@@ -12,6 +12,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Alias (Qdrant) | A stable name (`rag_chunks`) pointing at a real collection; applications use it, and it can be switched to another collection instantly and atomically. | 12 |
 | Allow-list | The only models a key may use; a request for anything else is refused (401/403). | 10 |
 | Analytics | Anonymous usage statistics a tool sends back to its makers. | 1 |
+| Analyzer | The recipe a search engine uses to turn text into searchable terms: a tokenizer plus token filters (lowercase, synonyms, stemming). | 13 |
 | ANN (approximate nearest neighbour) | Finding nearly the closest vectors very fast, instead of exactly the closest by checking every one. | 11 |
 | arm64 / aarch64 vs amd64 / x86_64 | Processor families; Apple Silicon is arm64, amd64-only images need slower emulation. | 3 |
 | Asymmetric retrieval | Embedding questions and documents differently (queries get a task instruction, documents don't), because a short question and a long passage are different kinds of text. | 8 |
@@ -22,6 +23,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Bind mount | A host folder shared into a container; fine for config and code, slow for databases on a Mac. | 3 |
 | Blast radius | How much damage one leaked or misbehaving credential can do; small, scoped, expiring keys keep it small. | 10 |
 | Blue/green | Building the new version beside the old one, then switching traffic all at once, with the old one kept for rollback. | 12 |
+| BM25 | The standard keyword relevance formula: scores rise with how often query words appear in a document (term frequency), how rare they are overall (inverse document frequency) and how short the document is, with diminishing returns for repeats. | 13 |
 | Branch | A separate line of work (a draft) where you change things without touching `main`. | 4 |
 | Branch protection / ruleset | GitHub settings that block direct pushes to `main` and require PRs, checks and signed commits. | 4 |
 | Brewfile | A plain text file listing Homebrew formulas and casks; `brew bundle` installs everything in it. | 1 |
@@ -67,6 +69,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Envelope encryption | Values are locked with a random data key, and the data key is locked separately for each recipient, so adding a person never means re-encrypting every value by hand. | 6 |
 | Environment variable | A named value handed to a program when it starts (`DB_PASSWORD=…`); fine for settings, easy to leak for secrets. | 6 |
 | EXPLAIN | Asks Postgres how it will run a query, e.g. whether it uses an index; `EXPLAIN ANALYZE` also runs it and shows real timings. | 11 |
+| Explain API | Adding `"explain": true` to a search so OpenSearch returns the arithmetic behind each score (tf, idf, length adjustment). | 13 |
 | Extension (Postgres) | An add-on that teaches Postgres new tricks; `vector` (pgvector) adds vector types and indexes. | 11 |
 | Fallback | Sending a request to a different model when the first one fails; fine between chat models, never between embedders (different vector spaces). | 10 |
 | False positive | A check flags something that is actually fine; silence it narrowly, with a comment explaining why. | 5 |
@@ -86,14 +89,20 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | HNSW | Hierarchical Navigable Small World: a layered graph index for fast approximate vector search, tuned by `m`, `ef_construction` and `hnsw.ef_search`. | 11 |
 | Homebrew | The standard package manager ("app store for developer tools") on macOS. | 1 |
 | host.docker.internal | The address a container uses to reach programs running on the host Mac itself. | 3 |
+| Hybrid search | Running keyword (BM25) and vector search together and fusing their normalised scores; robust across exact-code and paraphrase questions. | 13 |
 | Image | The frozen blueprint a container is started from: a program plus all its dependencies. | 3 |
 | Image tag vs digest | A tag (`v1.104.0`) is a movable label; a digest (`@sha256:…`) is the exact, unchangeable fingerprint of one image. | 9 |
 | Infrastructure as code | Defining your environment in version-controlled files instead of setting it up by hand. | 1 |
+| Internal user | A user stored inside OpenSearch's own security index (here `rag_search`, `rag_indexer`). | 13 |
 | Interpreter | The `python` program itself: the engine that reads and runs Python code, e.g. CPython 3.12. | 2 |
+| Inverse document frequency (idf) | How rare a word is across all documents; rare words count for much more in BM25. | 13 |
+| Inverted index | A map from each word to the documents containing it, like the index at the back of a book. | 13 |
 | Iterative scan | pgvector 0.8+ setting (`hnsw.iterative_scan`) that keeps scanning the index until enough rows pass the filters, avoiding silently short results. | 11 |
 | IVFFlat | An older pgvector index that groups vectors into lists (clusters) and searches only the nearest lists; faster to build, usually lower recall than HNSW. | 11 |
 | justfile | A menu of named command shortcuts run with `just <recipe>` (e.g. `just check`), reused by CI. | 4 |
+| JVM heap | The working memory of a Java program such as OpenSearch; typically about half the container's memory, fixed and locked in RAM. | 13 |
 | JWT (JSON Web Token) | A small signed token carrying its own permissions and expiry; anyone can read it, but only the holder of the signing key can create or change it. | 12 |
+| k-NN plugin / Lucene engine | OpenSearch's vector search feature, here using Lucene's HNSW implementation. | 13 |
 | Key pair (public / private key) | Two matching keys: anyone can lock with the public key, only the private key unlocks. Share the public one, guard the private one. | 6 |
 | KV cache | The model's working memory of everything read so far; grows with prompt and answer length and is a big part of memory use. | 7 |
 | launchd | macOS's built-in service manager: starts programs at login and restarts them if they crash (agents live in `~/Library/LaunchAgents/`). | 7 |
@@ -105,6 +114,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Log rotation | Keeping only the newest few log files of a limited size and deleting the oldest (here 3 × 10 MB). | 3 |
 | macOS Keychain | The Mac's built-in encrypted password store, unlocked by your login; home for personal tokens. | 6 |
 | maintenance_work_mem | Postgres memory for maintenance work such as building indexes; HNSW builds are much faster when the graph fits in it. | 11 |
+| Mapping | An OpenSearch index's schema: each field's type (`text`, `keyword`, `knn_vector` …) and analyzer. | 13 |
 | Master key | The gateway's root credential (`LITELLM_MASTER_KEY`); it can do everything, so it is for admins only. | 9 |
 | Matryoshka embeddings | Embeddings trained so their first part is already a useful smaller embedding; keep the first N numbers, re-normalise, and save storage at a small quality cost. | 8 |
 | Max parallel requests (concurrency limit) | How many requests one key may have in flight at once; crucial when every app shares one GPU. | 10 |
@@ -162,17 +172,23 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Reverse proxy | A server that sits in front of other servers, receives every request, applies rules and forwards it. | 9 |
 | Revocation | Making an old secret stop working, e.g. deleting an API token. | 6 |
 | Role / privilege (database) | A database identity / what it's allowed to do (connect, read, write, create tables). | 11 |
+| Role mapping | The link in OpenSearch's security plugin that gives a user (or backend role) the permissions of a role. | 13 |
 | Rotation | Replacing a secret with a new value on a schedule, or immediately after a suspected leak. | 6 |
 | Routing | Choosing which real backend (deployment) answers a request for a given model alias. | 9 |
 | Salt key (LITELLM_SALT_KEY) | A secret LiteLLM uses to encrypt credentials it stores in its database; it must never change, or those become unreadable. | 10 |
 | Scalar quantization (int8) | Storing each vector number as a 1-byte integer instead of 2–4 bytes: about 4× smaller and faster to scan. | 12 |
 | Schema (database) | A named folder of tables inside a database (we use `rag`); also "the structure" of the tables. | 11 |
+| Score normalisation | Rescaling scores from different methods to the same range (min-max: best = 1, worst = 0) before combining them. | 13 |
+| Search engine | A system built to find documents by their words (and now vectors) fast, with relevance ranking; e.g. OpenSearch, Elasticsearch. | 13 |
+| Search pipeline | Processing steps OpenSearch applies around a search, e.g. normalising and combining scores for hybrid search (`rag-hybrid`). | 13 |
 | Secret | Any value that grants access: a password, API key, token, private key or encryption key. | 6 |
 | Secret file / /run/secrets | A secret delivered to a container as a small in-memory file, the standard Docker and Kubernetes pattern. | 6 |
 | Secret scanner | A check (e.g. gitleaks, detect-private-key) that looks for keys, tokens and passwords before they are committed. | 5 |
 | SecretStr | A pydantic type that prints as `**********`; the real value needs a deliberate `.get_secret_value()`. | 6 |
+| Security plugin | OpenSearch's built-in TLS, users, roles and permissions; never disable it. | 13 |
 | Semantic Versioning | MAJOR.MINOR.PATCH version numbers: breaking change → major, `feat` → minor, `fix` → patch. | 4 |
 | Shadow price | An internal, notional price for something with no bill (your own GPU time), so usage can be compared and budgeted; here $2/hour ÷ tokens per second. | 10 |
+| Shard / replica | The pieces an index is split into / copies of them for safety; one node uses 1 shard and 0 replicas. | 13 |
 | shared_buffers | Postgres's own memory cache for table and index pages, typically about 25% of the memory it may use. | 11 |
 | Shell / zsh | The program inside Terminal that reads and runs your commands; zsh is the macOS default. | 1 |
 | Shift left | Moving checks earlier in the process (editor, commit) where fixing problems is cheapest. | 5 |
@@ -188,15 +204,21 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | SSDLC | Secure Software Development Lifecycle: building security checks (static analysis, secret scanning) into every change. | 5 |
 | SSH key | A private key that stays on your Mac and a public `.pub` key you give GitHub, to prove it's you without a password. | 4 |
 | Staged files | The files you have `git add`-ed: exactly what the next commit will contain, and what hooks check. | 5 |
+| Stemming | Reducing words to a common root ("Fridays" → "fridai") so variations of a word match. | 13 |
 | Streaming (SSE) | Sending an answer token by token as it is generated, over Server-Sent Events, instead of all at the end. | 9 |
 | Supersede | Replace an accepted ADR with a newer ADR that points back to it; the old one is never edited. | 4 |
+| Synonyms (search) | Rules treating different terms as equivalent ("wfh" = "work from home" = "remote work"), best applied at query time with `synonym_graph`. | 13 |
 | Team (LiteLLM) | A group of virtual keys sharing a budget and a model list, e.g. a department or product. | 10 |
 | TEI (Text Embeddings Inference) | Hugging Face's Rust server for embedding and reranking models, with batching, API keys and metrics; runs natively with Metal on Apple Silicon. | 8 |
 | Telemetry | Usage information a program sends to its makers; switched off on purpose (Qdrant here, Homebrew analytics in Step 1). | 12 |
+| Term frequency (tf) | How often a query word appears in a document; more helps in BM25, with diminishing returns. | 13 |
+| text vs keyword field | `text` is analysed for full-text search; `keyword` is stored exactly, for filters and IDs. | 13 |
 | Thinking mode | Qwen models' optional hidden reasoning before the answer; better on hard questions, slower and more tokens (`enable_thinking`). | 7 |
 | Throughput | How much work a server finishes per second, e.g. chunks embedded per second. | 8 |
 | Token | The unit a model reads and writes: roughly ¾ of an English word. | 7 |
+| Token filter | An analyzer step that changes the token stream: lowercase, synonyms, stemming. | 13 |
 | Tokenizer | The model's dictionary for converting text to tokens and back. | 7 |
+| Tokenizer (search) | The analyzer step that splits text into words (tokens); not the same as an LLM's tokenizer. | 13 |
 | Tokens per second (tok/s) | How fast an answer streams once it starts; mostly set by memory bandwidth. | 7 |
 | Transitive dependency | A dependency of a dependency: a package you never chose that comes along because one you chose needs it. | 2 |
 | Truncation / max sequence length | The longest text a model reads; anything beyond is cut off, silently in TEI by default (`--auto-truncate`). | 8 |
