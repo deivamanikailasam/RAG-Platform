@@ -6,7 +6,7 @@ attributes/scrub -> redaction -> resource -> batch for traces and logs (metrics 
 deletes the risky keys and masks JWT-, key- and email-shaped values; the Compose service is the
 contrib 0.162.x image pinned by tag + digest, read-only, without capabilities, limited to 512 MB and
 published on 127.0.0.1 only; rag-api, LiteLLM (message logging off), OPA and Keycloak send their
-spans to it.
+spans to it; ADR-0019 is recorded.
 
 When Docker and the pinned image are available the config is validated by the Collector itself.
 The live test runs only when the Collector answers on 127.0.0.1:13133 (``just up``).
@@ -27,6 +27,7 @@ REPO = Path(__file__).resolve().parents[1]
 CONFIG = REPO / "infra" / "config" / "otel-collector" / "config.yaml"
 COMPOSE = REPO / "infra" / "compose" / "compose.yaml"
 LITELLM = REPO / "infra" / "config" / "litellm" / "config.yaml"
+ADR = REPO / "docs" / "adr" / "0019-use-opentelemetry-and-a-central-collector.md"
 IMAGE = "otel/opentelemetry-collector-contrib:0.162.0"
 ORDER = ["memory_limiter", "attributes/scrub", "redaction", "resource", "batch"]
 
@@ -182,6 +183,16 @@ def test_opa_and_keycloak_trace_into_the_collector() -> None:
     env = _service("keycloak")["environment"]
     assert env["KC_TRACING_ENABLED"] == "true"
     assert env["KC_TRACING_ENDPOINT"] == "http://otel-collector:4317"
+
+
+def test_adr_0019_is_recorded() -> None:
+    text = ADR.read_text()
+    assert text.startswith("# ADR-0019: Use OpenTelemetry and a central Collector")
+    assert "**Status:** Accepted" in text
+    for word in ("memory_limiter", "redaction", "traceparent", "message_logging", "Revisit when"):
+        assert word in text
+    index = (REPO / "docs" / "adr" / "README.md").read_text()
+    assert "0019-use-opentelemetry-and-a-central-collector.md" in index
 
 
 # --- live -------------------------------------------------------------------------------------
