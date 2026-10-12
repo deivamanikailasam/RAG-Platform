@@ -71,11 +71,36 @@ class Dashboard:
                 "excludeByName": {"Time": True, "__name__": True}, "renameByName": {"Value": "up"}}}],
         })  # fmt: skip
 
-    def json(self, uid: str, title: str) -> dict[str, Any]:
+    def prompts_table(self, x: int, y: int) -> None:
+        """Step 24: which prompt version each environment runs right now (from rag_prompt_info)."""
+        self._add({
+            "type": "table", "title": "Active prompt versions",
+            "description": "From the registry baked into each running rag-api. sha = first 12 hex "
+                           "characters of the prompt file's SHA-256 (matches prompts.lock.json).",
+            "datasource": DS, "gridPos": {"x": x, "y": y, "w": 24, "h": 6},
+            "targets": [{"refId": "A", "datasource": DS, "instant": True, "format": "table",
+                         "expr": "max by (label, prompt, version, sha) (rag_prompt_info)"}],
+            "transformations": [{"id": "organize", "options": {
+                "excludeByName": {"Time": True, "Value": True},
+                "indexByName": {"label": 0, "prompt": 1, "version": 2, "sha": 3}}}],
+        })  # fmt: skip
+
+    def json(self, uid: str, title: str, annotations: list[Panel] | None = None) -> dict[str, Any]:
         return {"uid": uid, "title": title, "tags": ["rag", "slo"], "timezone": "browser",
                 "schemaVersion": 41, "version": 1, "editable": False, "refresh": "30s",
                 "time": {"from": "now-1h", "to": "now"}, "panels": self.panels,
-                "templating": {"list": []}, "annotations": {"list": []}}  # fmt: skip
+                "templating": {"list": []}, "annotations": {"list": annotations or []}}  # fmt: skip
+
+
+# A marker on every time-series panel whenever a prompt version starts running (Step 24):
+# "did quality or latency change when rag-answer@3 went live?"
+PROMPT_CHANGES = {
+    "name": "Prompt version changes", "datasource": DS, "enable": True, "iconColor": "purple",
+    "expr": "count by (label, prompt, version) (rag_prompt_info)"
+            " unless count by (label, prompt, version) (rag_prompt_info offset 5m)",
+    "step": "1m", "titleFormat": "{{prompt}} v{{version}} ({{label}})",
+    "textFormat": "A new prompt version started running",
+}  # fmt: skip
 
 
 def otel(kind: str) -> str:
@@ -126,7 +151,9 @@ def rag_overview() -> dict[str, Any]:
     d.series("Telemetry pipeline: accepted vs refused",
              [(otel("accepted"), "accepted"), (otel("refused"), "refused")], 12, 23, "short",
              "Items per second through the OpenTelemetry Collector. Refused > 0 means data loss.")  # fmt: skip
-    return d.json("rag-overview", "RAG platform · overview")
+    d.row("Prompts (Step 24)", 31)
+    d.prompts_table(0, 32)
+    return d.json("rag-overview", "RAG platform · overview", [PROMPT_CHANGES])
 
 
 DASHBOARDS = {"rag-overview.json": rag_overview}

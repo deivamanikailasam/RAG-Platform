@@ -123,3 +123,25 @@ tests:
               summary: "Audit events cannot be stored: rag-api is refusing requests until they can"
               runbook: docs/runbooks/audit-log.md
       - { eval_time: 13m, alertname: RagAuditWriteFailing, exp_alerts: [] }
+
+  # 9. Step 24: the Grafana "Prompt version changes" annotation query (scripts/build_dashboards.py).
+  #    rag-answer v2 replaces v1 in production at minute 10: one marker shortly after, none later.
+  - interval: 1m
+    input_series:
+      - series: 'rag_prompt_info{label="production", prompt="rag-answer", version="1", sha="5752b259f08c"}'
+        values: "1x9"
+      - series: 'rag_prompt_info{label="production", prompt="rag-answer", version="2", sha="9189878bda04"}'
+        values: "_x10 1x20"
+    promql_expr_test:
+      - expr: >-
+          count by (label, prompt, version) (rag_prompt_info)
+          unless count by (label, prompt, version) (rag_prompt_info offset 5m)
+        eval_time: 12m
+        exp_samples:
+          - labels: '{label="production", prompt="rag-answer", version="2"}'
+            value: 1
+      - expr: >-
+          count by (label, prompt, version) (rag_prompt_info)
+          unless count by (label, prompt, version) (rag_prompt_info offset 5m)
+        eval_time: 20m
+        exp_samples: []

@@ -173,12 +173,12 @@ def test_collector_counters_are_named_explicitly_without_total() -> None:
     assert expr.count("or vector(0)") == 6
 
 
-def test_unit_tests_cover_every_rule_file_with_eight_cases() -> None:
+def test_unit_tests_cover_every_rule_file_with_nine_cases() -> None:
     tests = _yaml(PROM / "tests" / "rules_test.yml")
     files = {(PROM / "tests" / f).resolve() for f in tests["rule_files"]}
     assert files == {p.resolve() for p in RULES.glob("*.yml")}
-    assert len(tests["tests"]) == 8  # Step 23 adds RagAuditWriteFailing
-    tested = {c["alertname"] for t in tests["tests"] for c in t["alert_rule_test"]}
+    assert len(tests["tests"]) == 9  # Step 23 adds RagAuditWriteFailing, Step 24 a PromQL test
+    tested = {c["alertname"] for t in tests["tests"] for c in t.get("alert_rule_test", [])}
     assert tested >= {
         "RagSearchErrorBudgetFastBurn", "RagSearchErrorBudgetSlowBurn", "RagSearchSlow",
         "RagPolicyQueryMismatch", "TargetDown", "OtelCollectorLosingData", "RagAuditWriteFailing",
@@ -261,12 +261,27 @@ def test_every_panel_queries_the_provisioned_prometheus() -> None:
     assert dashboard["uid"] == "rag-overview"
     assert dashboard["editable"] is False
     queries = [p for p in dashboard["panels"] if p["type"] != "row"]
-    assert len(queries) == 10
+    assert len(queries) == 11  # Step 24 adds "Active prompt versions"
     for panel in queries:
         assert panel["datasource"]["uid"] == "prometheus"
         assert all(t["expr"] for t in panel["targets"])
     ids = [p["id"] for p in dashboard["panels"]]
     assert ids == list(range(1, len(ids) + 1))
+
+
+def test_prompt_versions_are_shown_and_marked_on_the_graphs() -> None:
+    """Step 24: a table of what runs where, and an annotation whenever a prompt version changes."""
+    dashboard = json.loads((GRAFANA / "dashboards" / "rag-overview.json").read_text())
+    [table] = [p for p in dashboard["panels"] if p["title"] == "Active prompt versions"]
+    assert "rag_prompt_info" in table["targets"][0]["expr"]
+    [marker] = dashboard["annotations"]["list"]
+    assert marker["name"] == "Prompt version changes"
+    assert "unless" in marker["expr"]
+    assert "offset 5m" in marker["expr"]
+    # promtool checks the annotation query itself (rules_test.yml, case 9)
+    tests = _yaml(PROM / "tests" / "rules_test.yml")["tests"]
+    exprs = [c["expr"] for t in tests for c in t.get("promql_expr_test", [])]
+    assert any("rag_prompt_info offset 5m" in e for e in exprs)
 
 
 # --- Compose ----------------------------------------------------------------------------------

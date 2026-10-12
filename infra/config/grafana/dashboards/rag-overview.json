@@ -635,12 +635,84 @@
         }
       },
       "id": 13
+    },
+    {
+      "type": "row",
+      "title": "Prompts (Step 24)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 31,
+        "w": 24,
+        "h": 1
+      },
+      "id": 14
+    },
+    {
+      "type": "table",
+      "title": "Active prompt versions",
+      "description": "From the registry baked into each running rag-api. sha = first 12 hex characters of the prompt file's SHA-256 (matches prompts.lock.json).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 24,
+        "h": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "instant": true,
+          "format": "table",
+          "expr": "max by (label, prompt, version, sha) (rag_prompt_info)"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Value": true
+            },
+            "indexByName": {
+              "label": 0,
+              "prompt": 1,
+              "version": 2,
+              "sha": 3
+            }
+          }
+        }
+      ],
+      "id": 15
     }
   ],
   "templating": {
     "list": []
   },
   "annotations": {
-    "list": []
+    "list": [
+      {
+        "name": "Prompt version changes",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "enable": true,
+        "iconColor": "purple",
+        "expr": "count by (label, prompt, version) (rag_prompt_info) unless count by (label, prompt, version) (rag_prompt_info offset 5m)",
+        "step": "1m",
+        "titleFormat": "{{prompt}} v{{version}} ({{label}})",
+        "textFormat": "A new prompt version started running"
+      }
+    ]
   }
 }
