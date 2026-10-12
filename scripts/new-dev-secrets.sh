@@ -10,7 +10,7 @@ trap 'grep -q "^sops_mac=" "$out" 2>/dev/null || rm -f "$out"' EXIT
 
 rand() { openssl rand -base64 48 | tr -d '/+=\n' | cut -c1-32; }   # 32 random letters/digits
 
-cat > "$out" <<EOT
+cat > "$out" <<EOF
 # --- Data stores (Steps 11-15) ---
 POSTGRES_PASSWORD=$(rand)
 MINIO_ROOT_USER=rag-admin
@@ -27,7 +27,7 @@ LANGFUSE_NEXTAUTH_SECRET=$(rand)
 LANGFUSE_ENCRYPTION_KEY=$(openssl rand -hex 32)
 # --- Demo value used in this step ---
 DEMO_TOKEN=$(rand)
-EOT
+EOF
 
 sops --encrypt --in-place "$out"
 echo "created $out (encrypted). View names with: just secrets-keys"
