@@ -138,13 +138,13 @@ def test_policies_compile_strictly_and_are_formatted() -> None:
 
 
 @needs_opa
-def test_all_21_policy_tests_pass_with_coverage_over_90() -> None:
+def test_all_24_policy_tests_pass_with_coverage_over_90() -> None:
     run = _opa("test", "policies", "--coverage", "--threshold", "90")
     assert run.returncode == 0, run.stdout + run.stderr
     report = json.loads(run.stdout)
     assert report["coverage"] >= 90
     verbose = _opa("test", "policies")
-    assert "PASS: 21/21" in verbose.stdout
+    assert "PASS: 24/24" in verbose.stdout  # 21 from Step 18 + 3 metrics tests (Step 20)
 
 
 # --- OPA in Compose ---------------------------------------------------------------------------
