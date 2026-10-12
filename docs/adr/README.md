@@ -9,5 +9,6 @@
 | [0005](0005-automated-code-quality-gates-with-ruff-mypy-pytest-and-pre-commit.md) | Automated code quality gates with ruff, mypy, pytest and pre-commit | Accepted |
 | [0006](0006-manage-dev-secrets-with-sops-and-age-personal-tokens-in-keychain.md) | Manage dev secrets with SOPS + age; personal tokens in the macOS Keychain | Accepted |
 | [0007](0007-serve-local-models-natively-with-mlx-lm-behind-localhost.md) | Serve local models natively with mlx-lm, bound to localhost | Accepted |
+| [0008](0008-serve-embeddings-and-reranking-with-tei-natively-behind-an-api-key.md) | Serve embeddings and reranking with TEI natively, behind an API key | Accepted |
 
 New ADR: `just adr "Short title"`, then fill it in and add a row here.
