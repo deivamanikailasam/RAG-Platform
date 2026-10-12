@@ -207,6 +207,43 @@ services:
       resources:
         limits: { memory: 1g, cpus: "2" }
 
+  valkey:                                                     # in-memory store: LLM response cache, job queues, locks (Step 15)
+    image: valkey/valkey:9.1.2-alpine@sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11   # Valkey 9.1.x, pin by digest (Step 9 method)
+    # Valkey reads its users from an ACL file. The container builds that file at start-up from the
+    # secret FILES, into a RAM-only folder (same pattern as SeaweedFS), then starts the server.
+    # The image's own entrypoint then drops from root to the unprivileged "valkey" user.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        umask 077
+        cat > /run/valkey/users.acl <<EOF
+        user default off
+        user admin on >$$(cat /run/secrets/valkey_admin_password) ~* &* +@all
+        user litellm on >$$(cat /run/secrets/valkey_litellm_password) ~* &* +@all -@dangerous
+        user rag_app on >$$(cat /run/secrets/valkey_app_password) ~rag:* &rag:* +@all -@dangerous -@admin
+        EOF
+        chown -R valkey:valkey /run/valkey
+        exec docker-entrypoint.sh valkey-server /etc/valkey/valkey.conf --aclfile /run/valkey/users.acl
+    secrets: [valkey_admin_password, valkey_litellm_password, valkey_app_password]
+    tmpfs:
+      - /run/valkey:size=1m,mode=0700           # ACL file with passwords lives in RAM only
+    volumes:
+      - ../config/valkey/valkey.conf:/etc/valkey/valkey.conf:ro
+      - valkey-data:/data
+    ports:
+      - "127.0.0.1:6379:6379"                   # localhost only (Step 3 rule)
+    healthcheck:
+      # "NOAUTH" means alive and correctly refusing anonymous access, so no password needed here
+      test: ["CMD-SHELL", "valkey-cli ping 2>&1 | grep -qE 'PONG|NOAUTH'"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits: { memory: 768m, cpus: "1" }     # a bit above maxmemory for overhead
+
 volumes:
   litellm-db-data:                                            # keys, teams, budgets and spend logs live here
   rag-db-data:                                                # documents, chunks and vectors (Step 11)
@@ -214,6 +251,7 @@ volumes:
   qdrant-snapshots:                                           # Qdrant snapshot files (Step 12)
   opensearch-data:                                            # OpenSearch indices (Step 13): rebuildable from rag-db
   object-store-data:                                          # original files and their versions (Step 14): NOT rebuildable, back it up
+  valkey-data:                                                # Valkey RDB snapshots + AOF log (Step 15): cache is disposable, queued jobs are not
 
 secrets:
   litellm_master_key:
@@ -250,3 +288,9 @@ secrets:
     environment: S3_READER_ACCESS_KEY           # rag-reader: read rag-raw-docs only
   s3_reader_secret_key:
     environment: S3_READER_SECRET_KEY
+  valkey_admin_password:
+    environment: VALKEY_ADMIN_PASSWORD          # Valkey "admin" (Step 15): all keys and commands, via `just kv-cli`
+  valkey_litellm_password:
+    environment: VALKEY_LITELLM_PASSWORD        # litellm: gateway response cache (all keys, no @dangerous)
+  valkey_app_password:
+    environment: VALKEY_APP_PASSWORD            # rag_app: rag:* keys only, no @dangerous / @admin

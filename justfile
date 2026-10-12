@@ -232,3 +232,7 @@ s3 *args:
     #!/usr/bin/env bash
     set -euo pipefail
     sops exec-env secrets/dev.enc.env "AWS_ACCESS_KEY_ID=\"\$S3_ADMIN_ACCESS_KEY\" AWS_SECRET_ACCESS_KEY=\"\$S3_ADMIN_SECRET_KEY\" AWS_REGION=us-east-1 aws --endpoint-url {{s3_endpoint}} $(printf '%q ' "$@")"
+
+# Valkey CLI as admin (password via env var, never as an argument):   just kv-cli ping   /   just kv-cli acl list
+kv-cli *args:
+    sops exec-env secrets/dev.enc.env 'docker compose -f infra/compose/compose.yaml exec -e REDISCLI_AUTH="$VALKEY_ADMIN_PASSWORD" valkey valkey-cli --user admin {{args}}'

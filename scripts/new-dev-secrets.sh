@@ -34,7 +34,10 @@ S3_INGEST_ACCESS_KEY=$(gen_ak)
 S3_INGEST_SECRET_KEY=$(gen_sk)
 S3_READER_ACCESS_KEY=$(gen_ak)
 S3_READER_SECRET_KEY=$(gen_sk)
-REDIS_PASSWORD=$(rand)
+# --- Valkey (Step 15): one password per ACL user; letters/digits only, safe inside a redis:// URL ---
+VALKEY_ADMIN_PASSWORD=$(rand)
+VALKEY_LITELLM_PASSWORD=$(rand)
+VALKEY_APP_PASSWORD=$(rand)
 # --- Identity (Step 16) ---
 KEYCLOAK_ADMIN_PASSWORD=$(rand)
 # --- Gateway (Step 9): LiteLLM master keys must start with sk- ---
