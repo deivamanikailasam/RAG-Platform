@@ -62,7 +62,16 @@ check:
     brew bundle check --file=bootstrap/Brewfile
     uv sync --locked --all-packages
     uv run pre-commit run --all-files
+    just policy-check
     uv run pytest
+
+# Policies: formatted, compiled strictly, linted, tested with >= 90% coverage (Step 18)
+policy-check:
+    opa fmt --list --fail policies
+    opa check --strict policies
+    regal lint policies
+    opa test policies --coverage --threshold 90 > /dev/null
+    opa test policies
 
 # Create the next numbered ADR from the template:   just adr "Use Qdrant for vectors"
 adr title:

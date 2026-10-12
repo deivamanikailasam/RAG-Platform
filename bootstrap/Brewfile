@@ -27,3 +27,7 @@ brew "dbmate"               # simple, language-agnostic SQL migrations (up/down)
 
 # ---- Object storage tools (Step 14) ----
 brew "awscli"               # AWS CLI v2: speaks S3 to any compatible store via --endpoint-url
+
+# ---- Policy as code (Step 18) ----
+brew "opa"                  # Open Policy Agent: evaluate and test Rego policies
+brew "regal"                # Rego linter and language server (editor support)

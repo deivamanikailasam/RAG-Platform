@@ -1,0 +1,8 @@
+rules:
+  imports:
+    unresolved-reference:
+      level: error
+      except-paths:
+        - data.rag.authz.action_roles      # these come from policies/rag/authz/data.json
+        - data.rag.authz.group_clearance
+        - data.rag.authz.capped_groups
