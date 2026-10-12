@@ -26,6 +26,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | arm64 / aarch64 vs amd64 / x86_64 | Processor families; Apple Silicon is arm64, amd64-only images need slower emulation. | 3 |
 | Asymmetric retrieval | Embedding questions and documents differently (queries get a task instruction, documents don't), because a short question and a long passage are different kinds of text. | 8 |
 | At-least-once delivery | Every job is delivered at least once, but may be delivered twice after a crash (the worker finished but died before acknowledging). | 15 |
+| Attributes (span) | Key–value facts recorded on a span, e.g. `rag.candidates = 5`; facts about the request, never its content. | 19 |
 | Audience (`aud`) | The claim saying who a token is meant for (here `rag-api`). An API must reject tokens meant for someone else. | 16 |
 | Authentication vs authorisation | Who are you? (sign-in) versus what may you do? (permissions). Keycloak does the first and carries the facts (groups, roles) for the second. | 16 |
 | Authorisation policy | The written rules that say who may do which action and see which things; here `policies/rag/authz/authz.rego` plus its `data.json`. | 18 |
@@ -51,6 +52,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Cache key | The value a cache looks answers up by. It must include everything that changes the answer (prompt with retrieved context, model, parameters, user's permission scope, tenant), or answers leak between users. | 15 |
 | Cache poisoning | A wrong, stale or someone-else's answer stored in a cache and then served to other requests, e.g. because the cache key left out the permission scope. | 15 |
 | Cap (deny overrides) | A limit that beats any grant: a contractor in `executives` still only reaches `internal`, because caps in `capped_groups` always win over group clearances. | 18 |
+| Cardinality | How many distinct values a label has. User ids as metric labels create one time series per user: slow dashboards and big bills; keep labels to small fixed sets like `outcome` = ok or error. | 19 |
 | Cask | A Homebrew package that is a normal Mac app with a window. | 1 |
 | Chat template | The model-specific recipe that turns a list of messages into the exact text format the model was trained on. | 7 |
 | Ciphertext | The scrambled, encrypted version of a value; unreadable without the right key. | 6 |
@@ -63,6 +65,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Clock skew / leeway | Small differences between machines' clocks; a tolerance (30 s here) stops a verifier from rejecting a token that is only just fresh or only just expired. | 17 |
 | CODEOWNERS | A GitHub file naming who must review changes to which folders. | 4 |
 | Collection (Qdrant) | Qdrant's equivalent of a table: a set of points sharing vector settings. | 12 |
+| Collector (OpenTelemetry) | A service that receives, processes and exports telemetry; our single governance point that limits memory, scrubs secrets, redacts values, labels and batches (`otel-collector`). | 19 |
 | Command category (Valkey) | A named group of commands used in ACLs, e.g. `@dangerous` (FLUSHALL, KEYS, CONFIG, DEBUG…) or `@admin`; `+@all -@dangerous` means everything except those. | 15 |
 | Command Line Tools | Apple's free kit of basic developer programs: compiler, `make`, `git`, system headers. | 1 |
 | Commit | A save point in git history, with a message explaining what changed and why. | 4 |
@@ -72,11 +75,13 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Container | A running copy of an image: a self-contained "apartment" with a program and everything it needs. | 3 |
 | Container runtime | The software that downloads images and runs containers (OrbStack, Docker Desktop, Colima, Podman). | 3 |
 | Content addressing | Naming an object by a hash of its content (`sha256`), so identical files share a name and changes are detectable. | 14 |
+| Context propagation | Passing the trace id from one service to the next (in the `traceparent` HTTP header) so their spans join one trace. | 19 |
 | Context window | The maximum number of tokens (prompt + answer) a model can handle at once. | 7 |
 | Conventional Commits | A commit-message format `type(scope)!: description` (e.g. `feat(gateway): …`) readable by people and tools. | 4 |
 | Cooldown | Temporarily skipping a backend that keeps failing (LiteLLM: 30 s after 3 failures in a minute), so requests stop piling onto it. | 10 |
 | CORS | Browser rules for which websites may call a server from inside a web page; too open (`*`) and any site you visit could call your local model. | 7 |
 | Cosine similarity | A score for how closely two vectors point the same way: near 1 = very similar meaning, near 0 = unrelated. For unit-length vectors it equals the dot product. | 8 |
+| Counter (metric) | A number that only goes up, such as requests served; dashboards turn it into a rate. | 19 |
 | Cross-encoder | A model (the reranker) that reads the query and one document together and scores their relevance; precise but slow, so only used on a shortlist. | 8 |
 | Data filtering / partial evaluation (OPA) | OPA evaluating a policy with some facts still unknown and turning the rest into a filter, even a SQL `WHERE` clause, that a database can apply. | 18 |
 | Data key | The random key SOPS creates per file to lock every value; it is itself locked once per recipient. | 6 |
@@ -122,6 +127,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Formula | A Homebrew package that is a command-line tool. | 1 |
 | Full-text search / tsvector | Postgres's built-in keyword search: words normalised to stems (a `tsvector`) and indexed with GIN. | 11 |
 | Gateway (AI / LLM gateway) | A server in front of all model servers: every request passes through it for authentication, allow-listing, routing, limits and logging. | 9 |
+| GenAI semantic conventions | The emerging standard `gen_ai.*` attribute names for model calls (operation, model, token usage), so LLM tools and vendor dashboards understand each other. | 19 |
 | GIN index | A Postgres "inverted" index for values with many parts: arrays, JSON and words. | 11 |
 | Git hook | A script git runs automatically at a set moment: before a commit, after the message is written, before a push. | 5 |
 | .gitattributes | Rules for how git treats file types (line endings, binary files, generated files). | 4 |
@@ -132,6 +138,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | halfvec | A pgvector type that stores each number in 2 bytes instead of 4: half the storage, negligible quality loss for embeddings. | 11 |
 | Hash | A short fingerprint calculated from a file's contents; change one byte and it changes completely. | 2 |
 | Healthcheck | A command Compose runs inside a container every few seconds to ask "are you working?"; failures mark it unhealthy. | 9 |
+| Histogram (metric) | A metric that records a distribution of values (e.g. latencies), from which p50/p95/p99 are computed. | 19 |
 | HNSW | Hierarchical Navigable Small World: a layered graph index for fast approximate vector search, tuned by `m`, `ef_construction` and `hnsw.ef_search`. | 11 |
 | Homebrew | The standard package manager ("app store for developer tools") on macOS. | 1 |
 | host.docker.internal | The address a container uses to reach programs running on the host Mac itself. | 3 |
@@ -144,6 +151,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | In-memory key-value store | A database that keeps data in RAM and retrieves it by a key (a name). Extremely fast, but limited by memory; Valkey and Redis are examples. | 15 |
 | Infrastructure as code | Defining your environment in version-controlled files instead of setting it up by hand. | 1 |
 | `input` vs `data` (Rego) | `input` holds the facts about this one request (who, which action, which documents); `data` holds standing facts loaded with the policy, such as `data.json` mappings. | 18 |
+| Instrumentation (automatic vs manual) | Code that creates telemetry: libraries that make spans for you (HTTP, SQL) versus spans you add for your own logic (retrieval, policy decisions). | 19 |
 | Internal user | A user stored inside OpenSearch's own security index (here `rag_search`, `rag_indexer`). | 13 |
 | Interpreter | The `python` program itself: the engine that reads and runs Python code, e.g. CPython 3.12. | 2 |
 | Inverse document frequency (idf) | How rare a word is across all documents; rare words count for much more in BM25. | 13 |
@@ -172,6 +180,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Lockfile | A file recording the exact version and hash of every package in the full dependency tree (`uv.lock`). | 2 |
 | Log rotation | Keeping only the newest few log files of a limited size and deleting the oldest (here 3 × 10 MB). | 3 |
 | Login events (Keycloak) | Keycloak's record of sign-ins and failures (`LOGIN`, `LOGIN_ERROR`, …) with time, IP address and client; kept 30 days here. | 16 |
+| Log–trace correlation | Putting the trace and span id in every log line, so you can jump from a trace to the exact log lines of that request and back. | 19 |
 | macOS Keychain | The Mac's built-in encrypted password store, unlocked by your login; home for personal tokens. | 6 |
 | maintenance_work_mem | Postgres memory for maintenance work such as building indexes; HNSW builds are much faster when the graph fits in it. | 11 |
 | Mapping | An OpenSearch index's schema: each field's type (`text`, `keyword`, `knn_vector` …) and analyzer. | 13 |
@@ -181,6 +190,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | MDM | Mobile Device Management: how company IT installs and controls software on employees' Macs (e.g. Jamf, Kandji). | 1 |
 | Meaning space | The many-dimensional map an embedding model places texts on, where similar meanings sit close together. | 8 |
 | Memory bandwidth | How fast data moves between memory and the GPU; each decoded token reads the model's weights, so it is the speed limit for tokens per second. | 7 |
+| Metric | A number measured over time (requests per second, latency, errors); answers "is something wrong?". | 19 |
 | MFA / TOTP | Multi-factor authentication: a second proof besides the password. TOTP is the six-digit, time-based code from an authenticator app. | 16 |
 | Migration | A versioned, reviewable script that changes the database structure, applied in order and recorded in the database. | 11 |
 | Mixture of Experts (MoE) | A model that stores many specialist sub-networks but uses only a few per token: memory like a big model, speed like a small one. | 7 |
@@ -201,12 +211,16 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Object lock / retention (governance vs compliance) | Rules preventing deletion or overwrite of an object version until a retain-until date (WORM). Governance mode: privileged users can deliberately override; compliance mode: nobody can, not even admins. | 14 |
 | Object metadata | Extra key-value information stored with an object (content type, source URI, sha256…). | 14 |
 | Object storage / S3 API | Storing files as objects in buckets, reached over HTTP using Amazon's S3 protocol, now an industry standard spoken by AWS S3, SeaweedFS, Ceph and many more. | 14 |
+| Observability | Being able to answer new questions about a running system from the outside, using its traces, metrics and logs, without shipping new code. | 19 |
 | Opaque token | A token that is just a random reference, not a readable JWT; only the identity provider can say what it means, via introspection. | 17 |
 | OpenAI-compatible API | The same request and response format as OpenAI's API, so any tool that speaks "OpenAI" can call a local model. | 7 |
 | OpenFGA | A CNCF relationship-based (ReBAC) authorisation engine modelled on Google's Zanzibar: "shared with", folder inheritance, team membership. Planned for the permission-aware RAG project. | 18 |
+| OpenTelemetry | The CNCF open standard (APIs, SDKs, protocol, Collector) for producing and shipping traces, metrics and logs, supported by every major vendor. | 19 |
 | OrbStack | A lightweight macOS container runtime: Linux VM + Docker engine + Compose + single-node Kubernetes. | 3 |
+| OTLP | The OpenTelemetry protocol that carries all three signals: gRPC on port 4317, HTTP on 4318. | 19 |
 | Package manager | A program that installs, updates and removes other software and tracks what's installed. | 1 |
 | PAP (Policy Administration Point) | Where the rules are written and changed; here Git and pull requests on `policies/`. | 18 |
+| Parent / child span | Spans nest: a request's server span is the parent of the steps inside it, which can have children of their own; this nesting draws the waterfall. | 19 |
 | Password grant (ROPC) | The "resource owner password credentials" grant, where an app collects your password and swaps it for tokens. Modern OAuth guidance says never: the app sees the password and MFA can't work. | 16 |
 | PATH | The ordered list of folders your shell searches when you type a command. First match wins. | 1 |
 | Path-style addressing | Putting the bucket name in the URL path (`http://host:8333/bucket/key`) instead of the host name; common for self-hosted S3 stores. | 14 |
@@ -218,6 +232,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | PEP (Policy Enforcement Point) | The component that asks for a decision and obeys it, never deciding itself; here rag-api. (Not to be confused with a Python Enhancement Proposal.) | 18 |
 | Persistence: RDB / AOF | How an in-memory store survives restarts. RDB: periodic snapshots to disk. AOF (append-only file): a log of every write, replayed at start-up; `appendfsync everysec` loses at most about 1 s. | 15 |
 | pg_dump | Postgres's logical backup tool: writes a database's structure and data to a file that `pg_restore` can load again. | 11 |
+| Pipeline (Collector) | One signal's path through the Collector: receivers → processors (in order) → exporters. | 19 |
 | Plaintext | Readable, unencrypted text. | 6 |
 | Point | One item stored in Qdrant: an ID, one or more vectors, and a payload. Here, one chunk. | 12 |
 | Policy as code | Access rules written in a real language, versioned in Git, reviewed by pull request and tested like code. | 18 |
@@ -248,7 +263,9 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Realm role | A Keycloak role that says what someone may DO (`rag-user`, `rag-admin`, `rag-auditor`, `rag-ingest`). Here roles are attached to groups, never to people directly. | 16 |
 | ReBAC (relationship-based access control) | Access decided by relationships between people and things ("editors of this folder", "shared with Bob"); implemented by OpenFGA and SpiceDB. | 18 |
 | Recall | Of the truly closest results, the share the fast (approximate) search actually returned. | 11 |
+| Receiver / processor / exporter | The Collector's building blocks: a receiver takes data in (OTLP), a processor changes it (limit, scrub, redact, label, batch), an exporter sends it out (debug, Prometheus, Tempo…). | 19 |
 | Recipient | Someone (or a machine) whose public key can open a SOPS file: you, CI, a teammate. | 6 |
+| Redaction | Masking a value that looks like a secret (`****`) so the record survives but the secret doesn't; the Collector's safety net for JWTs, keys and emails. | 19 |
 | Refresh token | A longer-lived token an app swaps for new access tokens without signing in again; here it is one-time use and dies at logout. | 16 |
 | Regal | The linter and editor language server for Rego: catches bugs and style problems in policies; part of `just policy-check`. | 18 |
 | Rego | OPA's policy language: you write rules that become true or produce values, and OPA evaluates them against `input` and `data`. | 18 |
@@ -257,6 +274,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Repository | The project's filing cabinet: all files plus their full history of changes (git). | 4 |
 | Required action | Something a user must do at their next sign-in: change a temporary password, set up MFA (`CONFIGURE_TOTP`), verify an email. | 16 |
 | Rescoring | After a fast search on compressed vectors, re-ranking the top candidates using the original vectors to recover accuracy. | 12 |
+| Resource (OpenTelemetry) | Facts about the process sending telemetry (`service.name`, version, environment), attached to every span and metric. | 19 |
 | Restart policy | The rule Docker uses to restart a container that stops or crashes (`restart: unless-stopped`). | 9 |
 | Retrieve-then-rerank | The two-stage search pattern: a fast embedder finds ~50 candidates, then a slow, precise reranker picks the best few for the LLM. | 8 |
 | Retry | Trying the same model again after a temporary error, before any fallback. | 10 |
@@ -269,6 +287,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Rule (Rego) | A named statement such as `allow if { ... }`, true when every line in its body is true; several rules with the same name mean OR. | 18 |
 | S3 endpoint | The server URL to send S3 requests to (here `http://127.0.0.1:8333`), passed to tools as `--endpoint-url` / `endpoint_url`. | 14 |
 | Salt key (LITELLM_SALT_KEY) | A secret LiteLLM uses to encrypt credentials it stores in its database; it must never change, or those become unreadable. | 10 |
+| Sampling (head / tail) | Keeping only some traces. Head sampling decides when a request starts; tail sampling decides after seeing the whole trace (e.g. keep all errors and slow ones). | 19 |
 | Scalar quantization (int8) | Storing each vector number as a 1-byte integer instead of 2–4 bytes: about 4× smaller and faster to scan. | 12 |
 | Schema (database) | A named folder of tables inside a database (we use `rag`); also "the structure" of the tables. | 11 |
 | Score normalisation | Rescaling scores from different methods to the same range (min-max: best = 1, worst = 0) before combining them. | 13 |
@@ -279,6 +298,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Secret scanner | A check (e.g. gitleaks, detect-private-key) that looks for keys, tokens and passwords before they are committed. | 5 |
 | SecretStr | A pydantic type that prints as `**********`; the real value needs a deliberate `.get_secret_value()`. | 6 |
 | Security plugin | OpenSearch's built-in TLS, users, roles and permissions; never disable it. | 13 |
+| Semantic conventions | Agreed attribute names (`http.request.method`, `gen_ai.request.model`) so every tool understands the data. | 19 |
 | Semantic Versioning | MAJOR.MINOR.PATCH version numbers: breaking change → major, `feat` → minor, `fix` → patch. | 4 |
 | Service account | A non-human identity tied to a confidential client, used with client credentials (e.g. `service-account-ingestion-worker`). | 16 |
 | Shadow price | An internal, notional price for something with no bill (your own GPU time), so usage can be compared and budgeted; here $2/hour ÷ tokens per second. | 10 |
@@ -287,10 +307,12 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Shell / zsh | The program inside Terminal that reads and runs your commands; zsh is the macOS default. | 1 |
 | Shift left | Moving checks earlier in the process (editor, commit) where fixing problems is cheapest. | 5 |
 | Showback / chargeback | Showing each team what it used / actually billing its cost centre for it. | 10 |
+| Signal | One kind of telemetry: traces, metrics or logs. | 19 |
 | Signed commit | A commit stamped with your private key so GitHub can show it as Verified (really from you). | 4 |
 | Snapshot | A point-in-time backup file of a collection. | 12 |
 | SOPS | "Secrets OPerationS": encrypts the values in YAML, JSON or `.env` files while leaving the names readable. | 6 |
 | Source of truth | The one authoritative store that decides what exists and who may see it; every other copy is derived from it. | 12 |
+| Span | One timed step in a request: name, start, duration, status and attributes. | 19 |
 | Sparse vector | A vector that's mostly zeros, stored as (position, value) pairs; used for keyword-like retrieval (SPLADE, BM25-style). | 12 |
 | Speculative decoding | A small draft model guesses a few tokens ahead and the big model checks them in one pass, speeding up decoding (`--draft-model`). | 7 |
 | Squash merge | Merging a PR so all its small commits become one clean commit on `main`. | 4 |
@@ -302,11 +324,13 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Stemming | Reducing words to a common root ("Fridays" → "fridai") so variations of a word match. | 13 |
 | Stream (Valkey/Redis) | An append-only log of messages, each with an increasing ID (`XADD`); with consumer groups it works as a crash-safe job queue. | 15 |
 | Streaming (SSE) | Sending an answer token by token as it is generated, over Server-Sent Events, instead of all at the end. | 9 |
+| Structured logging | Writing logs as JSON objects instead of free text, so they can be filtered and joined by field. | 19 |
 | Supersede | Replace an accepted ADR with a newer ADR that points back to it; the old one is never edited. | 4 |
 | Synonyms (search) | Rules treating different terms as equivalent ("wfh" = "work from home" = "remote work"), best applied at query time with `synonym_graph`. | 13 |
 | Team (LiteLLM) | A group of virtual keys sharing a budget and a model list, e.g. a department or product. | 10 |
 | TEI (Text Embeddings Inference) | Hugging Face's Rust server for embedding and reranking models, with batching, API keys and metrics; runs natively with Metal on Apple Silicon. | 8 |
 | Telemetry | Usage information a program sends to its makers; switched off on purpose (Qdrant here, Homebrew analytics in Step 1). | 12 |
+| Telemetry (observability) | The data a system reports about itself (traces, metrics, logs) for its own operators; not to be confused with usage data sent to a vendor. | 19 |
 | Term frequency (tf) | How often a query word appears in a document; more helps in BM25, with diminishing returns. | 13 |
 | text vs keyword field | `text` is analysed for full-text search; `keyword` is stored exactly, for filters and IDs. | 13 |
 | Thinking mode | Qwen models' optional hidden reasoning before the answer; better on hard questions, slower and more tokens (`enable_thinking`). | 7 |
@@ -319,6 +343,8 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Tokenizer | The model's dictionary for converting text to tokens and back. | 7 |
 | Tokenizer (search) | The analyzer step that splits text into words (tokens); not the same as an LLM's tokenizer. | 13 |
 | Tokens per second (tok/s) | How fast an answer streams once it starts; mostly set by memory bandwidth. | 7 |
+| Trace | All the spans of one request, across all services, sharing one trace id. | 19 |
+| traceparent (W3C Trace Context) | The standard HTTP header that carries the trace id and parent span id to the next service. | 19 |
 | Transitive dependency | A dependency of a dependency: a package you never chose that comes along because one you chose needs it. | 2 |
 | Truncation / max sequence length | The longest text a model reads; anything beyond is cut off, silently in TEI by default (`--auto-truncate`). | 8 |
 | Trunk-based development | `main` (the trunk) is always working; every change goes through a short-lived branch and a PR. | 4 |

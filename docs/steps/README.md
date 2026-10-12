@@ -30,3 +30,4 @@ Phases: **A** Workstation · **B** Model serving · **C** Data stores · **D** I
 | 16 | Keycloak: realm, users and groups | D · Identity & policy | [step-16-keycloak-realm-users-groups.md](step-16-keycloak-realm-users-groups.md) |
 | 17 | JWT auth on the APIs | D · Identity & policy | [step-17-jwt-auth-on-the-apis.md](step-17-jwt-auth-on-the-apis.md) |
 | 18 | Policy engine: OPA (with OpenFGA in view) | D · Identity & policy | [step-18-policy-engine-opa.md](step-18-policy-engine-opa.md) |
+| 19 | OpenTelemetry Collector: one pipe for traces, metrics and logs | E · Observability | [step-19-opentelemetry-collector.md](step-19-opentelemetry-collector.md) |
