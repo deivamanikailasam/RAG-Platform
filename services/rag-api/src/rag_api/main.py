@@ -32,8 +32,14 @@ meter = metrics.get_meter("rag_api")
 SEARCHES = meter.create_counter(
     "rag.search.requests", unit="{request}", description="Searches by outcome"
 )
+# Bucket edges in SECONDS. The SDK's defaults (0, 5, 10, 25 … 10000) assume milliseconds: with them,
+# every search lands in the 0-5 bucket and p95 is reported as ~4.75 s. Put an edge at the 2 s objective.
+SEARCH_BUCKETS = [0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 3, 5, 10, 30]
 SEARCH_TIME = meter.create_histogram(
-    "rag.search.duration", unit="s", description="End-to-end search time"
+    "rag.search.duration",
+    unit="s",
+    description="End-to-end search time",
+    explicit_bucket_boundaries_advisory=SEARCH_BUCKETS,
 )
 DECISIONS = meter.create_counter(
     "rag.authz.decisions", unit="{decision}", description="Policy decisions"
@@ -51,6 +57,11 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     shutdown_telemetry = setup_telemetry("rag-api")
     HTTPXClientInstrumentor().instrument()  # calls to OPA and the gateway: spans + traceparent header
     PsycopgInstrumentor().instrument()  # one span per SQL statement (text only, never parameters)
+    # Start alert-worthy counters at 0. Otherwise a counter is born at its first value, and
+    # Prometheus' increase() can't see the jump from "nothing" to 1: the first incident is missed.
+    for outcome in ("ok", "error"):
+        SEARCHES.add(0, {"outcome": outcome})
+    DROPPED.add(0)
     yield
     shutdown_telemetry()  # on stop: send what's still buffered
 

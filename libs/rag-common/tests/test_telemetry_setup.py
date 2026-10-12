@@ -97,3 +97,35 @@ def test_real_providers_record_spans_and_metrics_with_merged_resource_attributes
     assert out["resource"]["service.name"] == "probe"
     assert out["resource"]["service.version"] == "9.9.9"  # from OTEL_RESOURCE_ATTRIBUTES
     assert out["resource"]["deployment.environment.name"] == "test"
+
+
+@pytest.mark.parametrize(("setting", "expected"), [(None, 15000.0), ("2500", 2500.0)])
+def test_metric_export_interval_honours_the_standard_setting(
+    setting: str | None, expected: float
+) -> None:
+    # Step 20: Prometheus scrapes every 15 s, so metrics are pushed every 15 s by default, and the
+    # standard OTEL_METRIC_EXPORT_INTERVAL (milliseconds) overrides it. Fresh process: providers are global.
+    code = textwrap.dedent(
+        """
+        from opentelemetry import metrics
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+        from rag_common.telemetry import setup_telemetry
+
+        shutdown = setup_telemetry("probe", span_exporter=InMemorySpanExporter())
+        reader = metrics.get_meter_provider()._metric_readers[0]  # SDK internals, test only
+        print(reader._export_interval_millis)
+        shutdown()
+        """
+    )
+    env = {"PATH": "", "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:9"}  # nothing listens there
+    if setting is not None:
+        env["OTEL_METRIC_EXPORT_INTERVAL"] = setting
+    result = subprocess.run(  # noqa: S603 - fixed code, our own interpreter
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=True,
+        timeout=60,
+    )
+    assert float(result.stdout.strip()) == expected

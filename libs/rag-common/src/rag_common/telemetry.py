@@ -7,6 +7,7 @@ in Compose and in Kubernetes:
     OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
     OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=dev,service.version=0.1.0
     OTEL_TRACES_SAMPLER=parentbased_traceidratio        OTEL_TRACES_SAMPLER_ARG=1.0
+    OTEL_METRIC_EXPORT_INTERVAL=15000                    (ms between metric exports; Step 20)
     OTEL_SDK_DISABLED=true                               (switch everything off)
 """
 
@@ -86,8 +87,10 @@ def setup_telemetry(
         tracer_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
     trace.set_tracer_provider(tracer_provider)
 
+    # How often metrics are sent: standard OTEL_METRIC_EXPORT_INTERVAL (ms); we default to 15 s.
+    interval_ms = int(os.getenv("OTEL_METRIC_EXPORT_INTERVAL", "15000"))
     reader = metric_reader or PeriodicExportingMetricReader(
-        OTLPMetricExporter(), export_interval_millis=15_000
+        OTLPMetricExporter(), export_interval_millis=interval_ms
     )
     meter_provider = MeterProvider(resource=resource, metric_readers=[reader])
     metrics.set_meter_provider(meter_provider)

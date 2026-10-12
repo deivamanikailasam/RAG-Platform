@@ -91,3 +91,41 @@ def test_log_lines_carry_the_trace_id() -> None:
         line = json.loads(JsonFormatter().format(record))
     assert line["msg"] == "hello"
     assert line["trace_id"] == format(span.get_span_context().trace_id, "032x")
+
+
+def test_latency_buckets_are_in_seconds(searched: str) -> None:
+    data = METRICS.get_metrics_data()
+    assert data is not None
+    hist = next(
+        m
+        for rm in data.resource_metrics
+        for sm in rm.scope_metrics
+        for m in sm.metrics
+        if m.name == "rag.search.duration"
+    )
+    bounds = list(hist.data.data_points[0].explicit_bounds)  # type: ignore[union-attr]
+    assert 2 in bounds  # an edge exactly at the 2-second objective
+    assert bounds[0] < 0.1  # fine resolution for fast searches, not the millisecond defaults
+
+
+def test_alert_worthy_counters_start_at_zero(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Step 20, bug 2: a counter born at its first incident is invisible to increase(). Starting the
+    # service must create the search and dropped-document counters at 0.
+    import rag_api.main as main
+
+    monkeypatch.setattr(main, "setup_logging", lambda: None)  # keep the test's own providers
+    monkeypatch.setattr(main, "setup_telemetry", lambda _name: lambda: None)
+    with TestClient(main.app):  # entering the context runs lifespan() start-up
+        pass
+    data = METRICS.get_metrics_data()
+    assert data is not None
+    points = {
+        (m.name, tuple(sorted((p.attributes or {}).items())))
+        for rm in data.resource_metrics
+        for sm in rm.scope_metrics
+        for m in sm.metrics
+        for p in m.data.data_points
+    }
+    assert ("rag.search.dropped_documents", ()) in points
+    assert ("rag.search.requests", (("outcome", "error"),)) in points
+    assert ("rag.search.requests", (("outcome", "ok"),)) in points
