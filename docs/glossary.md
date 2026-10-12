@@ -7,6 +7,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 |---|---|---:|
 | 0.0.0.0 / * | "Every interface": a port bound here is reachable by anyone who can reach your machine on the network. | 3 |
 | 401 vs 403 | 401 Unauthorized means "I don't know who you are" (no token, or a bad one); 403 Forbidden means "I know who you are, and the answer is no" (a valid token without the needed role). | 17 |
+| ABAC (attribute-based access control) | Access rules based on facts (attributes) about the person and the thing, such as classification, clearance or department, rather than just roles; what OPA evaluates here. | 18 |
 | Access token | The short-lived (5-minute) token an app shows to an API on every call; it carries who you are, your groups and roles, and when it expires. | 16 |
 | Acknowledgement (XACK) | A worker's "done" signal for a stream message. Until it arrives, the message stays pending for that worker. | 15 |
 | ACL (access control list, Valkey) | Per-user rules for which keys (`~pattern`), pub/sub channels (`&pattern`) and commands (`+@category`, `-@category`) a user may use; `user default off` disables anonymous access. | 15 |
@@ -27,6 +28,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | At-least-once delivery | Every job is delivered at least once, but may be delivered twice after a crash (the worker finished but died before acknowledging). | 15 |
 | Audience (`aud`) | The claim saying who a token is meant for (here `rag-api`). An API must reject tokens meant for someone else. | 16 |
 | Authentication vs authorisation | Who are you? (sign-in) versus what may you do? (permissions). Keycloak does the first and carries the facts (groups, roles) for the second. | 16 |
+| Authorisation policy | The written rules that say who may do which action and see which things; here `policies/rag/authz/authz.rego` plus its `data.json`. | 18 |
 | Authorization code + PKCE | The sign-in flow for web apps: the browser gets a one-time code and swaps it for tokens, proving with a random "code verifier" (PKCE) that it is the same app that started the sign-in. | 16 |
 | Authorization header | The HTTP request header that carries credentials; for APIs it is `Authorization: Bearer <access token>`. | 17 |
 | Auto-fix | A check that changes files to fix the problem itself; you review the change and `git add` it again. | 5 |
@@ -48,10 +50,12 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Cache hit / miss | Hit: the answer was already stored and comes back in milliseconds. Miss: it had to be computed (the LLM ran) and is then stored. | 15 |
 | Cache key | The value a cache looks answers up by. It must include everything that changes the answer (prompt with retrieved context, model, parameters, user's permission scope, tenant), or answers leak between users. | 15 |
 | Cache poisoning | A wrong, stale or someone-else's answer stored in a cache and then served to other requests, e.g. because the cache key left out the permission scope. | 15 |
+| Cap (deny overrides) | A limit that beats any grant: a contractor in `executives` still only reaches `internal`, because caps in `capped_groups` always win over group clearances. | 18 |
 | Cask | A Homebrew package that is a normal Mac app with a window. | 1 |
 | Chat template | The model-specific recipe that turns a list of messages into the exact text format the model was trained on. | 7 |
 | Ciphertext | The scrambled, encrypted version of a value; unreadable without the right key. | 6 |
 | Claim | One field in a token's payload, such as `iss`, `sub`, `groups` or `exp`. | 16 |
+| Clearance | The highest classification (public < internal < confidential < restricted) a person may read, taken from their groups; no known group means no clearance at all. | 18 |
 | CLI | Command-line interface: a program you control by typing commands. | 1 |
 | Client (OIDC) | An app registered with the identity provider. Public clients (browser, command line) can't keep a secret; confidential clients (servers, workers) can. | 16 |
 | Client credentials | The flow where a machine signs in with its own client id and secret, with no person involved; it gets an access token but no refresh token. | 16 |
@@ -74,12 +78,16 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | CORS | Browser rules for which websites may call a server from inside a web page; too open (`*`) and any site you visit could call your local model. | 7 |
 | Cosine similarity | A score for how closely two vectors point the same way: near 1 = very similar meaning, near 0 = unrelated. For unit-length vectors it equals the dot product. | 8 |
 | Cross-encoder | A model (the reranker) that reads the query and one document together and scores their relevance; precise but slow, so only used on a shortlist. | 8 |
+| Data filtering / partial evaluation (OPA) | OPA evaluating a policy with some facts still unknown and turning the rest into a filter, even a SQL `WHERE` clause, that a database can apply. | 18 |
 | Data key | The random key SOPS creates per file to lock every value; it is itself locked once per recipient. | 6 |
 | Dead-letter queue (DLQ) | Where jobs go after failing too many times (here: 3 deliveries), so they stop retrying forever and a human can inspect them. | 15 |
+| Decision log | OPA's record of every decision (input, result, path, time, `decision_id`), written as JSON; the audit evidence for "who was allowed what, and why". | 18 |
 | Decode | The second phase of generation: the model writes the answer one token at a time; its speed is limited by memory bandwidth. | 7 |
 | Dedicated vector database | A database built only for storing vectors and finding the nearest ones fast, with filters (Qdrant, Milvus, Weaviate), rather than a general database with a vector extension. | 12 |
+| `default` (Rego) | The value a rule takes when none of its bodies match, e.g. `default allow := false`; the building block of deny by default. | 18 |
 | Default privileges (ALTER DEFAULT PRIVILEGES) | A standing instruction that every table a given role creates from now on automatically gets certain grants, so new tables are never invisible to the app. | 11 |
 | Delete marker | With versioning on, "delete" only adds a marker that hides the object; older versions still exist until each is deleted by version ID. | 14 |
+| Deny by default | Nothing is allowed unless a rule explicitly allows it; in Rego, `default allow := false`. | 18 |
 | Dependency | A package your project needs in order to work. | 2 |
 | Dependency group | A named set of extra dependencies in `pyproject.toml` (PEP 735), e.g. `dev` for test tools not needed in production. | 2 |
 | Dependency injection (FastAPI) | FastAPI runs helper functions ("get the caller", "require this role") before an endpoint and passes their results in; tests swap them for fakes with `dependency_overrides`. | 17 |
@@ -106,6 +114,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Explain API | Adding `"explain": true` to a search so OpenSearch returns the arithmetic behind each score (tf, idf, length adjustment). | 13 |
 | Extension (Postgres) | An add-on that teaches Postgres new tricks; `vector` (pgvector) adds vector types and indexes. | 11 |
 | Fail closed | When unsure, deny: no groups in the token means no documents, not all documents; an unreachable key service means 503, not "let it through". | 17 |
+| Fail open | The opposite of fail closed: when something breaks or a fact is missing, let the request through. Never acceptable for security; an undefined Rego value can cause it silently. | 18 |
 | Fallback | Sending a request to a different model when the first one fails; fine between chat models, never between embedders (different vector spaces). | 10 |
 | False positive | A check flags something that is actually fine; silence it narrowly, with a comment explaining why. | 5 |
 | FinOps | The practice of making technology spend visible, attributed to teams, and managed against budgets; AI FinOps applies it to model usage. | 10 |
@@ -134,6 +143,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Image tag vs digest | A tag (`v1.104.0`) is a movable label; a digest (`@sha256:…`) is the exact, unchangeable fingerprint of one image. | 9 |
 | In-memory key-value store | A database that keeps data in RAM and retrieves it by a key (a name). Extremely fast, but limited by memory; Valkey and Redis are examples. | 15 |
 | Infrastructure as code | Defining your environment in version-controlled files instead of setting it up by hand. | 1 |
+| `input` vs `data` (Rego) | `input` holds the facts about this one request (who, which action, which documents); `data` holds standing facts loaded with the policy, such as `data.json` mappings. | 18 |
 | Internal user | A user stored inside OpenSearch's own security index (here `rag_search`, `rag_indexer`). | 13 |
 | Interpreter | The `python` program itself: the engine that reads and runs Python code, e.g. CPython 3.12. | 2 |
 | Inverse document frequency (idf) | How rare a word is across all documents; rare words count for much more in BM25. | 13 |
@@ -193,23 +203,30 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Object storage / S3 API | Storing files as objects in buckets, reached over HTTP using Amazon's S3 protocol, now an industry standard spoken by AWS S3, SeaweedFS, Ceph and many more. | 14 |
 | Opaque token | A token that is just a random reference, not a readable JWT; only the identity provider can say what it means, via introspection. | 17 |
 | OpenAI-compatible API | The same request and response format as OpenAI's API, so any tool that speaks "OpenAI" can call a local model. | 7 |
+| OpenFGA | A CNCF relationship-based (ReBAC) authorisation engine modelled on Google's Zanzibar: "shared with", folder inheritance, team membership. Planned for the permission-aware RAG project. | 18 |
 | OrbStack | A lightweight macOS container runtime: Linux VM + Docker engine + Compose + single-node Kubernetes. | 3 |
 | Package manager | A program that installs, updates and removes other software and tracks what's installed. | 1 |
+| PAP (Policy Administration Point) | Where the rules are written and changed; here Git and pull requests on `policies/`. | 18 |
 | Password grant (ROPC) | The "resource owner password credentials" grant, where an app collects your password and swaps it for tokens. Modern OAuth guidance says never: the app sees the password and MFA can't work. | 16 |
 | PATH | The ordered list of folders your shell searches when you type a command. First match wins. | 1 |
 | Path-style addressing | Putting the bucket name in the URL path (`http://host:8333/bucket/key`) instead of the host name; common for self-hosted S3 stores. | 14 |
 | Payload | The JSON metadata stored with a Qdrant point (tenant, access groups, title, text…). | 12 |
 | Payload index | An index on a payload field so filters on it are fast. Without one, filtering scans. | 12 |
+| PDP (Policy Decision Point) | The component that decides; here OPA, answering from the policy and its data. | 18 |
 | Pending entry | A stream message delivered to a consumer but not yet acknowledged; if the consumer crashed, another worker can reclaim it (`XAUTOCLAIM`). | 15 |
 | PEP | Python Enhancement Proposal: an official Python standard (e.g. PEP 621 `pyproject.toml`, PEP 735 dependency groups, PEP 668 protected system Pythons). | 2 |
+| PEP (Policy Enforcement Point) | The component that asks for a decision and obeys it, never deciding itself; here rag-api. (Not to be confused with a Python Enhancement Proposal.) | 18 |
 | Persistence: RDB / AOF | How an in-memory store survives restarts. RDB: periodic snapshots to disk. AOF (append-only file): a log of every write, replayed at start-up; `appendfsync everysec` loses at most about 1 s. | 15 |
 | pg_dump | Postgres's logical backup tool: writes a database's structure and data to a file that `pg_restore` can load again. | 11 |
 | Plaintext | Readable, unencrypted text. | 6 |
 | Point | One item stored in Qdrant: an ID, one or more vectors, and a payload. Here, one chunk. | 12 |
+| Policy as code | Access rules written in a real language, versioned in Git, reviewed by pull request and tested like code. | 18 |
+| Policy engine | A service whose only job is to evaluate authorisation rules against facts and answer yes/no plus details; here OPA. | 18 |
 | Polyrepo | One repository per service or library. | 4 |
 | Pooling | How an embedding model squeezes its per-token outputs into one vector (Qwen3-Embedding uses the last token). | 8 |
 | Port | A numbered "door" through which a program accepts network connections, e.g. 5432 for Postgres. | 3 |
 | pre-commit (the tool) | A framework that installs and runs git hooks from one file, `.pre-commit-config.yaml`. | 5 |
+| Pre-filter vs post-filter | Restricting a search inside the query (pre-filter, using the filter the policy computed) vs checking the results afterwards (post-filter); we do both, so leaks are impossible and results stay full. | 18 |
 | Prefill | The first phase of generation: the model reads every prompt token in one parallel pass; limited by compute, it sets TTFT. | 7 |
 | Presigned URL | A link with a built-in signature and expiry that grants temporary access to one object (or one version) without the opener needing credentials. | 14 |
 | Primary key / foreign key | A row's unique ID / a column pointing to another table's row (a chunk → its document). | 11 |
@@ -229,9 +246,12 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Read-only filesystem (container) | Starting a container so it can't write to its own files (`read_only: true`), with a small RAM `tmpfs` for scratch space; here code ownership by root gives the same protection because Compose can't combine it with environment-sourced secrets. | 17 |
 | Realm | A separate, self-contained space in Keycloak with its own users, groups, apps and settings. `master` is only for running Keycloak itself; our apps use `rag`. | 16 |
 | Realm role | A Keycloak role that says what someone may DO (`rag-user`, `rag-admin`, `rag-auditor`, `rag-ingest`). Here roles are attached to groups, never to people directly. | 16 |
+| ReBAC (relationship-based access control) | Access decided by relationships between people and things ("editors of this folder", "shared with Bob"); implemented by OpenFGA and SpiceDB. | 18 |
 | Recall | Of the truly closest results, the share the fast (approximate) search actually returned. | 11 |
 | Recipient | Someone (or a machine) whose public key can open a SOPS file: you, CI, a teammate. | 6 |
 | Refresh token | A longer-lived token an app swaps for new access tokens without signing in again; here it is one-time use and dies at logout. | 16 |
+| Regal | The linter and editor language server for Rego: catches bugs and style problems in policies; part of `just policy-check`. | 18 |
+| Rego | OPA's policy language: you write rules that become true or produce values, and OPA evaluates them against `input` and `data`. | 18 |
 | Relational database / table / row / column | Data stored in tables; each row is a record (one chunk), each column a field (its text, its vector). | 11 |
 | Remote / origin | A copy of the repository on a server (GitHub); `origin` is its default nickname. | 4 |
 | Repository | The project's filing cabinet: all files plus their full history of changes (git). | 4 |
@@ -246,6 +266,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Role mapping | The link in OpenSearch's security plugin that gives a user (or backend role) the permissions of a role. | 13 |
 | Rotation | Replacing a secret with a new value on a schedule, or immediately after a suspected leak. | 6 |
 | Routing | Choosing which real backend (deployment) answers a request for a given model alias. | 9 |
+| Rule (Rego) | A named statement such as `allow if { ... }`, true when every line in its body is true; several rules with the same name mean OR. | 18 |
 | S3 endpoint | The server URL to send S3 requests to (here `http://127.0.0.1:8333`), passed to tools as `--endpoint-url` / `endpoint_url`. | 14 |
 | Salt key (LITELLM_SALT_KEY) | A secret LiteLLM uses to encrypt credentials it stores in its database; it must never change, or those become unreadable. | 10 |
 | Scalar quantization (int8) | Storing each vector number as a 1-byte integer instead of 2–4 bytes: about 4× smaller and faster to scan. | 12 |
@@ -317,3 +338,4 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Workspace (uv) | Several Python packages in one repository sharing one `uv.lock` and one `.venv`. | 4 |
 | WORM (write once, read many) | Storage where data can be written once and then never changed or deleted until its retention ends; what object lock provides. | 14 |
 | `WWW-Authenticate` | The response header on a 401 telling the client a bearer token is required, or (with `error="invalid_token"`) that the one sent was not accepted. | 17 |
+| Zanzibar | Google's paper and system for relationship-based authorisation at global scale; the model behind OpenFGA and SpiceDB. | 18 |
