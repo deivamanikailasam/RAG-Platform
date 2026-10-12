@@ -47,7 +47,14 @@ ADR = (
     / "0014-use-seaweedfs-as-the-s3-compatible-object-store-instead-of-minio.md"
 )
 BUCKETS = ("rag-raw-docs", "rag-audit-archive", "rag-tmp")
-IDENTITIES = ("ADMIN", "INGEST", "READER", "LANGFUSE")  # + Langfuse's own bucket (Step 22)
+IDENTITIES = (
+    "ADMIN",
+    "INGEST",
+    "READER",
+    "LANGFUSE",  # + Langfuse's own bucket (Step 22)
+    "AUDIT_ANCHOR",
+    "AUDIT_READER",
+)  # + the audit archive's writer and reader (Step 23)
 KEYS = tuple(f"S3_{who}_{kind}_KEY" for who in IDENTITIES for kind in ("ACCESS", "SECRET"))
 SECRETS = [name.lower() for name in KEYS]
 
@@ -97,7 +104,8 @@ def test_identities_file_is_built_in_ram_from_secret_files() -> None:
 
 def test_identities_are_least_privilege_and_bucket_scoped() -> None:
     idents = _identities()
-    assert set(idents) == {"admin", "rag-ingest", "rag-reader", "langfuse"}  # langfuse: Step 22
+    assert set(idents) == {"admin", "rag-ingest", "rag-reader", "langfuse",  # langfuse: Step 22
+                           "audit-anchor", "audit-reader"}  # Step 23  # fmt: skip
     assert idents["admin"]["actions"] == ["Admin", "Read", "Write", "List", "Tagging"]
     assert idents["rag-ingest"]["actions"] == [
         "Read:rag-raw-docs",
@@ -110,9 +118,15 @@ def test_identities_are_least_privilege_and_bucket_scoped() -> None:
     ]
     assert idents["rag-reader"]["actions"] == ["Read:rag-raw-docs", "List:rag-raw-docs"]
     assert idents["langfuse"]["actions"] == ["Read:langfuse", "Write:langfuse", "List:langfuse"]
-    # Nobody but admin can touch the audit archive.
+    # Nobody but admin and the two audit identities (Step 23) can touch the audit archive.
     for name in ("rag-ingest", "rag-reader", "langfuse"):
         assert not any("rag-audit-archive" in a for a in idents[name]["actions"])
+    assert idents["audit-anchor"]["actions"] == [
+        "Read:rag-audit-archive",
+        "Write:rag-audit-archive",
+        "List:rag-audit-archive",
+    ]
+    assert idents["audit-reader"]["actions"] == ["Read:rag-audit-archive", "List:rag-audit-archive"]
     assert idents["admin"]["credentials"] == [
         {"accessKey": "<s3_admin_access_key>", "secretKey": "<s3_admin_secret_key>"}
     ]

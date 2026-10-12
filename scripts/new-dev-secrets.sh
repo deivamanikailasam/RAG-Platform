@@ -68,6 +68,14 @@ S3_LANGFUSE_ACCESS_KEY=$(gen_ak)
 S3_LANGFUSE_SECRET_KEY=$(gen_sk)
 LANGFUSE_PUBLIC_KEY=pk-lf-$(uuidgen | tr A-Z a-z)
 LANGFUSE_SECRET_KEY=sk-lf-$(uuidgen | tr A-Z a-z)
+# --- Audit log (Step 23): three audit-database roles and two archive identities, letters/digits only ---
+AUDIT_DB_MIGRATOR_PASSWORD=$(rand)
+AUDIT_DB_WRITER_PASSWORD=$(rand)
+AUDIT_DB_READER_PASSWORD=$(rand)
+S3_AUDIT_ANCHOR_ACCESS_KEY=$(rand)
+S3_AUDIT_ANCHOR_SECRET_KEY=$(rand)
+S3_AUDIT_READER_ACCESS_KEY=$(rand)
+S3_AUDIT_READER_SECRET_KEY=$(rand)
 # --- Demo value used in this step ---
 DEMO_TOKEN=$(rand)
 EOF

@@ -113,10 +113,11 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD_FILE: /run/secrets/rag_db_superuser_password
     secrets: [rag_db_superuser_password, rag_db_migrator_password, rag_db_app_password, rag_db_readonly_password,
-              rag_db_metrics_password]                  # Step 20: the rag_metrics (pg_monitor) role
+              rag_db_metrics_password,                  # Step 20: the rag_metrics (pg_monitor) role
+              audit_db_migrator_password, audit_db_writer_password, audit_db_reader_password]   # Step 23: the audit database
     volumes:
       - rag-db-data:/var/lib/postgresql/data
-      - ../config/rag-db/init:/docker-entrypoint-initdb.d:ro  # one-time bootstrap: roles, extensions, schema
+      - ../config/rag-db/init:/docker-entrypoint-initdb.d:ro  # one-time bootstrap: roles, extensions, schema (+ audit DB, Step 23)
     command:
       - postgres
       - -c
@@ -240,13 +241,21 @@ services:
            "actions": ["Read:rag-raw-docs", "List:rag-raw-docs"]},
           {"name": "langfuse",
            "credentials": [{"accessKey": "$$(cat /run/secrets/s3_langfuse_access_key)", "secretKey": "$$(cat /run/secrets/s3_langfuse_secret_key)"}],
-           "actions": ["Read:langfuse", "Write:langfuse", "List:langfuse"]}
+           "actions": ["Read:langfuse", "Write:langfuse", "List:langfuse"]},
+          {"name": "audit-anchor",
+           "credentials": [{"accessKey": "$$(cat /run/secrets/s3_audit_anchor_access_key)", "secretKey": "$$(cat /run/secrets/s3_audit_anchor_secret_key)"}],
+           "actions": ["Read:rag-audit-archive", "Write:rag-audit-archive", "List:rag-audit-archive"]},
+          {"name": "audit-reader",
+           "credentials": [{"accessKey": "$$(cat /run/secrets/s3_audit_reader_access_key)", "secretKey": "$$(cat /run/secrets/s3_audit_reader_secret_key)"}],
+           "actions": ["Read:rag-audit-archive", "List:rag-audit-archive"]}
         ]}
         EOF
         exec weed mini -dir=/data -s3.config=/run/seaweed/s3.json -master.telemetry=false
     secrets: [s3_admin_access_key, s3_admin_secret_key, s3_ingest_access_key, s3_ingest_secret_key,
               s3_reader_access_key, s3_reader_secret_key,
-              s3_langfuse_access_key, s3_langfuse_secret_key]   # Step 22: Langfuse's own bucket only
+              s3_langfuse_access_key, s3_langfuse_secret_key,   # Step 22: Langfuse's own bucket only
+              s3_audit_anchor_access_key, s3_audit_anchor_secret_key,   # Step 23: writes the audit archive
+              s3_audit_reader_access_key, s3_audit_reader_secret_key]   # Step 23: reads it (verify, auditors)
     tmpfs:
       - /run/seaweed:size=1m,mode=0700          # identities file lives in RAM only
     volumes:
@@ -452,11 +461,13 @@ services:
       OTEL_TRACES_SAMPLER_ARG: "1.0"                          # keep every trace in dev; lower in production
       RAG_API_LANGFUSE_BASE_URL: http://langfuse-web:3000     # Step 22: LLM traces; leave empty to switch off
       RAG_API_LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}     # identifies the project; not secret
+      RAG_API_AUDIT_DB_HOST: rag-db                           # Step 23: the audit database, as audit_writer
     secrets:
       - rag_api_gateway_key                                   # -> /run/secrets/rag_api_gateway_key
       - rag_api_db_password                                   # -> /run/secrets/rag_api_db_password
       - rag_api_opa_token                                     # -> /run/secrets/rag_api_opa_token (Step 18)
       - rag_api_langfuse_secret_key                           # -> /run/secrets/rag_api_langfuse_secret_key (Step 22)
+      - rag_api_audit_db_password                             # -> /run/secrets/rag_api_audit_db_password (Step 23)
     ports:
       - "127.0.0.1:8000:8000"
     # The guide sets read_only: true here. Compose refuses it together with secrets that come from
@@ -785,3 +796,19 @@ secrets:
     environment: S3_LANGFUSE_SECRET_KEY
   rag_api_langfuse_secret_key:
     environment: LANGFUSE_SECRET_KEY            # rag-api (Step 22): sk-lf-… authorises writes to the Langfuse project
+  audit_db_migrator_password:
+    environment: AUDIT_DB_MIGRATOR_PASSWORD     # audit_migrator (Step 23): owns the audit schema, runs its migrations
+  audit_db_writer_password:
+    environment: AUDIT_DB_WRITER_PASSWORD       # audit_writer: may ONLY call audit.append()
+  audit_db_reader_password:
+    environment: AUDIT_DB_READER_PASSWORD       # audit_reader: read + verify (anchor/verify jobs, auditors)
+  rag_api_audit_db_password:
+    environment: AUDIT_DB_WRITER_PASSWORD       # rag-api (Step 23): connects as audit_writer
+  s3_audit_anchor_access_key:
+    environment: S3_AUDIT_ANCHOR_ACCESS_KEY     # audit-anchor (Step 23): read/write/list rag-audit-archive
+  s3_audit_anchor_secret_key:
+    environment: S3_AUDIT_ANCHOR_SECRET_KEY
+  s3_audit_reader_access_key:
+    environment: S3_AUDIT_READER_ACCESS_KEY     # audit-reader (Step 23): read/list rag-audit-archive only
+  s3_audit_reader_secret_key:
+    environment: S3_AUDIT_READER_SECRET_KEY

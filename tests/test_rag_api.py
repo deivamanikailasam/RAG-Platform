@@ -148,10 +148,12 @@ def test_secrets_arrive_as_files_from_the_step_10_and_11_values() -> None:
         "rag_api_db_password",
         "rag_api_opa_token",
         "rag_api_langfuse_secret_key",  # Step 22: checked in tests/test_langfuse.py
+        "rag_api_audit_db_password",  # Step 23: the append-only audit_writer role
     ]
     secrets = yaml.safe_load(COMPOSE.read_text())["secrets"]
     assert secrets["rag_api_gateway_key"] == {"environment": "RAG_API_GATEWAY_KEY"}
     assert secrets["rag_api_db_password"] == {"environment": "RAG_DB_APP_PASSWORD"}
+    assert secrets["rag_api_audit_db_password"] == {"environment": "AUDIT_DB_WRITER_PASSWORD"}
 
 
 def test_container_is_locked_down_and_localhost_only() -> None:

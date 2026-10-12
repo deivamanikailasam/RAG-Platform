@@ -31,3 +31,6 @@ brew "awscli"               # AWS CLI v2: speaks S3 to any compatible store via 
 # ---- Policy as code (Step 18) ----
 brew "opa"                  # Open Policy Agent: evaluate and test Rego policies
 brew "regal"                # Rego linter and language server (editor support)
+
+# ---- Audit log tests (Step 23) ----
+brew "libpq"                # psql and pg_isready without a full Postgres server (keg-only: /opt/homebrew/opt/libpq/bin)

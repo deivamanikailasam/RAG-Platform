@@ -287,3 +287,18 @@ api-demo:
 # Delete Langfuse traces older than LANGFUSE_RETENTION_DAYS (default 30). Run nightly. (Step 22)
 langfuse-retention *args:
     sops exec-env secrets/dev.enc.env 'LANGFUSE_BASE_URL=http://localhost:3002 uv run python scripts/langfuse_retention.py {{args}}'
+
+# ---- Audit log (Step 23) ----
+audit_db_url := "postgres://audit_migrator:$AUDIT_DB_MIGRATOR_PASSWORD@127.0.0.1:5432/audit?sslmode=disable"
+
+# One-time: create the audit database and roles on an EXISTING rag-db volume
+audit-bootstrap:
+    docker compose -f infra/compose/compose.yaml exec -T rag-db bash < infra/config/rag-db/init/02-audit.sh
+
+# Audit migrations:   just audit-migrate up | status
+audit-migrate *args="status":
+    sops exec-env secrets/dev.enc.env 'DATABASE_URL="{{audit_db_url}}" dbmate --migrations-dir infra/db/audit/migrations --migrations-table audit.schema_migrations --no-dump-schema {{args}}'
+
+# Superuser SQL shell on the audit database (break-glass: inside the container only)
+audit-psql *args:
+    docker compose -f infra/compose/compose.yaml exec rag-db psql -U postgres -d audit {{args}}
