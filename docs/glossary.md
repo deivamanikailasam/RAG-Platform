@@ -11,7 +11,10 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | age | A small, modern encryption tool with short keys (`age1…`); makes the key pair SOPS uses. A simpler, safer replacement for GPG. | 6 |
 | Analytics | Anonymous usage statistics a tool sends back to its makers. | 1 |
 | arm64 / aarch64 vs amd64 / x86_64 | Processor families; Apple Silicon is arm64, amd64-only images need slower emulation. | 3 |
+| Asymmetric retrieval | Embedding questions and documents differently (queries get a task instruction, documents don't), because a short question and a long passage are different kinds of text. | 8 |
 | Auto-fix | A check that changes files to fix the problem itself; you review the change and `git add` it again. | 5 |
+| Batch | Several texts sent together and embedded in one GPU pass; much faster per text than one at a time. | 8 |
+| Bi-encoder | A model (the embedder) that turns the query and each document into vectors separately, so document vectors can be computed once in advance and compared in milliseconds. | 8 |
 | Bind mount | A host folder shared into a container; fine for config and code, slow for databases on a Mac. | 3 |
 | Branch | A separate line of work (a draft) where you change things without touching `main`. | 4 |
 | Branch protection / ruleset | GitHub settings that block direct pushes to `main` and require PRs, checks and signed commits. | 4 |
@@ -29,16 +32,21 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Context window | The maximum number of tokens (prompt + answer) a model can handle at once. | 7 |
 | Conventional Commits | A commit-message format `type(scope)!: description` (e.g. `feat(gateway): …`) readable by people and tools. | 4 |
 | CORS | Browser rules for which websites may call a server from inside a web page; too open (`*`) and any site you visit could call your local model. | 7 |
+| Cosine similarity | A score for how closely two vectors point the same way: near 1 = very similar meaning, near 0 = unrelated. For unit-length vectors it equals the dot product. | 8 |
+| Cross-encoder | A model (the reranker) that reads the query and one document together and scores their relevance; precise but slow, so only used on a shortlist. | 8 |
 | Data key | The random key SOPS creates per file to lock every value; it is itself locked once per recipient. | 6 |
 | Decode | The second phase of generation: the model writes the answer one token at a time; its speed is limited by memory bandwidth. | 7 |
 | Dependency | A package your project needs in order to work. | 2 |
 | Dependency group | A named set of extra dependencies in `pyproject.toml` (PEP 735), e.g. `dev` for test tools not needed in production. | 2 |
 | Dev dependency | A package needed only while developing (e.g. pytest), not when the app runs in production. | 2 |
+| Dimensions (of an embedding) | How many numbers an embedding vector has (Qwen3-Embedding-0.6B: up to 1,024); more can hold more nuance but costs storage and search time. | 8 |
 | direnv | A tool that loads a project's settings automatically when you enter its folder. | 1 |
 | Docker Compose | A file (`compose.yaml`) listing many containers and how they connect; `docker compose up` starts them all. | 3 |
 | Docker engine / CLI | The engine runs containers inside the VM; the `docker` command is how you talk to it. | 3 |
 | Drift | When the dependency list (`pyproject.toml`) and the lockfile (`uv.lock`) no longer match; `uv sync --locked` catches it. | 2 |
 | EditorConfig | A small `.editorconfig` file telling every editor the same formatting basics (indentation, line endings). | 4 |
+| Embedding / vector | A fixed-length list of numbers representing a text's meaning: a point in meaning space. | 8 |
+| Embedding contract | Everything that defines how vectors were made (model + revision, dimensions, query instruction, normalisation, pooling, chunk limit); change any part and the index must be rebuilt. | 8 |
 | Encryption | Scrambling data so only someone with the right key can unscramble it. | 6 |
 | Endpoint | A specific URL path on a server, e.g. `/v1/chat/completions` or `/health`. | 7 |
 | Envelope encryption | Values are locked with a random data key, and the data key is locked separately for each recipient, so adding a person never means re-encrypting every value by hand. | 6 |
@@ -64,7 +72,9 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Lockfile | A file recording the exact version and hash of every package in the full dependency tree (`uv.lock`). | 2 |
 | Log rotation | Keeping only the newest few log files of a limited size and deleting the oldest (here 3 × 10 MB). | 3 |
 | macOS Keychain | The Mac's built-in encrypted password store, unlocked by your login; home for personal tokens. | 6 |
+| Matryoshka embeddings | Embeddings trained so their first part is already a useful smaller embedding; keep the first N numbers, re-normalise, and save storage at a small quality cost. | 8 |
 | MDM | Mobile Device Management: how company IT installs and controls software on employees' Macs (e.g. Jamf, Kandji). | 1 |
+| Meaning space | The many-dimensional map an embedding model places texts on, where similar meanings sit close together. | 8 |
 | Memory bandwidth | How fast data moves between memory and the GPU; each decoded token reads the model's weights, so it is the speed limit for tokens per second. | 7 |
 | Mixture of Experts (MoE) | A model that stores many specialist sub-networks but uses only a few per token: memory like a big model, speed like a small one. | 7 |
 | Model inventory | A reviewed list of which exact models a platform serves: repo, revision, licence, port, role and who approved it (`infra/model-serving/models.yaml`). | 7 |
@@ -73,6 +83,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Named volume | Docker-managed storage inside the VM that survives container deletion; use it for database data. | 3 |
 | Network interface | A way your machine connects to networks: Wi-Fi, Ethernet, or localhost. | 3 |
 | --no-verify | A git flag that skips local hooks; the reason CI must repeat the same checks. | 5 |
+| Normalisation | Scaling a vector to length 1, so cosine similarity becomes a simple dot product. | 8 |
 | OpenAI-compatible API | The same request and response format as OpenAI's API, so any tool that speaks "OpenAI" can call a local model. | 7 |
 | OrbStack | A lightweight macOS container runtime: Linux VM + Docker engine + Compose + single-node Kubernetes. | 3 |
 | Package manager | A program that installs, updates and removes other software and tracks what's installed. | 1 |
@@ -80,6 +91,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | PEP | Python Enhancement Proposal: an official Python standard (e.g. PEP 621 `pyproject.toml`, PEP 735 dependency groups, PEP 668 protected system Pythons). | 2 |
 | Plaintext | Readable, unencrypted text. | 6 |
 | Polyrepo | One repository per service or library. | 4 |
+| Pooling | How an embedding model squeezes its per-token outputs into one vector (Qwen3-Embedding uses the last token). | 8 |
 | Port | A numbered "door" through which a program accepts network connections, e.g. 5432 for Postgres. | 3 |
 | pre-commit (the tool) | A framework that installs and runs git hooks from one file, `.pre-commit-config.yaml`. | 5 |
 | Prefill | The first phase of generation: the model reads every prompt token in one parallel pass; limited by compute, it sets TTFT. | 7 |
@@ -88,9 +100,12 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Push / pull | Send your commits to the remote / fetch other people's commits from it. | 4 |
 | pyproject.toml | The standard Python project file listing the dependency ranges you'll accept (PEP 621). | 2 |
 | Quantization | Storing each of a model's numbers in fewer bits (8-bit, 4-bit): smaller and faster, at the cost of a little accuracy. | 7 |
+| Query instruction | A one-sentence task description prefixed to queries (not documents) for instruction-aware embedders: `Instruct: {task}\nQuery:{query}`. | 8 |
+| Re-indexing | Re-embedding every stored document because the embedding contract changed; planned like a migration. | 8 |
 | Recipient | Someone (or a machine) whose public key can open a SOPS file: you, CI, a teammate. | 6 |
 | Remote / origin | A copy of the repository on a server (GitHub); `origin` is its default nickname. | 4 |
 | Repository | The project's filing cabinet: all files plus their full history of changes (git). | 4 |
+| Retrieve-then-rerank | The two-stage search pattern: a fast embedder finds ~50 candidates, then a slow, precise reranker picks the best few for the LLM. | 8 |
 | Revocation | Making an old secret stop working, e.g. deleting an API token. | 6 |
 | Rotation | Replacing a secret with a new value on a schedule, or immediately after a suspected leak. | 6 |
 | Secret | Any value that grants access: a password, API key, token, private key or encryption key. | 6 |
@@ -109,11 +124,14 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | SSH key | A private key that stays on your Mac and a public `.pub` key you give GitHub, to prove it's you without a password. | 4 |
 | Staged files | The files you have `git add`-ed: exactly what the next commit will contain, and what hooks check. | 5 |
 | Supersede | Replace an accepted ADR with a newer ADR that points back to it; the old one is never edited. | 4 |
+| TEI (Text Embeddings Inference) | Hugging Face's Rust server for embedding and reranking models, with batching, API keys and metrics; runs natively with Metal on Apple Silicon. | 8 |
 | Thinking mode | Qwen models' optional hidden reasoning before the answer; better on hard questions, slower and more tokens (`enable_thinking`). | 7 |
+| Throughput | How much work a server finishes per second, e.g. chunks embedded per second. | 8 |
 | Token | The unit a model reads and writes: roughly ¾ of an English word. | 7 |
 | Tokenizer | The model's dictionary for converting text to tokens and back. | 7 |
 | Tokens per second (tok/s) | How fast an answer streams once it starts; mostly set by memory bandwidth. | 7 |
 | Transitive dependency | A dependency of a dependency: a package you never chose that comes along because one you chose needs it. | 2 |
+| Truncation / max sequence length | The longest text a model reads; anything beyond is cut off, silently in TEI by default (`--auto-truncate`). | 8 |
 | Trunk-based development | `main` (the trunk) is always working; every change goes through a short-lived branch and a PR. | 4 |
 | TTFT (time to first token) | How long you wait before the first word appears; mostly set by prefill and prompt length. | 7 |
 | Type checker | A tool (e.g. `mypy`) that reads type hints and checks they are used consistently, catching wrong-kind-of-value bugs before running. | 5 |
