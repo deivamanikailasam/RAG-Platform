@@ -1,0 +1,18 @@
+name: query-instruction
+version: 1
+kind: text
+description: >-
+  Instruction prefixed to every search query before it is embedded (Qwen3-Embedding format).
+  Part of the embedding contract (Step 8): it must match the collection's query_instruction,
+  so a change here needs a re-evaluation of retrieval, and possibly a re-index.
+owner: rag-platform
+model: embedder
+template: |-
+  Instruct: Given an employee question, retrieve passages from company documents that answer it
+  Query:{{query}}
+variables:
+  query:
+    description: The user's search query, as typed
+    max_chars: 2000
+    untrusted: false  # embedding models don't follow instructions; nothing to inject into
+changelog: Moved from a constant in search.py into the registry (Step 24). Text unchanged.

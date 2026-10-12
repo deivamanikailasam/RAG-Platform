@@ -1,0 +1,8 @@
+# Which version each environment uses. Promote or roll back = change a number here, in a PR.
+# Edit with `just prompts promote <name> <version> <label>` (it re-checks everything).
+query-instruction:
+  production: 1
+  staging: 1
+rag-answer:
+  production: 1
+  staging: 2

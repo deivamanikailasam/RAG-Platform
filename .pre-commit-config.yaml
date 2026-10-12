@@ -72,3 +72,16 @@ repos:
         entry: scripts/check-sops-encrypted.sh
         language: system
         files: ^secrets/
+      - id: prompts-lint
+        name: prompt registry (format, rules, lock, labels)
+        entry: uv run python scripts/prompts.py lint
+        language: system
+        files: ^prompts/
+        pass_filenames: false
+      - id: prompts-check-main
+        name: released prompts unchanged vs main (before push)
+        entry: just prompts-check-main
+        language: system
+        files: ^prompts/
+        pass_filenames: false
+        stages: [pre-push]

@@ -2,3 +2,6 @@
 #   /infra/           @platform-team
 #   /evals/           @ml-quality-team
 *       @deivamanikailasam
+
+# Prompts change what every user sees: their owners review every change.
+/prompts/       @deivamanikailasam

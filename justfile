@@ -323,3 +323,15 @@ audit-anchor:
 # Check database chain, archive, and that they agree. Daily, and on request. Exit 1 = problems.
 audit-verify:
     sops exec-env secrets/dev.enc.env 'AUDIT_DB_DSN="{{audit_reader_dsn}}" uv run python scripts/audit_chain.py verify'
+
+# ---- Prompt registry (Step 24) ----
+# just prompts list | lint | new <name> | lock | promote <name> <version> <label> | render … | diff …
+[positional-arguments]
+prompts *args:
+    uv run python scripts/prompts.py "$@"
+
+# Released prompt versions on main must be unchanged here (CI runs this; Step 27)
+prompts-check-main:
+    git fetch -q origin main
+    git show origin/main:prompts/prompts.lock.json > .git/main-prompts.lock.json 2>/dev/null || : > .git/main-prompts.lock.json
+    uv run python scripts/prompts.py lint --against .git/main-prompts.lock.json

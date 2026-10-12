@@ -52,3 +52,31 @@ verifier = TokenVerifier(
 )
 principal = verifier.verify(token)  # never log the token itself
 ```
+
+## `rag_common.prompts`: the prompt registry (Step 24)
+
+Prompts are versioned YAML files in the repository's `prompts/` folder
+(`prompts/<name>/v<N>.yaml`), frozen by the SHA-256 recorded in `prompts/prompts.lock.json`, with
+`prompts/labels.yaml` saying which version each environment (production, staging…) runs.
+
+- `Registry.load(root)` validates every file (schema, placeholders, untrusted-variable rules), checks
+  every hash against the lock, and checks the labels. Any problem raises `PromptError`.
+- `registry.render(name, values, label=...)` fills placeholders in ONE pass, refuses missing,
+  unexpected or over-long values, and neutralises an untrusted value's closing tag
+  (`</question>` becomes `<\/question>`). The result carries `ref` (`rag-answer@2`) and `sha256`:
+  record them with every call that used it.
+- `lock_only_grew(old, new)` compares a lock with the one on `main`: entries may be added, never
+  changed or removed.
+
+```python
+from pathlib import Path
+
+from rag_common.prompts import Registry
+
+registry = Registry.load(Path("prompts"))
+r = registry.render("query-instruction", {"query": "hybrid work"}, label="production")
+r.ref   # 'query-instruction@1'
+r.text  # 'Instruct: …\nQuery:hybrid work'
+```
+
+The everyday workflow is the CLI: `just prompts list | lint | new | lock | promote | render | diff`.
