@@ -11,6 +11,7 @@ dependencies = [
     "psycopg[binary]>=3.2",
     "pgvector>=0.4",
     "openai>=2.0",
+    "httpx>=0.28",            # talks to OPA, the policy decision point (Step 18)
 ]
 
 [tool.uv.sources]

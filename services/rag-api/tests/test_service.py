@@ -1,5 +1,6 @@
-"""The rest of the service, beyond the token attacks in test_auth.py: 503 vs 401, settings from
-secret files, request validation, and the search backend's fail-closed and per-user behaviour."""
+"""The rest of the service, beyond the token attacks in test_auth.py and the policy wiring in
+test_policy.py: 503 vs 401, settings from secret files, request validation, the search backend's
+fail-closed and per-user behaviour, and the OPA client treating every odd answer as "no"."""
 
 from __future__ import annotations
 
@@ -8,12 +9,14 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
 from rag_api import search as search_module
 from rag_api.main import app, get_search, get_verifier
+from rag_api.policy import DocumentRef, OpaClient, PolicyUnavailable
 from rag_api.search import INSTRUCTION, PgSearch
 from rag_api.settings import Settings
 from rag_common.auth import KeyServiceUnavailable, Principal
@@ -27,7 +30,15 @@ class DownKeys:
 
 
 class NeverSearch:
-    def search(self, query: str, *, groups: frozenset[str], k: int, user: str) -> list[Any]:
+    def search(
+        self,
+        query: str,
+        *,
+        groups: frozenset[str],
+        classifications: frozenset[str],
+        k: int,
+        user: str,
+    ) -> list[Any]:
         raise AssertionError("the backend must not be reached")
 
 
@@ -71,6 +82,7 @@ def test_settings_read_env_and_secret_files(
     # Compose mounts secrets as /run/secrets/<name>; the names match the env prefix + field name.
     (tmp_path / "rag_api_gateway_key").write_text("sk-virtual-key")
     (tmp_path / "rag_api_db_password").write_text("app-password")
+    (tmp_path / "rag_api_opa_token").write_text("opa-token")
     monkeypatch.setenv("RAG_API_OIDC_ISSUER", "http://localhost:8180/realms/rag")
     monkeypatch.setenv(
         "RAG_API_OIDC_JWKS_URL", "http://keycloak:8080/realms/rag/protocol/openid-connect/certs"
@@ -80,6 +92,8 @@ def test_settings_read_env_and_secret_files(
     assert s.allowed_clients == ["rag-web", "rag-cli", "ingestion-worker"]
     assert s.gateway_key.get_secret_value() == "sk-virtual-key"
     assert s.db_password.get_secret_value() == "app-password"
+    assert s.opa_url == "http://opa:8181"  # Step 18 default: the Compose service name
+    assert s.opa_token.get_secret_value() == "opa-token"
     assert "sk-virtual-key" not in repr(s)  # secrets never print
 
 
@@ -93,10 +107,11 @@ def _settings(secrets_dir: Path) -> Settings:
         oidc_jwks_url="http://keycloak:8080/realms/rag/protocol/openid-connect/certs",
         gateway_key=SecretStr("sk-test"),
         db_password=SecretStr("pw"),
+        opa_token=SecretStr("opa"),
     )
 
 
-def test_no_groups_returns_nothing_without_any_call(
+def test_no_clearance_returns_nothing_without_any_call(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     def boom(*a: Any, **kw: Any) -> None:
@@ -104,10 +119,14 @@ def test_no_groups_returns_nothing_without_any_call(
 
     monkeypatch.setattr("rag_api.search.psycopg.connect", boom)
     backend = PgSearch(_settings(tmp_path))
-    assert backend.search("anything", groups=frozenset(), k=5, user="sub-1") == []
+    # The policy found no clearance at all (e.g. a service account without groups).
+    no_clearance = backend.search(
+        "anything", groups=frozenset({"all-staff"}), classifications=frozenset(), k=5, user="sub-1"
+    )
+    assert no_clearance == []
 
 
-def test_search_tags_the_gateway_call_with_the_user_and_filters_by_groups(
+def test_search_tags_the_gateway_call_with_the_user_and_applies_the_policy_filter(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -127,7 +146,8 @@ def test_search_tags_the_gateway_call_with_the_user_and_filters_by_groups(
 
         def execute(self, sql: str, params: dict[str, Any]) -> Any:
             seen["sql"], seen["params"] = sql, params
-            return SimpleNamespace(fetchall=lambda: [("Remote work policy", "internal", 0.71)])
+            row = (1, "Remote work policy", "internal", ["all-staff"], 0.71)
+            return SimpleNamespace(fetchall=lambda: [row])
 
     def fake_connect(dsn: str) -> FakeConn:
         seen["dsn"] = dsn
@@ -138,14 +158,106 @@ def test_search_tags_the_gateway_call_with_the_user_and_filters_by_groups(
     backend = PgSearch(_settings(tmp_path))
     monkeypatch.setattr(backend, "_gw", SimpleNamespace(embeddings=FakeEmbeddings()))
 
-    hits = backend.search("hybrid work", groups=frozenset({"hr", "all-staff"}), k=3, user="sub-1")
+    found = backend.search(
+        "hybrid work",
+        groups=frozenset({"hr", "all-staff"}),
+        classifications=frozenset({"public", "internal", "confidential"}),
+        k=3,
+        user="sub-1",
+    )
 
-    assert [h.title for h in hits] == ["Remote work policy"]
+    assert [c.hit.title for c in found] == ["Remote work policy"]
+    assert found[0].ref == DocumentRef(1, "internal", ("all-staff",))  # facts for the post-check
     assert seen["embed"]["user"] == "sub-1"  # cost and logs per person at the gateway
     assert seen["embed"]["model"] == "embedder"
     assert seen["embed"]["input"] == [INSTRUCTION + "hybrid work"]
     assert seen["params"]["groups"] == ["all-staff", "hr"]
+    assert seen["params"]["classifications"] == ["confidential", "internal", "public"]
     assert seen["params"]["k"] == 3
     assert "d.acl_groups && %(groups)s" in seen["sql"]
+    assert "d.classification = ANY(%(classifications)s)" in seen["sql"]
+    assert "d.classification = 'public' OR" in seen["sql"]
     assert "d.deleted_at IS NULL" in seen["sql"]
     assert "user=rag_app" in seen["dsn"]  # least-privilege role from Step 11, never the superuser
+
+
+# ------------------------------------------------------------------ the OPA client
+
+
+def _opa(handler: Any) -> OpaClient:
+    client = OpaClient("http://opa:8181", "tok")
+    client._http = httpx.Client(  # swap the network for a scripted OPA
+        base_url="http://opa:8181",
+        headers={"Authorization": "Bearer tok"},
+        transport=httpx.MockTransport(handler),
+    )
+    return client
+
+
+ALICE = Principal(
+    "sub-alice", "alice", "rag-cli", frozenset({"all-staff"}), frozenset({"rag-user"})
+)
+GOOD = {
+    "allow": True,
+    "reasons": [],
+    "filter": {"groups": ["all-staff"], "classifications": ["public"]},
+}
+
+
+def test_client_sends_only_token_facts_with_its_bearer_token() -> None:
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"], seen["auth"] = request.url.path, request.headers["Authorization"]
+        seen["body"] = request.read()
+        return httpx.Response(200, json={"result": GOOD})
+
+    d = _opa(handler).decide(ALICE, "search")
+    assert d.allow
+    assert d.filter.classifications == {"public"}
+    assert seen["path"] == "/v1/data/rag/authz/decision"
+    assert seen["auth"] == "Bearer tok"
+    assert b'"groups":["all-staff"]' in seen["body"].replace(b" ", b"")
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        httpx.Response(401, json={"code": "unauthorized"}),  # wrong token
+        httpx.Response(500, text="boom"),
+        httpx.Response(200, text="not json"),
+        httpx.Response(200, json={}),  # undefined: policy not loaded
+        httpx.Response(200, json={"result": {"allow": True}}),  # missing fields
+    ],
+    ids=["401", "500", "not json", "undefined", "wrong shape"],
+)
+def test_odd_answers_are_errors_never_a_yes(response: httpx.Response) -> None:
+    with pytest.raises(PolicyUnavailable):
+        _opa(lambda request: response).decide(ALICE, "search")
+
+
+def test_only_a_literal_true_allows() -> None:
+    truthy = {**GOOD, "allow": "yes"}
+    d = _opa(lambda request: httpx.Response(200, json={"result": truthy})).decide(ALICE, "search")
+    assert d.allow is False
+
+
+def test_readable_skips_the_call_for_no_documents_and_checks_the_shape() -> None:
+    def never(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("no call expected")
+
+    assert _opa(never).readable(ALICE, []) == set()
+    docs = [DocumentRef(1, "internal", ("all-staff",))]
+    ok = _opa(lambda request: httpx.Response(200, json={"result": [1]}))
+    assert ok.readable(ALICE, docs) == {1}
+    odd = _opa(lambda request: httpx.Response(200, json={"result": {"1": True}}))
+    with pytest.raises(PolicyUnavailable):
+        odd.readable(ALICE, docs)
+
+
+def test_opa_unreachable_is_policy_unavailable() -> None:
+    def refuse(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused")
+
+    with pytest.raises(PolicyUnavailable):
+        _opa(refuse).decide(ALICE, "search")

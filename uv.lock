@@ -992,6 +992,7 @@ version = "0.1.0"
 source = { editable = "services/rag-api" }
 dependencies = [
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "openai" },
     { name = "pgvector" },
     { name = "psycopg", extra = ["binary"] },
@@ -1003,6 +1004,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.140" },
+    { name = "httpx", specifier = ">=0.28" },
     { name = "openai", specifier = ">=2.0" },
     { name = "pgvector", specifier = ">=0.4" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },

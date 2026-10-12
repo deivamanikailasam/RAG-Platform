@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import Annotated
 
@@ -11,6 +12,7 @@ from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
+from rag_api.policy import Decision, OpaClient, PolicyEngine, PolicyUnavailable
 from rag_api.search import Hit, PgSearch, SearchBackend
 from rag_api.settings import Settings
 from rag_common.auth import AuthError, KeyServiceUnavailable, OIDCSettings, Principal, TokenVerifier
@@ -41,6 +43,12 @@ def get_verifier() -> TokenVerifier:
 @lru_cache
 def get_search() -> SearchBackend:
     return PgSearch(get_settings())
+
+
+@lru_cache
+def get_policy() -> PolicyEngine:
+    s = get_settings()
+    return OpaClient(s.opa_url, s.opa_token.get_secret_value())
 
 
 def unauthorized(error: str = "invalid_token") -> HTTPException:
@@ -74,12 +82,37 @@ def current_principal(
         raise unauthorized() from e
 
 
-def require_role(role: str) -> Callable[[Principal], Principal]:
-    def check(principal: Annotated[Principal, Depends(current_principal)]) -> Principal:
-        if not principal.has_role(role):
-            log.warning("forbidden: sub=%s lacks role %s", principal.subject, role)
-            raise HTTPException(status.HTTP_403_FORBIDDEN, f"Requires role {role}")
-        return principal
+@dataclass(frozen=True)
+class Authorized:
+    principal: Principal
+    decision: Decision
+
+
+def authorize(action: str) -> Callable[[Principal, PolicyEngine], Authorized]:
+    """The API names the ACTION; the policy decides. No role names or rules live in this code."""
+
+    def check(
+        principal: Annotated[Principal, Depends(current_principal)],
+        policy: Annotated[PolicyEngine, Depends(get_policy)],
+    ) -> Authorized:
+        try:
+            decision = policy.decide(principal, action)
+        except PolicyUnavailable as e:
+            log.error("policy engine unavailable: %s", e)  # fail closed: no decision, no access
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE, "Policy engine unavailable"
+            ) from e
+        if not decision.allow:
+            log.warning(
+                "forbidden: sub=%s action=%s reasons=%s",
+                principal.subject,
+                action,
+                decision.reasons,
+            )
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "; ".join(decision.reasons) or "Forbidden"
+            )
+        return Authorized(principal, decision)
 
     return check
 
@@ -121,13 +154,29 @@ class SearchRequest(BaseModel):
 @app.post("/v1/search")
 def search(
     req: SearchRequest,
-    p: Annotated[Principal, Depends(require_role("rag-user"))],
+    auth: Annotated[Authorized, Depends(authorize("search"))],
     backend: Annotated[SearchBackend, Depends(get_search)],
+    policy: Annotated[PolicyEngine, Depends(get_policy)],
 ) -> list[Hit]:
-    # The groups come ONLY from the verified token, never from the request body.
-    return backend.search(req.query, groups=p.groups, k=req.k, user=p.subject)
+    p, f = auth.principal, auth.decision.filter
+    # 1. PRE-filter inside the database query, using the filter the POLICY computed (fast).
+    candidates = backend.search(
+        req.query, groups=f.groups, classifications=f.classifications, k=req.k, user=p.subject
+    )
+    # 2. POST-check every candidate with the policy's full rule (safe). If the two ever disagree,
+    #    the document is dropped and we log it: that's a bug in the query, never a leak.
+    refs = [c.ref for c in candidates]
+    try:
+        allowed = policy.readable(p, refs)
+    except PolicyUnavailable as e:
+        log.error("policy engine unavailable: %s", e)
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Policy engine unavailable") from e
+    dropped = [c.ref.id for c in candidates if c.ref.id not in allowed]
+    if dropped:
+        log.error("query/policy mismatch: dropped documents %s for sub=%s", dropped, p.subject)
+    return [c.hit for c in candidates if c.ref.id in allowed]
 
 
 @app.get("/v1/admin/ping")
-def admin_ping(p: Annotated[Principal, Depends(require_role("rag-admin"))]) -> dict[str, str]:
-    return {"status": "ok", "admin": p.username}
+def admin_ping(auth: Annotated[Authorized, Depends(authorize("admin:ping"))]) -> dict[str, str]:
+    return {"status": "ok", "admin": auth.principal.username}

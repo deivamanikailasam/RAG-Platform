@@ -17,3 +17,5 @@ class Settings(BaseSettings):
     gateway_key: SecretStr  # file /run/secrets/rag_api_gateway_key
     db_host: str = "rag-db"
     db_password: SecretStr  # file /run/secrets/rag_api_db_password
+    opa_url: str = "http://opa:8181"  # the policy decision point (Step 18)
+    opa_token: SecretStr  # file /run/secrets/rag_api_opa_token
