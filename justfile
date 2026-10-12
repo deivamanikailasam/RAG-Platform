@@ -236,3 +236,11 @@ s3 *args:
 # Valkey CLI as admin (password via env var, never as an argument):   just kv-cli ping   /   just kv-cli acl list
 kv-cli *args:
     sops exec-env secrets/dev.enc.env 'docker compose -f infra/compose/compose.yaml exec -e REDISCLI_AUTH="$VALKEY_ADMIN_PASSWORD" valkey valkey-cli --user admin {{args}}'
+
+# Keycloak (Step 16): create demo users with the least-privilege provisioner (safe to re-run)
+kc-users:
+    just with-secrets uv run --with httpx scripts/kc_users.py
+
+# Keycloak: sign in (device flow) and as a machine (client credentials), look inside the tokens, sign out
+kc-whoami:
+    just with-secrets uv run --with httpx scripts/kc_whoami.py
