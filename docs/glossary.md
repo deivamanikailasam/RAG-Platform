@@ -9,6 +9,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | ADR (Architecture Decision Record) | A short Markdown file recording one significant decision: context, decision, alternatives and consequences. | 4 |
 | Analytics | Anonymous usage statistics a tool sends back to its makers. | 1 |
 | arm64 / aarch64 vs amd64 / x86_64 | Processor families; Apple Silicon is arm64, amd64-only images need slower emulation. | 3 |
+| Auto-fix | A check that changes files to fix the problem itself; you review the change and `git add` it again. | 5 |
 | Bind mount | A host folder shared into a container; fine for config and code, slow for databases on a Mac. | 3 |
 | Branch | A separate line of work (a draft) where you change things without touching `main`. | 4 |
 | Branch protection / ruleset | GitHub settings that block direct pushes to `main` and require PRs, checks and signed commits. | 4 |
@@ -30,7 +31,10 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Docker engine / CLI | The engine runs containers inside the VM; the `docker` command is how you talk to it. | 3 |
 | Drift | When the dependency list (`pyproject.toml`) and the lockfile (`uv.lock`) no longer match; `uv sync --locked` catches it. | 2 |
 | EditorConfig | A small `.editorconfig` file telling every editor the same formatting basics (indentation, line endings). | 4 |
+| False positive | A check flags something that is actually fine; silence it narrowly, with a comment explaining why. | 5 |
+| Formatter | A tool (e.g. `ruff format`) that rewrites code layout into one consistent style without changing what it does. | 5 |
 | Formula | A Homebrew package that is a command-line tool. | 1 |
+| Git hook | A script git runs automatically at a set moment: before a commit, after the message is written, before a push. | 5 |
 | .gitattributes | Rules for how git treats file types (line endings, binary files, generated files). | 4 |
 | .gitignore | A "do not pack" list of files git must never track (secrets, `.venv`, data, models). | 4 |
 | Hash | A short fingerprint calculated from a file's contents; change one byte and it changes completely. | 2 |
@@ -40,6 +44,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Infrastructure as code | Defining your environment in version-controlled files instead of setting it up by hand. | 1 |
 | Interpreter | The `python` program itself: the engine that reads and runs Python code, e.g. CPython 3.12. | 2 |
 | justfile | A menu of named command shortcuts run with `just <recipe>` (e.g. `just check`), reused by CI. | 4 |
+| Linter / static analysis | A tool (e.g. `ruff check`) that reads code without running it and flags likely bugs and risky patterns, each as a coded rule like `B006`. | 5 |
 | localhost / 127.0.0.1 | "This machine only": a port bound here is reachable only from your own Mac. | 3 |
 | Lockfile | A file recording the exact version and hash of every package in the full dependency tree (`uv.lock`). | 2 |
 | Log rotation | Keeping only the newest few log files of a limited size and deleting the oldest (here 3 × 10 MB). | 3 |
@@ -47,26 +52,34 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Monorepo | One repository holding all services, libraries, infrastructure and docs. | 4 |
 | Named volume | Docker-managed storage inside the VM that survives container deletion; use it for database data. | 3 |
 | Network interface | A way your machine connects to networks: Wi-Fi, Ethernet, or localhost. | 3 |
+| --no-verify | A git flag that skips local hooks; the reason CI must repeat the same checks. | 5 |
 | OrbStack | A lightweight macOS container runtime: Linux VM + Docker engine + Compose + single-node Kubernetes. | 3 |
 | Package manager | A program that installs, updates and removes other software and tracks what's installed. | 1 |
 | PATH | The ordered list of folders your shell searches when you type a command. First match wins. | 1 |
 | PEP | Python Enhancement Proposal: an official Python standard (e.g. PEP 621 `pyproject.toml`, PEP 735 dependency groups, PEP 668 protected system Pythons). | 2 |
 | Polyrepo | One repository per service or library. | 4 |
 | Port | A numbered "door" through which a program accepts network connections, e.g. 5432 for Postgres. | 3 |
+| pre-commit (the tool) | A framework that installs and runs git hooks from one file, `.pre-commit-config.yaml`. | 5 |
 | Pull request (PR) | A request to review a branch and merge it into `main`. | 4 |
 | Push / pull | Send your commits to the remote / fetch other people's commits from it. | 4 |
 | pyproject.toml | The standard Python project file listing the dependency ranges you'll accept (PEP 621). | 2 |
 | Remote / origin | A copy of the repository on a server (GitHub); `origin` is its default nickname. | 4 |
 | Repository | The project's filing cabinet: all files plus their full history of changes (git). | 4 |
+| Secret scanner | A check (e.g. gitleaks, detect-private-key) that looks for keys, tokens and passwords before they are committed. | 5 |
 | Semantic Versioning | MAJOR.MINOR.PATCH version numbers: breaking change → major, `feat` → minor, `fix` → patch. | 4 |
 | Shell / zsh | The program inside Terminal that reads and runs your commands; zsh is the macOS default. | 1 |
+| Shift left | Moving checks earlier in the process (editor, commit) where fixing problems is cheapest. | 5 |
 | Signed commit | A commit stamped with your private key so GitHub can show it as Verified (really from you). | 4 |
 | Squash merge | Merging a PR so all its small commits become one clean commit on `main`. | 4 |
 | src layout | Putting a package's code under `src/<name>/` so tests import the installed package, not the raw folder. | 4 |
+| SSDLC | Secure Software Development Lifecycle: building security checks (static analysis, secret scanning) into every change. | 5 |
 | SSH key | A private key that stays on your Mac and a public `.pub` key you give GitHub, to prove it's you without a password. | 4 |
+| Staged files | The files you have `git add`-ed: exactly what the next commit will contain, and what hooks check. | 5 |
 | Supersede | Replace an accepted ADR with a newer ADR that points back to it; the old one is never edited. | 4 |
 | Transitive dependency | A dependency of a dependency: a package you never chose that comes along because one you chose needs it. | 2 |
 | Trunk-based development | `main` (the trunk) is always working; every change goes through a short-lived branch and a PR. | 4 |
+| Type checker | A tool (e.g. `mypy`) that reads type hints and checks they are used consistently, catching wrong-kind-of-value bugs before running. | 5 |
+| Type hint | A label saying what kind of value a variable or function expects or returns, e.g. `def chunk(text: str) -> list[str]`. | 5 |
 | Unified memory | Apple Silicon memory shared by the CPU and GPU; every GB given to the container VM is a GB the models lose. | 3 |
 | uv | Astral's all-in-one Python tool: interpreters, virtual environments, locking and tool installs. | 2 |
 | Virtual environment | A private folder of packages (`.venv`) for one project, tied to one interpreter. | 2 |
