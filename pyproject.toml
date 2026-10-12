@@ -9,7 +9,7 @@ dependencies = []
 dev = [
     "boto3>=1.43.0",               # AWS SDK: type-checks and tests the s3_*.py scripts against the object store (Step 14)
     "boto3-stubs[s3]>=1.43.0",     # type hints for boto3 S3 clients, so strict mypy can check those scripts (Step 14)
-    "httpx>=0.28.1",               # HTTP client: type-checks and tests the kc_*.py Keycloak scripts (Step 16)
+    "httpx>=0.28.1",               # HTTP client: kc_*.py / api_demo.py scripts (Steps 16-17) and FastAPI's test client
     "mypy>=2.4.0",
     "openai>=3.29.0",              # OpenAI SDK: type-checks and tests the gateway smoke test (Step 9)
     "opensearch-py>=3.2.0",        # OpenSearch client: type-checks and tests the os_*.py scripts (Step 13)
@@ -29,7 +29,7 @@ dev = [
 package = false                    # the root is a container for members, not a package itself
 
 [tool.uv.workspace]
-members = ["libs/*"]               # add "services/*" when the first service exists (Step 9)
+members = ["libs/*", "services/*"]  # services/* since the first service, rag-api (Step 17)
 exclude = ["infra/model-serving"]  # Apple-only MLX serving project with its own lockfile (Step 7)
 
 [tool.ruff]
@@ -58,7 +58,7 @@ ignore = ["E501"]                   # line length is the formatter's job
 "scripts/**"  = ["T20"]             # scripts may print
 
 [tool.ruff.lint.isort]
-known-first-party = ["rag_common"]
+known-first-party = ["rag_common", "rag_api"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -69,9 +69,15 @@ python_version = "3.12"
 strict = true                       # the full set of strictness checks
 warn_unreachable = true
 pretty = true
-files = ["libs/rag-common/src", "scripts", "tests"]  # add each new library/service as it's created
+files = [                           # add each new library/service as it's created
+    "libs/rag-common/src",
+    "services/rag-api/src",          # Step 17
+    "services/rag-api/tests",        # Step 17: the attack tests are type-checked too
+    "scripts",
+    "tests",
+]
 plugins = ["pydantic.mypy"]          # so mypy understands pydantic models (Step 6)
 
 [tool.pytest.ini_options]
-testpaths = ["libs", "tests"]
+testpaths = ["libs", "services", "tests"]
 addopts = "-ra --strict-markers --import-mode=importlib"

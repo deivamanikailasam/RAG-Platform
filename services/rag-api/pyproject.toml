@@ -1,0 +1,21 @@
+[project]
+name = "rag-api"
+version = "0.1.0"
+description = "The RAG platform's public API"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "rag-common",
+    "fastapi>=0.140",
+    "uvicorn>=0.50",
+    "pydantic-settings>=2.10",
+    "psycopg[binary]>=3.2",
+    "pgvector>=0.4",
+    "openai>=2.0",
+]
+
+[tool.uv.sources]
+rag-common = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
