@@ -292,7 +292,8 @@ def test_grafana_links_every_signal_to_the_others() -> None:
     # 4. log line -> its trace
     loki = sources["loki"]
     assert loki["url"] == "http://loki:3100"
-    (field,) = loki["jsonData"]["derivedFields"]
+    # (Step 22 adds a second derived field, "Langfuse": checked in tests/test_langfuse.py)
+    field = next(f for f in loki["jsonData"]["derivedFields"] if f["name"] == "TraceID")
     assert field["datasourceUid"] == "tempo"
     assert field["url"] == "$${__value.raw}"
     assert field["urlDisplayLabel"] == "View trace"

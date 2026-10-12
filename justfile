@@ -283,3 +283,7 @@ api-up:
 # Call the API as a person, a machine, with no token and with a forged token
 api-demo:
     just with-secrets uv run --with httpx scripts/api_demo.py
+
+# Delete Langfuse traces older than LANGFUSE_RETENTION_DAYS (default 30). Run nightly. (Step 22)
+langfuse-retention *args:
+    sops exec-env secrets/dev.enc.env 'LANGFUSE_BASE_URL=http://localhost:3002 uv run python scripts/langfuse_retention.py {{args}}'

@@ -56,6 +56,11 @@ datasources:
           url: "$${__value.raw}"
           datasourceUid: tempo
           urlDisplayLabel: View trace
+        - name: Langfuse                      # Step 22: the same request's content view (needs a Langfuse login)
+          matcherType: regex
+          matcherRegex: '"trace_id": ?"(\w+)"'
+          url: "http://localhost:3002/project/rag-platform/traces/$${__value.raw}"
+          urlDisplayLabel: Open in Langfuse
 
   - name: Alertmanager
     uid: alertmanager
