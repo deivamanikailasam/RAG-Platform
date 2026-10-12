@@ -23,5 +23,6 @@
 | [0019](0019-use-opentelemetry-and-a-central-collector.md) | Use OpenTelemetry and a central Collector | Accepted |
 | [0020](0020-use-prometheus-alertmanager-and-grafana.md) | Use Prometheus, Alertmanager and Grafana with SLO-based alerting | Accepted |
 | [0021](0021-use-tempo-and-loki-for-traces-and-logs.md) | Use Tempo and Loki for traces and logs | Accepted |
+| [0022](0022-use-self-hosted-langfuse-for-llm-traces.md) | Use self-hosted Langfuse for LLM traces | Accepted |
 
 New ADR: `just adr "Short title"`, then fill it in and add a row here.
