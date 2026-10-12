@@ -83,6 +83,7 @@ def test_settings_read_env_and_secret_files(
     (tmp_path / "rag_api_gateway_key").write_text("sk-virtual-key")
     (tmp_path / "rag_api_db_password").write_text("app-password")
     (tmp_path / "rag_api_opa_token").write_text("opa-token")
+    (tmp_path / "rag_api_audit_db_password").write_text("audit-writer")  # Step 23
     monkeypatch.setenv("RAG_API_OIDC_ISSUER", "http://localhost:8180/realms/rag")
     monkeypatch.setenv(
         "RAG_API_OIDC_JWKS_URL", "http://keycloak:8080/realms/rag/protocol/openid-connect/certs"
@@ -94,6 +95,9 @@ def test_settings_read_env_and_secret_files(
     assert s.db_password.get_secret_value() == "app-password"
     assert s.opa_url == "http://opa:8181"  # Step 18 default: the Compose service name
     assert s.opa_token.get_secret_value() == "opa-token"
+    # Step 23: the audit database, written as audit_writer
+    assert (s.audit_db_host, s.audit_db_port) == ("rag-db", 5432)
+    assert s.audit_db_password.get_secret_value() == "audit-writer"
     assert "sk-virtual-key" not in repr(s)  # secrets never print
 
 
@@ -108,6 +112,7 @@ def _settings(secrets_dir: Path) -> Settings:
         gateway_key=SecretStr("sk-test"),
         db_password=SecretStr("pw"),
         opa_token=SecretStr("opa"),
+        audit_db_password=SecretStr("audit"),
     )
 
 

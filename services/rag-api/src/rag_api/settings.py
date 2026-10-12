@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     gateway_key: SecretStr  # file /run/secrets/rag_api_gateway_key
     db_host: str = "rag-db"
     db_password: SecretStr  # file /run/secrets/rag_api_db_password
+    # Audit log (Step 23): a separate database, written as the append-only audit_writer role
+    audit_db_host: str = "rag-db"
+    audit_db_port: int = 5432
+    audit_db_password: SecretStr  # file /run/secrets/rag_api_audit_db_password
     opa_url: str = "http://opa:8181"  # the policy decision point (Step 18)
     opa_token: SecretStr  # file /run/secrets/rag_api_opa_token
     # Langfuse (Step 22). Leave langfuse_base_url empty to switch LLM tracing off.

@@ -8,7 +8,7 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -18,6 +18,14 @@ from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.psycopg import PsycopgInstrumentor
 from pydantic import BaseModel, Field
 
+from rag_api.audit import (
+    AuditEvent,
+    AuditLog,
+    AuditUnavailable,
+    Outcome,
+    PgAuditLog,
+    current_trace_id,
+)
 from rag_api.llmtrace import LlmTracer, build_llm_tracer
 from rag_api.policy import Decision, OpaClient, PolicyEngine, PolicyUnavailable
 from rag_api.search import Hit, PgSearch, SearchBackend
@@ -50,6 +58,11 @@ DROPPED = meter.create_counter(
     unit="{document}",
     description="Query/policy mismatches (should be 0)",
 )
+AUDIT_FAILURES = meter.create_counter(
+    "rag.audit.write_failures",
+    unit="{event}",
+    description="Audit events that could not be stored (should be 0)",
+)
 
 
 @asynccontextmanager
@@ -63,7 +76,11 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     for outcome in ("ok", "error"):
         SEARCHES.add(0, {"outcome": outcome})
     DROPPED.add(0)
+    for outcome in ("allowed", "denied"):
+        AUDIT_FAILURES.add(0, {"outcome": outcome})
     yield
+    if get_audit.cache_info().currsize:
+        get_audit().close()  # close the pool's connections cleanly
     if get_llm.cache_info().currsize:  # only if it was ever created
         get_llm().shutdown()  # flush buffered Langfuse traces
     shutdown_telemetry()  # on stop: send what's still buffered
@@ -111,6 +128,14 @@ def get_llm() -> LlmTracer:
 
 
 @lru_cache
+def get_audit() -> AuditLog:
+    s = get_settings()
+    return PgAuditLog(
+        host=s.audit_db_host, port=s.audit_db_port, password=s.audit_db_password.get_secret_value()
+    )
+
+
+@lru_cache
 def get_policy() -> PolicyEngine:
     s = get_settings()
     return OpaClient(s.opa_url, s.opa_token.get_secret_value())
@@ -147,18 +172,48 @@ def current_principal(
         raise unauthorized() from e
 
 
+def audit_event(
+    p: Principal, action: str, outcome: Outcome, resource: str, **details: Any
+) -> AuditEvent:
+    return AuditEvent(
+        actor=p.subject, client_id=p.client_id, action=action, outcome=outcome,
+        resource=resource, details=details, trace_id=current_trace_id(),
+    )  # fmt: skip
+
+
+def record_or_refuse(audit: AuditLog, event: AuditEvent) -> None:
+    """Fail closed: if we can't record that data was handed out, we don't hand it out."""
+    try:
+        audit.record(event)
+    except AuditUnavailable as e:
+        AUDIT_FAILURES.add(1, {"outcome": event.outcome})
+        log.error("audit log unavailable, refusing %s: %s", event.action, e)
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Audit log unavailable") from e
+
+
+def record_best_effort(audit: AuditLog, event: AuditEvent) -> None:
+    """For refusals: nothing is handed out, so a failed write must not turn a 403 into a 503."""
+    try:
+        audit.record(event)
+    except AuditUnavailable as e:
+        AUDIT_FAILURES.add(1, {"outcome": event.outcome})
+        log.error("audit log unavailable, %s event for sub=%s lost: %s",
+                  event.outcome, event.actor, e)  # fmt: skip
+
+
 @dataclass(frozen=True)
 class Authorized:
     principal: Principal
     decision: Decision
 
 
-def authorize(action: str) -> Callable[[Principal, PolicyEngine], Authorized]:
+def authorize(action: str) -> Callable[[Principal, PolicyEngine, AuditLog], Authorized]:
     """The API names the ACTION; the policy decides. No role names or rules live in this code."""
 
     def check(
         principal: Annotated[Principal, Depends(current_principal)],
         policy: Annotated[PolicyEngine, Depends(get_policy)],
+        audit: Annotated[AuditLog, Depends(get_audit)],
     ) -> Authorized:
         with tracer.start_as_current_span("rag.authz.decide") as span:
             span.set_attribute("rag.authz.action", action)
@@ -177,6 +232,10 @@ def authorize(action: str) -> Callable[[Principal, PolicyEngine], Authorized]:
                 principal.subject,
                 action,
                 decision.reasons,
+            )
+            record_best_effort(
+                audit,
+                audit_event(principal, action, "denied", action, reasons=list(decision.reasons)),
             )
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN, "; ".join(decision.reasons) or "Forbidden"
@@ -227,6 +286,7 @@ def search(
     backend: Annotated[SearchBackend, Depends(get_search)],
     policy: Annotated[PolicyEngine, Depends(get_policy)],
     llm: Annotated[LlmTracer, Depends(get_llm)],
+    audit: Annotated[AuditLog, Depends(get_audit)],
 ) -> list[Hit]:
     p, f = auth.principal, auth.decision.filter
     started, outcome = time.perf_counter(), "error"
@@ -274,13 +334,28 @@ def search(
                 log.error(
                     "query/policy mismatch: dropped documents %s for sub=%s", dropped, p.subject
                 )
+            returned = [c for c in candidates if c.ref.id in allowed]
+            # 3. Record WHO received WHICH documents, before handing anything out (Step 23).
+            #    Ids and counts only: never the question or the text.
+            record_or_refuse(
+                audit,
+                audit_event(
+                    p, "search", "allowed", "documents",
+                    returned_ids=[c.ref.id for c in returned], dropped_by_policy=len(dropped),
+                    k=req.k, query_chars=len(req.query),
+                ),
+            )  # fmt: skip
             outcome = "ok"
-            return [c.hit for c in candidates if c.ref.id in allowed]
+            return [c.hit for c in returned]
         finally:
             SEARCHES.add(1, {"outcome": outcome})
             SEARCH_TIME.record(time.perf_counter() - started, {"outcome": outcome})
 
 
 @app.get("/v1/admin/ping")
-def admin_ping(auth: Annotated[Authorized, Depends(authorize("admin:ping"))]) -> dict[str, str]:
+def admin_ping(
+    auth: Annotated[Authorized, Depends(authorize("admin:ping"))],
+    audit: Annotated[AuditLog, Depends(get_audit)],
+) -> dict[str, str]:
+    record_or_refuse(audit, audit_event(auth.principal, "admin:ping", "allowed", "rag-api"))
     return {"status": "ok", "admin": auth.principal.username}

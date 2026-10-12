@@ -1,4 +1,4 @@
-"""Shared test doubles: a fake identity provider, a fake search backend and a fake policy engine."""
+"""Shared test doubles: fake identity provider, search backend, policy engine and audit log."""
 
 from __future__ import annotations
 
@@ -14,8 +14,9 @@ from fastapi.testclient import TestClient
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
+from rag_api.audit import AuditEvent, AuditUnavailable
 from rag_api.llmtrace import LlmTracer
-from rag_api.main import app, get_llm, get_policy, get_search, get_verifier
+from rag_api.main import app, get_audit, get_llm, get_policy, get_search, get_verifier
 from rag_api.policy import Decision, DocumentRef, PolicyUnavailable, SearchFilter
 from rag_api.search import Candidate, Hit
 from rag_common.auth import OIDCSettings, Principal, TokenVerifier
@@ -94,6 +95,23 @@ class FakePolicy:
         return ids if self.readable_ids is None else ids & self.readable_ids
 
 
+class FakeAudit:
+    """An audit log in a list. Set .down = True to simulate the audit database being unreachable."""
+
+    def __init__(self) -> None:
+        self.events: list[AuditEvent] = []
+        self.down = False
+
+    def record(self, event: AuditEvent) -> int:
+        if self.down:
+            raise AuditUnavailable("PoolTimeout")
+        self.events.append(event)
+        return len(self.events)
+
+    def close(self) -> None:
+        pass
+
+
 @pytest.fixture(scope="session")
 def otel() -> tuple[InMemorySpanExporter, InMemoryMetricReader]:
     """The process-wide OpenTelemetry setup (it can only be installed once), kept in memory."""
@@ -118,12 +136,20 @@ def policy() -> FakePolicy:
 
 
 @pytest.fixture
-def client(idp: FakeIdP, search: FakeSearch, policy: FakePolicy) -> Iterator[TestClient]:
+def audit() -> FakeAudit:
+    return FakeAudit()
+
+
+@pytest.fixture
+def client(
+    idp: FakeIdP, search: FakeSearch, policy: FakePolicy, audit: FakeAudit
+) -> Iterator[TestClient]:
     allowed = frozenset({"rag-web", "rag-cli", "ingestion-worker"})
     settings = OIDCSettings(ISSUER, "rag-api", "unused", allowed)
     app.dependency_overrides[get_verifier] = lambda: TokenVerifier(settings, idp)
     app.dependency_overrides[get_search] = lambda: search
     app.dependency_overrides[get_policy] = lambda: policy
+    app.dependency_overrides[get_audit] = lambda: audit
     # Langfuse is off unless a test switches it on (test_llmtrace.py)
     app.dependency_overrides[get_llm] = lambda: LlmTracer(None)
     yield TestClient(app)
