@@ -67,3 +67,8 @@ repos:
         stages: [pre-push]
         pass_filenames: false
         always_run: true
+      - id: secrets-encrypted
+        name: files in secrets/ are SOPS-encrypted
+        entry: scripts/check-sops-encrypted.sh
+        language: system
+        files: ^secrets/

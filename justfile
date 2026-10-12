@@ -55,3 +55,19 @@ adr title:
     file="docs/adr/${next}-${slug}.md"
     sed -e "s/NNNN/${next}/" -e "s/TITLE/{{title}}/" -e "s/YYYY-MM-DD/$(date +%F)/" docs/adr/0000-template.md > "$file"
     echo "created $file"
+
+# Create the encrypted dev secrets file (first time only)
+secrets-init:
+    scripts/new-dev-secrets.sh
+
+# List secret NAMES (never values)
+secrets-keys:
+    sops --decrypt secrets/dev.enc.env | cut -d= -f1 | grep -v '^#' | grep .
+
+# Edit secrets safely (decrypted only inside the editor)
+secrets-edit:
+    sops secrets/dev.enc.env
+
+# Run any command with the dev secrets available:   just with-secrets docker compose up -d
+with-secrets +cmd:
+    sops exec-env secrets/dev.enc.env "{{cmd}}"

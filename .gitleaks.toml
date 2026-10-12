@@ -1,0 +1,7 @@
+# Use gitleaks' default rules, but don't flag SOPS ciphertext (it looks random by design).
+[extend]
+useDefault = true
+
+[allowlist]
+description = "SOPS-encrypted files"
+paths = ['''^secrets/.*\.enc\.(env|ya?ml|json)$''']
