@@ -9,6 +9,7 @@ dependencies = []
 dev = [
     "mypy>=2.4.0",
     "openai>=3.29.0",              # OpenAI SDK: type-checks and tests the gateway smoke test (Step 9)
+    "opensearch-py>=3.2.0",        # OpenSearch client: type-checks and tests the os_*.py scripts (Step 13)
     "pgvector>=0.4.0",             # pgvector types for psycopg: type-checks and tests pg_demo.py (Step 11)
     "pre-commit>=4.6.2",
     "psycopg[binary]>=3.2.0",      # Postgres driver: type-checks and tests pg_demo.py (Step 11)
