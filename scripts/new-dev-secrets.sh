@@ -56,9 +56,18 @@ TEI_API_KEY=$(openssl rand -hex 24)
 GRAFANA_ADMIN_PASSWORD=$(rand)
 OPA_METRICS_TOKEN=$(rand)
 RAG_DB_METRICS_PASSWORD=$(rand)
+# --- Langfuse (Step 22). SALT and ENCRYPTION_KEY hash API keys / encrypt stored secrets: NEVER rotate casually ---
 LANGFUSE_SALT=$(rand)
 LANGFUSE_NEXTAUTH_SECRET=$(rand)
 LANGFUSE_ENCRYPTION_KEY=$(openssl rand -hex 32)
+LANGFUSE_DB_PASSWORD=$(rand)
+LANGFUSE_CLICKHOUSE_PASSWORD=$(rand)
+LANGFUSE_VALKEY_PASSWORD=$(rand)
+LANGFUSE_ADMIN_PASSWORD=$(rand)
+S3_LANGFUSE_ACCESS_KEY=$(gen_ak)
+S3_LANGFUSE_SECRET_KEY=$(gen_sk)
+LANGFUSE_PUBLIC_KEY=pk-lf-$(uuidgen | tr A-Z a-z)
+LANGFUSE_SECRET_KEY=sk-lf-$(uuidgen | tr A-Z a-z)
 # --- Demo value used in this step ---
 DEMO_TOKEN=$(rand)
 EOF

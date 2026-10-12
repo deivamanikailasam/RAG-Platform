@@ -11,6 +11,37 @@ x-logging: &to-collector
     labels: com.docker.compose.service        # attach the Compose service name to every line
     tag: docker
 
+# Step 22: settings shared by langfuse-web and langfuse-worker. Langfuse reads its settings ONLY from
+# environment variables (no *_FILE support); the values come from `sops exec-env` at `just up`.
+x-langfuse-env: &langfuse-env
+  NEXTAUTH_URL: http://localhost:3002
+  DATABASE_URL: postgresql://langfuse:${LANGFUSE_DB_PASSWORD}@langfuse-db:5432/langfuse
+  SALT: ${LANGFUSE_SALT}
+  ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY}
+  TELEMETRY_ENABLED: "false"                                  # no usage data sent to the vendor
+  CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse-clickhouse:9000
+  CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+  CLICKHOUSE_USER: langfuse
+  CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD}
+  CLICKHOUSE_CLUSTER_ENABLED: "false"
+  REDIS_HOST: langfuse-valkey
+  REDIS_PORT: "6379"
+  REDIS_AUTH: ${LANGFUSE_VALKEY_PASSWORD}
+  LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+  LANGFUSE_S3_EVENT_UPLOAD_REGION: us-east-1
+  LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://object-store:8333
+  LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${S3_LANGFUSE_ACCESS_KEY}
+  LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${S3_LANGFUSE_SECRET_KEY}
+  LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"           # required for SeaweedFS
+  LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
+  LANGFUSE_S3_MEDIA_UPLOAD_REGION: us-east-1
+  LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://localhost:8333    # what your BROWSER uses
+  LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: ${S3_LANGFUSE_ACCESS_KEY}
+  LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${S3_LANGFUSE_SECRET_KEY}
+  LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+
 services:
   litellm-db:                                                 # the gateway's own private database (Step 10)
     image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24   # pin by digest (Step 9 method)
@@ -206,12 +237,16 @@ services:
                        "Read:rag-tmp", "Write:rag-tmp", "List:rag-tmp"]},
           {"name": "rag-reader",
            "credentials": [{"accessKey": "$$(cat /run/secrets/s3_reader_access_key)", "secretKey": "$$(cat /run/secrets/s3_reader_secret_key)"}],
-           "actions": ["Read:rag-raw-docs", "List:rag-raw-docs"]}
+           "actions": ["Read:rag-raw-docs", "List:rag-raw-docs"]},
+          {"name": "langfuse",
+           "credentials": [{"accessKey": "$$(cat /run/secrets/s3_langfuse_access_key)", "secretKey": "$$(cat /run/secrets/s3_langfuse_secret_key)"}],
+           "actions": ["Read:langfuse", "Write:langfuse", "List:langfuse"]}
         ]}
         EOF
         exec weed mini -dir=/data -s3.config=/run/seaweed/s3.json -master.telemetry=false
     secrets: [s3_admin_access_key, s3_admin_secret_key, s3_ingest_access_key, s3_ingest_secret_key,
-              s3_reader_access_key, s3_reader_secret_key]
+              s3_reader_access_key, s3_reader_secret_key,
+              s3_langfuse_access_key, s3_langfuse_secret_key]   # Step 22: Langfuse's own bucket only
     tmpfs:
       - /run/seaweed:size=1m,mode=0700          # identities file lives in RAM only
     volumes:
@@ -556,6 +591,107 @@ services:
     restart: unless-stopped
     deploy: { resources: { limits: { memory: 1g, cpus: "1" } } }
 
+  # --- Step 22: Langfuse, the "cockpit voice recorder" for LLM traces (content, masked, 30 days) ---
+  langfuse-db:                                                # Langfuse's own Postgres: users, projects, API keys, prompts
+    image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    environment:
+      POSTGRES_DB: langfuse
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD_FILE: /run/secrets/langfuse_db_password
+    secrets: [langfuse_db_password]
+    volumes: [langfuse-db-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse -d langfuse"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: *to-collector
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    deploy: { resources: { limits: { memory: 512m, cpus: "1" } } }
+
+  langfuse-clickhouse:                                        # analytics database: traces, observations, scores
+    image: clickhouse/clickhouse-server:25.12@sha256:8a790dd3468db22b1d4e7b18a176f378ff5ff6053b9c48dd4ea1fa71a24c5ba6   # the version Langfuse's own Compose file uses
+    user: "101:101"
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: langfuse
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD}
+    volumes:
+      - langfuse-clickhouse-data:/var/lib/clickhouse
+      - langfuse-clickhouse-logs:/var/log/clickhouse-server
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: *to-collector
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    deploy: { resources: { limits: { memory: 3g, cpus: "2" } } }
+
+  langfuse-valkey:                                            # Langfuse's job queue: noeviction, so it can't share Step 15's cache
+    image: valkey/valkey:9.1.2-alpine@sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        umask 077
+        printf 'requirepass %s\nmaxmemory-policy noeviction\nappendonly yes\ndir /data\n' \
+          "$$(cat /run/secrets/langfuse_valkey_password)" > /run/valkey/valkey.conf
+        exec valkey-server /run/valkey/valkey.conf
+    secrets: [langfuse_valkey_password]
+    tmpfs: ["/run/valkey:size=1m,mode=0700"]                  # config with the password lives in RAM only
+    volumes: [langfuse-valkey-data:/data]
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli ping 2>&1 | grep -qE 'PONG|NOAUTH'"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    logging: *to-collector
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    deploy: { resources: { limits: { memory: 512m, cpus: "0.5" } } }
+
+  langfuse-worker:                                            # turns queued raw events (in S3) into ClickHouse rows
+    image: docker.langfuse.com/langfuse/langfuse-worker:4.27.0@sha256:091a85c3c54bf5fff7cc0073a7f35a52861cc0e30d33dd05569fe3ed66b15d8d
+    environment: *langfuse-env
+    depends_on: &langfuse-deps
+      langfuse-db:         { condition: service_healthy }
+      langfuse-clickhouse: { condition: service_healthy }
+      langfuse-valkey:     { condition: service_healthy }
+      object-store:        { condition: service_healthy }
+    logging: *to-collector
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    deploy: { resources: { limits: { memory: 1g, cpus: "1" } } }
+
+  langfuse-web:                                               # UI + API, incl. the OTLP endpoint /api/public/otel
+    image: docker.langfuse.com/langfuse/langfuse:4.27.0@sha256:c9e2cab8469a5d7353e86a3252b02c52ac94ef31288ce2639ee01aabf5e4222b
+    environment:
+      <<: *langfuse-env
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET}
+      LANGFUSE_S3_MEDIA_UPLOAD_INTERNAL_ENDPOINT: http://object-store:8333   # what Langfuse itself uses
+      AUTH_DISABLE_SIGNUP: "true"                             # nobody can create their own account
+      # Headless initialisation: organisation, project, keys and first admin, created on first start
+      LANGFUSE_INIT_ORG_ID: rag-platform
+      LANGFUSE_INIT_ORG_NAME: RAG Platform
+      LANGFUSE_INIT_PROJECT_ID: rag-platform
+      LANGFUSE_INIT_PROJECT_NAME: rag-platform
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
+      LANGFUSE_INIT_USER_EMAIL: admin@example.com
+      LANGFUSE_INIT_USER_NAME: Platform Admin
+      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_ADMIN_PASSWORD}
+    depends_on: *langfuse-deps
+    ports: ["127.0.0.1:3002:3000"]                            # 3000 is Grafana's
+    logging: *to-collector
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    # The guide says 1g. Node sizes its heap from the container limit (~500 MB at 1g), and Langfuse
+    # 4.27's web start-up needs more: at 1g it crash-loops with "JavaScript heap out of memory".
+    # Measured: ~1 GB in use after start. 2g gives it headroom.
+    deploy: { resources: { limits: { memory: 2g, cpus: "1" } } }
+
 volumes:
   litellm-db-data:                                            # keys, teams, budgets and spend logs live here
   rag-db-data:                                                # documents, chunks and vectors (Step 11)
@@ -570,6 +706,10 @@ volumes:
   grafana-data:                                               # Grafana's own database (users, preferences); dashboards come from Git
   tempo-data:                                                 # trace blocks + WAL, 7 days (Step 21): disposable
   loki-data:                                                  # log chunks + index, 7 days (Step 21): disposable
+  langfuse-db-data:                                           # Langfuse users, projects, API keys, prompts (Step 22): back it up
+  langfuse-clickhouse-data:                                   # Langfuse traces and observations, 30 days via our retention job (Step 22)
+  langfuse-clickhouse-logs:                                   # ClickHouse server logs (Step 22)
+  langfuse-valkey-data:                                       # Langfuse job queue, append-only file (Step 22): queued jobs are not disposable
 
 secrets:
   litellm_master_key:
@@ -632,3 +772,13 @@ secrets:
     environment: GRAFANA_ADMIN_PASSWORD         # Grafana "admin" (Step 20)
   rag_db_metrics_password:
     environment: RAG_DB_METRICS_PASSWORD        # rag_metrics (Step 20): pg_monitor statistics, no table data
+  langfuse_db_password:
+    environment: LANGFUSE_DB_PASSWORD           # langfuse-db (Step 22)
+  langfuse_valkey_password:
+    environment: LANGFUSE_VALKEY_PASSWORD       # langfuse-valkey (Step 22): its own instance, noeviction
+  s3_langfuse_access_key:
+    environment: S3_LANGFUSE_ACCESS_KEY         # langfuse (Step 22): read/write/list bucket "langfuse" only
+  s3_langfuse_secret_key:
+    environment: S3_LANGFUSE_SECRET_KEY
+  rag_api_langfuse_secret_key:
+    environment: LANGFUSE_SECRET_KEY            # rag-api (Step 22): sk-lf-… authorises writes to the Langfuse project
