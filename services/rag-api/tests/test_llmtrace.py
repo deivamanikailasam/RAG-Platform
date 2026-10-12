@@ -49,7 +49,7 @@ def _search(client: TestClient, idp: FakeIdP, search: FakeSearch) -> None:
     search.candidates = [
         *search.candidates,
         Candidate(DocumentRef(3, "confidential", ("hr",)),
-                  Hit(title="Salary bands 2026", classification="confidential", score=0.8)),
+                  Hit(id=3, title="Salary bands 2026", classification="confidential", score=0.8)),
     ]  # fmt: skip
     r = client.post(
         "/v1/search", json={"query": QUESTION}, headers={"Authorization": f"Bearer {idp.mint()}"}

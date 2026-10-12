@@ -34,6 +34,7 @@ tracer = trace.get_tracer("rag_api.search")
 class Hit(BaseModel):
     """What the caller sees."""
 
+    id: int  # the document id: needed to cite it (rag-answer@2) and to evaluate retrieval (Step 26)
     title: str
     classification: str
     score: float
@@ -64,8 +65,10 @@ class PgSearch:
         # The query instruction is a registered prompt (Step 24), part of the embedding contract.
         self._prompts, self._label = prompts, s.prompt_label
         self._gw = OpenAI(base_url=s.gateway_url, api_key=s.gateway_key.get_secret_value())
+        # The role is configurable, so the evaluation harness can read with rag_readonly (Step 26)
         self._dsn = (
-            f"host={s.db_host} dbname=rag user=rag_app password={s.db_password.get_secret_value()}"
+            f"host={s.db_host} dbname=rag user={s.db_user} "
+            f"password={s.db_password.get_secret_value()}"
         )
 
     def search(
@@ -106,7 +109,7 @@ class PgSearch:
         return [
             Candidate(
                 ref=DocumentRef(id=i, classification=c, acl_groups=tuple(acl)),
-                hit=Hit(title=t, classification=c, score=sc),
+                hit=Hit(id=i, title=t, classification=c, score=sc),
             )
             for i, t, c, acl, sc in rows
         ]

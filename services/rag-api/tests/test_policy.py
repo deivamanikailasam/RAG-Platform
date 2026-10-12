@@ -58,7 +58,7 @@ def test_post_check_drops_what_the_query_should_not_have_returned(
     # Simulate a buggy query that leaks a restricted document into the candidates.
     leaked = Candidate(
         DocumentRef(4, "restricted", ("executives",)),
-        Hit(title="Exec offsite", classification="restricted", score=0.9),
+        Hit(id=4, title="Exec offsite", classification="restricted", score=0.9),
     )
     search.candidates = [*search.candidates, leaked]
     policy.readable_ids = {1}  # the policy's full rule says only document 1 is readable

@@ -27,7 +27,7 @@ def test_search_records_who_got_which_documents(
 ) -> None:  # fmt: skip
     search.candidates.append(
         Candidate(DocumentRef(4, "restricted", ("executives",)),
-                  Hit(title="Board minutes", classification="restricted", score=0.9))
+                  Hit(id=4, title="Board minutes", classification="restricted", score=0.9))
     )  # fmt: skip
     policy.readable_ids = {1}  # the post-check drops document 4
     r = client.post("/v1/search", json={"query": QUESTION, "k": 3}, headers=bearer(idp.mint()))

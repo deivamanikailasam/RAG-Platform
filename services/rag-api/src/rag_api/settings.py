@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     gateway_url: str = "http://litellm:4000/v1"
     gateway_key: SecretStr  # file /run/secrets/rag_api_gateway_key
     db_host: str = "rag-db"
+    db_user: str = "rag_app"  # the evaluation harness uses rag_readonly (Step 26)
     db_password: SecretStr  # file /run/secrets/rag_api_db_password
     # Audit log (Step 23): a separate database, written as the append-only audit_writer role
     audit_db_host: str = "rag-db"

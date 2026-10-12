@@ -74,7 +74,7 @@ class FakeSearch:
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
         self.candidates = [
-            Candidate(DocumentRef(1, "internal", ("all-staff",)), Hit(title="Remote work policy", classification="internal", score=0.71)),
+            Candidate(DocumentRef(1, "internal", ("all-staff",)), Hit(id=1, title="Remote work policy", classification="internal", score=0.71)),
         ]  # fmt: skip
 
     def search(self, query: str, *, groups: frozenset[str], classifications: frozenset[str],
