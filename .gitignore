@@ -32,3 +32,6 @@ models/
 .vscode/*
 !.vscode/extensions.json
 .direnv/
+
+# --- Database backups (Step 11): they contain all your data, never commit them ---
+backups/

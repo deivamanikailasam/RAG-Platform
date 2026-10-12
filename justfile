@@ -192,3 +192,16 @@ db-migrate *args="status":
 # Admin SQL shell (superuser, inside the container: no password on your Mac)
 db-psql:
     docker compose -f infra/compose/compose.yaml exec rag-db psql -U postgres -d rag
+
+# Logical backup of the RAG database (custom format, compressed) into backups/ (gitignored)
+db-backup:
+    mkdir -p backups
+    docker compose -f infra/compose/compose.yaml exec -T rag-db pg_dump -U postgres -d rag -Fc > backups/rag-$(date +%Y%m%d-%H%M%S).dump
+    ls -lh backups | tail -3
+
+# Restore the latest backup into a scratch database and count rows (proves the backup is usable)
+db-restore-test:
+    docker compose -f infra/compose/compose.yaml exec -T rag-db psql -U postgres -c "DROP DATABASE IF EXISTS rag_restore_test" -c "CREATE DATABASE rag_restore_test"
+    cat "$(ls -t backups/rag-*.dump | head -1)" | docker compose -f infra/compose/compose.yaml exec -T rag-db pg_restore -U postgres -d rag_restore_test --no-owner
+    docker compose -f infra/compose/compose.yaml exec -T rag-db psql -U postgres -d rag_restore_test -c "SELECT count(*) AS chunks FROM rag.chunks"
+    docker compose -f infra/compose/compose.yaml exec -T rag-db psql -U postgres -c "DROP DATABASE rag_restore_test"
