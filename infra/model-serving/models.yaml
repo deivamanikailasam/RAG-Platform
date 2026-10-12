@@ -1,0 +1,25 @@
+# Model inventory: which exact models this platform serves, and why.
+# Update this file (in a PR) whenever a model or revision changes.
+models:
+  - id: qwen-quality
+    repo: mlx-community/Qwen3.8-27B-8bit
+    revision: <40-char SHA from the snapshots folder>
+    upstream: Qwen/Qwen3.8-27B
+    format: MLX, 8-bit
+    size_on_disk_gb: <from du -sh>
+    licence: <confirm on the upstream Qwen model page>
+    port: 8081
+    role: high-quality generation, synthesis, judging drafts
+    approved_by: <you>
+    approved_on: 2026-10-11
+  - id: qwen-fast
+    repo: lmstudio-community/Qwen3.6-35B-A3B-MLX-4bit
+    revision: <40-char SHA>
+    upstream: Qwen/Qwen3.6-35B-A3B
+    format: MLX, 4-bit, Mixture of Experts (~3B active)
+    size_on_disk_gb: <from du -sh>
+    licence: Apache-2.0 (per the model page; confirm upstream)
+    port: 8082
+    role: query rewriting, routing, classification, short answers
+    approved_by: <you>
+    approved_on: 2026-10-11

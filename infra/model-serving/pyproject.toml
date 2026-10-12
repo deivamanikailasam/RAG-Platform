@@ -1,0 +1,8 @@
+[project]
+name = "model-serving"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "huggingface-hub[cli]>=2.2.0",
+    "mlx-lm>=0.32.0",
+]

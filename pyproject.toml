@@ -18,6 +18,7 @@ package = false                    # the root is a container for members, not a 
 
 [tool.uv.workspace]
 members = ["libs/*"]               # add "services/*" when the first service exists (Step 9)
+exclude = ["infra/model-serving"]  # Apple-only MLX serving project with its own lockfile (Step 7)
 
 [tool.ruff]
 line-length = 100
