@@ -2,7 +2,8 @@
 
 The static tests read the committed files and check the rules the chapter sets: the Collector config
 receives OTLP on 4317/4318, has a health check, processes in the fixed order memory_limiter ->
-attributes/scrub -> redaction -> resource -> batch for traces and logs (metrics skip scrubbing),
+attributes/scrub -> redaction -> resource -> batch for traces and logs (metrics skip scrubbing; Step 21
+adds log-only steps in between and the Tempo/Loki exporters),
 deletes the risky keys and masks JWT-, key- and email-shaped values; the Compose service is the
 contrib 0.162.x image pinned by tag + digest, read-only, without capabilities, limited to 512 MB and
 published on 127.0.0.1 only; rag-api, LiteLLM (message logging off), OPA and Keycloak send their
@@ -60,13 +61,19 @@ def test_receives_otlp_on_both_protocols_and_has_a_health_check() -> None:
 def test_processor_order_protects_memory_first_and_batches_last() -> None:
     pipelines = _yaml(CONFIG)["service"]["pipelines"]
     assert pipelines["traces"]["processors"] == ORDER
-    assert pipelines["logs"]["processors"] == ORDER
+    # Step 21 adds the container-log grouping before scrubbing and the body masking after
+    # redaction; the memory limiter still comes first and the batch still comes last.
+    logs = [p for p in pipelines["logs"]["processors"] if p in ORDER]
+    assert logs == ORDER
+    assert pipelines["logs"]["processors"][0] == "memory_limiter"
+    assert pipelines["logs"]["processors"][-1] == "batch"
     # metrics carry numbers and short labels, never content: no scrubbing or redaction
     assert pipelines["metrics"]["processors"] == ["memory_limiter", "resource", "batch"]
-    for signal in ("traces", "metrics", "logs"):
+    for signal in ("traces", "metrics"):
         assert pipelines[signal]["receivers"] == ["otlp"]
-    assert pipelines["traces"]["exporters"] == ["debug"]  # Tempo + Loki arrive in Step 21
-    assert pipelines["logs"]["exporters"] == ["debug"]
+    assert pipelines["logs"]["receivers"] == ["otlp", "fluent_forward"]  # Step 21
+    assert pipelines["traces"]["exporters"] == ["otlp_grpc/tempo"]  # Step 21: Tempo
+    assert pipelines["logs"]["exporters"] == ["otlp_http/loki"]  # Step 21: Loki
     # Step 20: metrics are pushed into Prometheus's own OTLP endpoint
     assert pipelines["metrics"]["exporters"] == ["otlp_http/prometheus"]
 
@@ -146,7 +153,12 @@ def test_collector_service_is_pinned_locked_down_and_localhost_only() -> None:
     assert s["command"] == ["--config=/etc/otelcol/config.yaml"]
     assert s["volumes"] == ["../config/otel-collector/config.yaml:/etc/otelcol/config.yaml:ro"]
     assert (COMPOSE.parent / "../config/otel-collector/config.yaml").resolve() == CONFIG
-    assert s["ports"] == ["127.0.0.1:4317:4317", "127.0.0.1:4318:4318", "127.0.0.1:13133:13133"]
+    assert s["ports"] == [
+        "127.0.0.1:4317:4317",
+        "127.0.0.1:4318:4318",
+        "127.0.0.1:13133:13133",
+        "127.0.0.1:24224:24224",  # Step 21: container logs from the Docker engine
+    ]
     assert s["read_only"] is True
     assert s["cap_drop"] == ["ALL"]
     assert s["security_opt"] == ["no-new-privileges:true"]

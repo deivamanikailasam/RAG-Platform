@@ -1,6 +1,16 @@
 # The platform stack. Start with:   just up   (secrets are decrypted in memory by sops)
 name: rag-platform
 
+# Step 21: every container's stdout/stderr goes to the Collector through Docker's own "fluentd" log
+# driver. The Docker ENGINE pushes the lines out, so no log agent needs the Docker socket.
+x-logging: &to-collector
+  driver: fluentd
+  options:
+    fluentd-address: 127.0.0.1:24224          # the Collector's published port (the Docker engine connects)
+    fluentd-async: "true"                     # never block a container because the Collector is down
+    labels: com.docker.compose.service        # attach the Compose service name to every line
+    tag: docker
+
 services:
   litellm-db:                                                 # the gateway's own private database (Step 10)
     image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24   # pin by digest (Step 9 method)
@@ -17,6 +27,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    logging: *to-collector                                    # Step 21: output to the Collector -> Loki
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
     deploy:
@@ -57,6 +68,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    logging: *to-collector                                    # Step 21: output to the Collector -> Loki
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
     deploy:
@@ -100,6 +112,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    logging: *to-collector                                    # Step 21: output to the Collector -> Loki
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
     deploy:
@@ -132,6 +145,7 @@ services:
       interval: 15s
       timeout: 5s
       retries: 10
+    logging: *to-collector                                    # Step 21: output to the Collector -> Loki
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
     deploy:
@@ -166,6 +180,7 @@ services:
       timeout: 10s
       retries: 15
       start_period: 60s
+    logging: *to-collector                                    # Step 21: output to the Collector -> Loki
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
     deploy:
@@ -208,6 +223,7 @@ services:
       interval: 15s
       timeout: 5s
       retries: 10
+    logging: *to-collector                                    # Step 21: output to the Collector -> Loki
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
     deploy:
@@ -245,6 +261,7 @@ services:
       interval: 10s
       timeout: 3s
       retries: 10
+    logging: *to-collector                                    # Step 21: output to the Collector -> Loki
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
     deploy:
@@ -266,6 +283,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    logging: *to-collector                                    # Step 21: output to the Collector -> Loki
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
     deploy:
@@ -314,6 +332,7 @@ services:
       timeout: 5s
       retries: 10
       start_period: 60s
+    logging: *to-collector                                    # Step 21: output to the Collector -> Loki
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
     deploy:
@@ -351,6 +370,7 @@ services:
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
+    logging: *to-collector                                    # Step 21: output to the Collector -> Loki
     restart: unless-stopped
     deploy:
       resources:
@@ -365,6 +385,9 @@ services:
       - "127.0.0.1:4317:4317"                 # OTLP gRPC: native macOS processes and scripts can send too
       - "127.0.0.1:4318:4318"                 # OTLP HTTP
       - "127.0.0.1:13133:13133"               # health check
+      - "127.0.0.1:24224:24224"               # Step 21: container logs from the Docker engine
+    # No "logging:" block: the Collector can't ship its own logs to itself, so it keeps Docker's
+    # default local json-file log (`just logs otel-collector`).
     # No healthcheck: the image holds only the Collector (no shell). Check from the host instead:
     # curl -s localhost:13133/ returns status JSON. Senders never fail when the Collector is down;
     # their exporters drop data and retry.
@@ -412,6 +435,7 @@ services:
       litellm:  { condition: service_healthy }
       opa:      { condition: service_started }        # Step 18: no healthcheck in the static image
       otel-collector: { condition: service_started }  # Step 19: no shell, so no healthcheck
+    logging: *to-collector                                    # Step 21: output to the Collector -> Loki
     restart: unless-stopped
     deploy:
       resources:
@@ -425,6 +449,8 @@ services:
       - --storage.tsdb.retention.time=15d
       - --storage.tsdb.retention.size=5GB                     # whichever limit is hit first
       - --web.enable-otlp-receiver                            # accept pushes from the Collector
+      - --web.enable-remote-write-receiver                    # Step 21: Tempo's span metrics + service graph arrive here
+      - --enable-feature=exemplar-storage                     # Step 21: keep the trace ids attached to metric points
     volumes:
       - ../config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ../config/prometheus/rules:/etc/prometheus/rules:ro
@@ -442,6 +468,7 @@ services:
     # the unprivileged "nobody" user, which cannot change the program or its config files.
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
+    logging: *to-collector                                    # Step 21: output to the Collector -> Loki
     restart: unless-stopped
     deploy: { resources: { limits: { memory: 1g, cpus: "1" } } }
 
@@ -458,6 +485,7 @@ services:
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
+    logging: *to-collector                                    # Step 21: output to the Collector -> Loki
     restart: unless-stopped
     deploy: { resources: { limits: { memory: 128m, cpus: "0.25" } } }
 
@@ -481,6 +509,7 @@ services:
       prometheus: { condition: service_healthy }
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
+    logging: *to-collector                                    # Step 21: output to the Collector -> Loki
     restart: unless-stopped
     deploy: { resources: { limits: { memory: 512m, cpus: "1" } } }
 
@@ -496,8 +525,36 @@ services:
     # read_only left out for the same Compose reason as prometheus; the image runs as "nobody".
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
+    logging: *to-collector                                    # Step 21: output to the Collector -> Loki
     restart: unless-stopped
     deploy: { resources: { limits: { memory: 128m, cpus: "0.25" } } }
+
+  tempo:                                                      # trace store: every span, 7 days (Step 21)
+    image: grafana/tempo:3.0.3@sha256:0296560ac66f8a3600d7fb3014a52c189d4d9c3549ad6ff441bf2409855d68d5
+    command: ["-target=all", "-config.file=/etc/tempo.yaml"]  # single process: every component, no Kafka
+    volumes:
+      - ../config/tempo/tempo.yaml:/etc/tempo.yaml:ro
+      - tempo-data:/var/tempo
+    ports: ["127.0.0.1:3200:3200"]                            # query API, for curl checks; Grafana uses tempo:3200
+    # OTLP gRPC (4317) is NOT published: only the Collector sends here, inside the Compose network.
+    logging: *to-collector
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    deploy: { resources: { limits: { memory: 1g, cpus: "1" } } }
+
+  loki:                                                       # log store: every container's lines, 7 days (Step 21)
+    image: grafana/loki:3.7.7@sha256:d70e4659623f3e109af669cae76fe2a5dd5be54e2298fe8aed380d982fbc2500
+    command: ["-config.file=/etc/loki/loki.yaml"]
+    volumes:
+      - ../config/loki/loki.yaml:/etc/loki/loki.yaml:ro
+      - loki-data:/loki
+    ports: ["127.0.0.1:3100:3100"]                            # no login of its own: localhost only
+    logging: *to-collector
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    deploy: { resources: { limits: { memory: 1g, cpus: "1" } } }
 
 volumes:
   litellm-db-data:                                            # keys, teams, budgets and spend logs live here
@@ -511,6 +568,8 @@ volumes:
   prometheus-data:                                            # metrics, 15 days / 5 GB (Step 20): disposable
   alertmanager-data:                                          # silences and notification state (Step 20)
   grafana-data:                                               # Grafana's own database (users, preferences); dashboards come from Git
+  tempo-data:                                                 # trace blocks + WAL, 7 days (Step 21): disposable
+  loki-data:                                                  # log chunks + index, 7 days (Step 21): disposable
 
 secrets:
   litellm_master_key:

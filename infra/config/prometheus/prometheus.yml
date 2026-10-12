@@ -48,3 +48,9 @@ scrape_configs:
 
   - job_name: tei                             # embedder + reranker run natively on macOS (Step 8)
     static_configs: [{ targets: ["host.docker.internal:9083", "host.docker.internal:9084"] }]
+
+  - job_name: tempo                           # Step 21: trace storage health
+    static_configs: [{ targets: ["tempo:3200"] }]
+
+  - job_name: loki                            # Step 21: log storage health
+    static_configs: [{ targets: ["loki:3100"] }]

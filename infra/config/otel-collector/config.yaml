@@ -10,6 +10,8 @@ receivers:
     protocols:
       grpc: { endpoint: 0.0.0.0:4317 }
       http: { endpoint: 0.0.0.0:4318 }
+  fluent_forward:                                # container stdout/stderr, sent by Docker's "fluentd" log driver
+    endpoint: 0.0.0.0:24224
 
 processors:
   # 1. FIRST: refuse data instead of crashing when memory runs short.
@@ -18,7 +20,23 @@ processors:
     limit_percentage: 80
     spike_limit_percentage: 20
 
-  # 2. Remove things that must never be stored, whatever a service sends by mistake.
+  # 2. Container logs arrive from Docker's log driver, all containers over one connection. Each line
+  #    carries its Compose service name (the driver's "labels" option). Regroup lines by that value,
+  #    so every group belongs to exactly one service, then name the service after it.
+  groupbyattrs/container:
+    keys: [com.docker.compose.service]
+  transform/container-logs:
+    log_statements:
+      - context: resource
+        conditions: ['attributes["com.docker.compose.service"] != nil']
+        statements:
+          - set(attributes["service.name"], attributes["com.docker.compose.service"])
+          - delete_key(attributes, "com.docker.compose.service")
+      - context: log
+        statements:
+          - delete_key(attributes, "fluent.tag")
+
+  # 3. Remove things that must never be stored, whatever a service sends by mistake.
   attributes/scrub:
     actions:
       - { key: http.request.header.authorization, action: delete }
@@ -33,23 +51,35 @@ processors:
       - "sk-[A-Za-z0-9_-]{16,}"                                  # LiteLLM / OpenAI-style keys
       - "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}"        # email addresses
     summary: info                                # count what was masked, in redaction.* attributes
+  # The redaction processor checks ATTRIBUTES. A log line's text is its BODY, so mask that too.
+  transform/redact-log-body:
+    log_statements:
+      - context: log
+        statements:
+          - replace_pattern(body, "eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+", "****")
+          - replace_pattern(body, "sk-[A-Za-z0-9_-]{16,}", "****")
+          - replace_pattern(body, "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}", "****")
 
-  # 3. Label everything with where it came from.
+  # 4. Label everything with where it came from.
   resource:
     attributes:
       - { key: deployment.environment.name, value: dev, action: upsert }
 
-  # 4. LAST: send in batches (far fewer, larger requests).
+  # 5. LAST: send in batches (far fewer, larger requests).
   batch:
     timeout: 2s
     send_batch_size: 1024
 
 exporters:
-  debug:                                         # traces and logs still print here until Tempo + Loki (Step 21)
-    verbosity: basic
-  otlp_http/prometheus:                          # metrics: pushed to Prometheus's own OTLP endpoint (Step 20)
-    endpoint: http://prometheus:9090/api/v1/otlp
+  otlp_grpc/tempo:                               # traces -> Tempo (Step 21)
+    endpoint: tempo:4317
     tls: { insecure: true }                      # inside the Compose network only
+  otlp_http/prometheus:                          # metrics -> Prometheus's OTLP endpoint (Step 20)
+    endpoint: http://prometheus:9090/api/v1/otlp
+    tls: { insecure: true }
+  otlp_http/loki:                                # logs -> Loki's OTLP endpoint (Step 21)
+    endpoint: http://loki:3100/otlp
+    tls: { insecure: true }
 
 service:
   extensions: [health_check]
@@ -65,12 +95,13 @@ service:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, attributes/scrub, redaction, resource, batch]
-      exporters: [debug]
+      exporters: [otlp_grpc/tempo]
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, resource, batch]
       exporters: [otlp_http/prometheus]
     logs:
-      receivers: [otlp]
-      processors: [memory_limiter, attributes/scrub, redaction, resource, batch]
-      exporters: [debug]
+      receivers: [otlp, fluent_forward]
+      processors: [memory_limiter, groupbyattrs/container, transform/container-logs, attributes/scrub,
+                   redaction, transform/redact-log-body, resource, batch]
+      exporters: [otlp_http/loki]

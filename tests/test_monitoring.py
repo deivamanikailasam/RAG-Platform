@@ -94,7 +94,7 @@ def test_every_component_is_scraped_with_least_privilege() -> None:
     jobs = {j["job_name"]: j for j in _yaml(PROM / "prometheus.yml")["scrape_configs"]}
     assert set(jobs) == {
         "prometheus", "alertmanager", "otel-collector", "keycloak", "opa", "qdrant",
-        "postgres-rag", "tei",
+        "postgres-rag", "tei", "tempo", "loki",
     }  # fmt: skip
 
     def targets(job: str) -> list[str]:
@@ -298,6 +298,8 @@ def test_prometheus_flags_retention_and_otlp() -> None:
         "--storage.tsdb.retention.time=15d",
         "--storage.tsdb.retention.size=5GB",
         "--web.enable-otlp-receiver",
+        "--web.enable-remote-write-receiver",  # Step 21: Tempo's generated metrics
+        "--enable-feature=exemplar-storage",  # Step 21: trace ids on metric points
     ]
     assert "host.docker.internal:host-gateway" in s["extra_hosts"]
     assert "--cluster.listen-address=" in _service("alertmanager")["command"]

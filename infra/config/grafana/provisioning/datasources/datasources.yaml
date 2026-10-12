@@ -1,14 +1,62 @@
 # Grafana reads this at start-up: data sources are code, not clicks.
+# The jsonData links are what make "metric -> trace -> logs" a click instead of a search.
+# ("$$" is a literal "$": Grafana would otherwise read "$name" as an environment variable.)
 apiVersion: 1
 datasources:
   - name: Prometheus
     uid: prometheus                           # dashboards refer to this fixed id
     type: prometheus
-    access: proxy                             # Grafana's server queries Prometheus; the browser never does
+    access: proxy                             # Grafana's server queries; the browser never talks to Prometheus
     url: http://prometheus:9090
     isDefault: true
     editable: false
-    jsonData: { timeInterval: 15s }           # matches the scrape interval
+    jsonData:
+      timeInterval: 15s                       # matches the scrape interval
+      exemplarTraceIdDestinations:            # metric point -> its example trace in Tempo
+        - name: trace_id
+          datasourceUid: tempo
+
+  - name: Tempo
+    uid: tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    editable: false
+    jsonData:
+      streamingEnabled: { search: true }
+      serviceMap: { datasourceUid: prometheus }     # service graph from Tempo's generated metrics
+      nodeGraph: { enabled: true }
+      tracesToLogsV2:                         # span -> the log lines of the same request in Loki
+        datasourceUid: loki
+        filterByTraceID: true
+        spanStartTimeShift: "-5m"
+        spanEndTimeShift: "5m"
+        tags: [{ key: service.name, value: service_name }]
+      tracesToMetrics:                        # span -> that service's request rate in Prometheus
+        datasourceUid: prometheus
+        spanStartTimeShift: "-5m"
+        spanEndTimeShift: "5m"
+        tags: [{ key: service.name, value: service }]
+        queries:
+          - name: Request rate
+            query: sum(rate(traces_spanmetrics_calls_total{$$__tags}[5m]))
+
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: false
+    jsonData:
+      maxLines: 1000
+      derivedFields:                          # log line -> its trace (our JSON logs carry "trace_id")
+        - name: TraceID
+          matcherType: regex
+          matcherRegex: '"trace_id": ?"(\w+)"'
+          url: "$${__value.raw}"
+          datasourceUid: tempo
+          urlDisplayLabel: View trace
+
   - name: Alertmanager
     uid: alertmanager
     type: alertmanager
