@@ -23,3 +23,28 @@ models:
     role: query rewriting, routing, classification, short answers
     approved_by: <you>
     approved_on: 2026-10-11
+  - id: embedder
+    repo: Qwen/Qwen3-Embedding-0.6B
+    revision: <40-char SHA>
+    format: safetensors (TEI, Metal)
+    licence: Apache-2.0 (per the model card)
+    port: 8083
+    role: dense embeddings for indexing and queries
+    contract:                       # changing ANY of these requires a full re-index
+      dimensions: 1024              # model supports 32-1024 (Matryoshka); truncate client-side, then re-normalise
+      normalise: true
+      pooling: last-token           # read by TEI from the model config
+      query_instruction: "Instruct: Given an employee question, retrieve passages from company documents that answer it\nQuery:"
+      document_instruction: none
+      max_chunk_tokens: 1024        # our chunkers (Step 31) must stay under this; TEI truncates silently beyond the model limit
+    approved_by: <you>
+    approved_on: 2026-10-12
+  - id: reranker
+    repo: BAAI/bge-reranker-v2-m3
+    revision: <40-char SHA>
+    format: safetensors (TEI, Metal), cross-encoder
+    licence: <confirm on the model card>
+    port: 8084
+    role: rerank top-k retrieval candidates
+    approved_by: <you>
+    approved_on: 2026-10-12

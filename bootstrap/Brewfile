@@ -18,3 +18,6 @@ brew "dive"                 # inspect image layers: find bloat and accidentally 
 # ---- Secrets (Step 6) ----
 brew "age"                  # modern file encryption; makes the key pair SOPS uses
 brew "sops"                 # encrypts values inside .env / YAML / JSON files, keeps names readable
+
+# ---- Embeddings & reranking (Step 8) ----
+brew "text-embeddings-inference"  # Hugging Face TEI: fast embedding/reranking server, native Metal build on Apple Silicon
