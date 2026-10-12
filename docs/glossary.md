@@ -63,6 +63,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Claim | One field in a token's payload, such as `iss`, `sub`, `groups` or `exp`. | 16 |
 | Clearance | The highest classification (public < internal < confidential < restricted) a person may read, taken from their groups; no known group means no clearance at all. | 18 |
 | CLI | Command-line interface: a program you control by typing commands. | 1 |
+| ClickHouse | A fast column-oriented analytics database; Langfuse stores traces, observations and scores in it. | 22 |
 | Client (OIDC) | An app registered with the identity provider. Public clients (browser, command line) can't keep a secret; confidential clients (servers, workers) can. | 16 |
 | Client credentials | The flow where a machine signs in with its own client id and secret, with no person involved; it gets an access token but no refresh token. | 16 |
 | Client scope | A reusable bundle of protocol mappers (and other token settings) that can be attached to many clients instead of repeating the mappers on each. | 16 |
@@ -90,6 +91,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Dashboards as code | Generating dashboard definitions (Grafana JSON) from reviewed code in Git (`scripts/build_dashboards.py`) instead of clicking in the UI, with a check that fails when the committed JSON is out of date. | 20 |
 | Data filtering / partial evaluation (OPA) | OPA evaluating a policy with some facts still unknown and turning the rest into a filter, even a SQL `WHERE` clause, that a database can apply. | 18 |
 | Data key | The random key SOPS creates per file to lock every value; it is itself locked once per recipient. | 6 |
+| Data retention | How long data is kept before it is deleted; for Langfuse traces, 30 days, enforced by our own nightly job because automatic retention is an Enterprise feature when self-hosted. | 22 |
 | Dead-letter queue (DLQ) | Where jobs go after failing too many times (here: 3 deliveries), so they stop retrying forever and a human can inspect them. | 15 |
 | Decision log | OPA's record of every decision (input, result, path, time, `decision_id`), written as JSON; the audit evidence for "who was allowed what, and why". | 18 |
 | Decode | The second phase of generation: the model writes the answer one token at a time; its speed is limited by memory bandwidth. | 7 |
@@ -138,6 +140,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Full-text search / tsvector | Postgres's built-in keyword search: words normalised to stems (a `tsvector`) and indexed with GIN. | 11 |
 | Gateway (AI / LLM gateway) | A server in front of all model servers: every request passes through it for authentication, allow-listing, routing, limits and logging. | 9 |
 | GenAI semantic conventions | The emerging standard `gen_ai.*` attribute names for model calls (operation, model, token usage), so LLM tools and vendor dashboards understand each other. | 19 |
+| Generation (LLM observability) | An observation for one LLM call: prompt, completion, model, tokens and cost (recorded from Step 33). | 22 |
 | GIN index | A Postgres "inverted" index for values with many parts: arrays, JSON and words. | 11 |
 | Git hook | A script git runs automatically at a set moment: before a commit, after the message is written, before a push. | 5 |
 | .gitattributes | Rules for how git treats file types (line endings, binary files, generated files). | 4 |
@@ -148,6 +151,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Grouping (alerts) | Alertmanager combining related alerts (same `alertname` and `service` here) into one notification instead of one per time series. | 20 |
 | halfvec | A pgvector type that stores each number in 2 bytes instead of 4: half the storage, negligible quality loss for embeddings. | 11 |
 | Hash | A short fingerprint calculated from a file's contents; change one byte and it changes completely. | 2 |
+| Headless initialisation | Creating an application's organisation, project, API keys and first admin from configuration at first start, with no clicking (Langfuse's `LANGFUSE_INIT_*` variables). | 22 |
 | Healthcheck | A command Compose runs inside a container every few seconds to ask "are you working?"; failures mark it unhealthy. | 9 |
 | Histogram (metric) | A metric that records a distribution of values (e.g. latencies), from which p50/p95/p99 are computed. | 19 |
 | `histogram_quantile` | The PromQL function that estimates a percentile (e.g. p95) from histogram buckets; it can only be as precise as the bucket edges allow. | 20 |
@@ -191,6 +195,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Lineage | The recorded chain from an output (an answer) back to its inputs (chunks → document → exact file version). | 14 |
 | Linter / static analysis | A tool (e.g. `ruff check`) that reads code without running it and flags likely bugs and risky patterns, each as a coded rule like `B006`. | 5 |
 | Liveness / readiness | Two health questions: "is the process alive?" (restart it if not) and "can it serve traffic yet?". | 9 |
+| LLM observability | Recording what an AI system was asked, what it looked up and what it answered, to debug and improve it (Langfuse here). | 22 |
 | localhost / 127.0.0.1 | "This machine only": a port bound here is reachable only from your own Mac. | 3 |
 | Lockfile | A file recording the exact version and hash of every package in the full dependency tree (`uv.lock`). | 2 |
 | Log aggregation | Collecting every container's log lines into one central, searchable store with retention (Loki here) instead of reading files on each machine. | 21 |
@@ -203,6 +208,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | macOS Keychain | The Mac's built-in encrypted password store, unlocked by your login; home for personal tokens. | 6 |
 | maintenance_work_mem | Postgres memory for maintenance work such as building indexes; HNSW builds are much faster when the graph fits in it. | 11 |
 | Mapping | An OpenSearch index's schema: each field's type (`text`, `keyword`, `knn_vector` …) and analyzer. | 13 |
+| Masking hook | A function in our own process that rewrites every value (tokens, keys, emails → `****`) before it is sent to Langfuse. | 22 |
 | Master key | The gateway's root credential (`LITELLM_MASTER_KEY`); it can do everything, so it is for admins only. | 9 |
 | Matryoshka embeddings | Embeddings trained so their first part is already a useful smaller embedding; keep the first N numbers, re-normalise, and save storage at a small quality cost. | 8 |
 | Max parallel requests (concurrency limit) | How many requests one key may have in flight at once; crucial when every app shares one GPU. | 10 |
@@ -232,7 +238,9 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Object metadata | Extra key-value information stored with an object (content type, source URI, sha256…). | 14 |
 | Object storage / S3 API | Storing files as objects in buckets, reached over HTTP using Amazon's S3 protocol, now an industry standard spoken by AWS S3, SeaweedFS, Ceph and many more. | 14 |
 | Observability | Being able to answer new questions about a running system from the outside, using its traces, metrics and logs, without shipping new code. | 19 |
+| Observation (Langfuse) | One step inside a Langfuse trace, with a type: `chain`, `retriever`, `embedding`, `generation`, `tool`, `agent` … | 22 |
 | Opaque token | A token that is just a random reference, not a readable JWT; only the identity provider can say what it means, via introspection. | 17 |
+| Open core | A free (here MIT-licensed) core product plus paid Enterprise features; Langfuse's model. | 22 |
 | OpenAI-compatible API | The same request and response format as OpenAI's API, so any tool that speaks "OpenAI" can call a local model. | 7 |
 | OpenFGA | A CNCF relationship-based (ReBAC) authorisation engine modelled on Google's Zanzibar: "shared with", folder inheritance, team membership. Planned for the permission-aware RAG project. | 18 |
 | OpenTelemetry | The CNCF open standard (APIs, SDKs, protocol, Collector) for producing and shipping traces, metrics and logs, supported by every major vendor. | 19 |
@@ -267,6 +275,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Presigned URL | A link with a built-in signature and expiry that grants temporary access to one object (or one version) without the opener needing credentials. | 14 |
 | Primary key / foreign key | A row's unique ID / a column pointing to another table's row (a chunk → its document). | 11 |
 | Principal | The verified caller as the code sees it after token validation: user id (`sub`), username, calling app (`azp`), groups and roles. | 17 |
+| Project and API keys (Langfuse) | A Langfuse project holds traces; its public key (`pk-lf-…`) identifies it and its secret key (`sk-lf-…`) authorises writes. | 22 |
 | Prompt cache | Reusing the KV cache of a prompt start sent before (e.g. the same system prompt), which makes TTFT much faster. | 7 |
 | PromQL | Prometheus's query language: select series by name and labels, then compute with functions like `rate()`, `increase()`, `sum by (…)` and `histogram_quantile`. | 20 |
 | Protocol mapper | A Keycloak rule that puts an extra fact into tokens, such as the `groups` claim or an extra audience. | 16 |
@@ -320,6 +329,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Sampling (head / tail) | Keeping only some traces. Head sampling decides when a request starts; tail sampling decides after seeing the whole trace (e.g. keep all errors and slow ones). | 19 |
 | Scalar quantization (int8) | Storing each vector number as a 1-byte integer instead of 2–4 bytes: about 4× smaller and faster to scan. | 12 |
 | Schema (database) | A named folder of tables inside a database (we use `rag`); also "the structure" of the tables. | 11 |
+| Score (LLM evaluation) | A judgement attached to a trace: thumbs up/down, a 0–1 rating, or an evaluator's verdict. | 22 |
 | Score normalisation | Rescaling scores from different methods to the same range (min-max: best = 1, worst = 0) before combining them. | 13 |
 | Scrape | Prometheus fetching a target's `/metrics` page on a schedule (every 15 s here), optionally with a bearer token read from a secret file. | 20 |
 | Search engine | A system built to find documents by their words (and now vectors) fast, with relevance ranking; e.g. OpenSearch, Elasticsearch. | 13 |
@@ -333,12 +343,14 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Semantic Versioning | MAJOR.MINOR.PATCH version numbers: breaking change → major, `feat` → minor, `fix` → patch. | 4 |
 | Service account | A non-human identity tied to a confidential client, used with client credentials (e.g. `service-account-ingestion-worker`). | 16 |
 | Service graph | Who-calls-whom metrics (`traces_service_graph_request_total{client, server}`) that Tempo computes from client/server spans; Grafana draws them as boxes and arrows. | 21 |
+| Session / user / tags | Ways to group LLM traces: a conversation, a (pseudonymous) person, free-form labels. | 22 |
 | Shadow price | An internal, notional price for something with no bill (your own GPU time), so usage can be compared and budgeted; here $2/hour ÷ tokens per second. | 10 |
 | Shard / replica | The pieces an index is split into / copies of them for safety; one node uses 1 shard and 0 replicas. | 13 |
 | shared_buffers | Postgres's own memory cache for table and index pages, typically about 25% of the memory it may use. | 11 |
 | Shell / zsh | The program inside Terminal that reads and runs your commands; zsh is the macOS default. | 1 |
 | Shift left | Moving checks earlier in the process (editor, commit) where fixing problems is cheapest. | 5 |
 | Showback / chargeback | Showing each team what it used / actually billing its cost centre for it. | 10 |
+| Side door | A way to read data around the access policy, for example a trace viewer showing documents the reader isn't cleared for. | 22 |
 | Signal | One kind of telemetry: traces, metrics or logs. | 19 |
 | Signed commit | A commit stamped with your private key so GitHub can show it as Verified (really from you). | 4 |
 | Silence | A deliberate, time-limited mute of matching alerts in Alertmanager, e.g. during planned maintenance; stored so it survives restarts. | 20 |

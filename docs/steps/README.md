@@ -33,3 +33,4 @@ Phases: **A** Workstation · **B** Model serving · **C** Data stores · **D** I
 | 19 | OpenTelemetry Collector: one pipe for traces, metrics and logs | E · Observability | [step-19-opentelemetry-collector.md](step-19-opentelemetry-collector.md) |
 | 20 | Prometheus + Grafana: dashboards, SLOs and alerts | E · Observability | [step-20-prometheus-grafana-slos-alerts.md](step-20-prometheus-grafana-slos-alerts.md) |
 | 21 | Loki + Tempo: from a spike to the exact trace and log line | E · Observability | [step-21-loki-tempo-traces-and-logs.md](step-21-loki-tempo-traces-and-logs.md) |
+| 22 | Langfuse: LLM traces with content, under control | E · Observability | [step-22-langfuse-llm-traces.md](step-22-langfuse-llm-traces.md) |
