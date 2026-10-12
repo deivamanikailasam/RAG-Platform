@@ -57,7 +57,7 @@ python_version = "3.12"
 strict = true                       # the full set of strictness checks
 warn_unreachable = true
 pretty = true
-files = ["libs/rag-common/src"]     # add each new library/service as it's created
+files = ["libs/rag-common/src", "scripts", "tests"]  # add each new library/service as it's created
 plugins = ["pydantic.mypy"]          # so mypy understands pydantic models (Step 6)
 
 [tool.pytest.ini_options]

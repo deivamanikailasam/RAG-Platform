@@ -1,3 +1,8 @@
+# Model serving (Step 7): which models to serve, and the shared safe server command
+quality_model := "mlx-community/Qwen3.8-27B-8bit"
+fast_model    := "lmstudio-community/Qwen3.6-35B-A3B-MLX-4bit"
+serve         := "HF_HUB_OFFLINE=1 uv run --project infra/model-serving mlx_lm.server --host 127.0.0.1 --allowed-origins http://localhost"
+
 # List available recipes (runs when you type just "just")
 default:
     @just --list
@@ -71,3 +76,36 @@ secrets-edit:
 # Run any command with the dev secrets available:   just with-secrets docker compose up -d
 with-secrets +cmd:
     sops exec-env secrets/dev.enc.env "{{cmd}}"
+
+# Download both models (needs network + HF token)
+models-download:
+    uv run --project infra/model-serving hf download {{quality_model}}
+    uv run --project infra/model-serving hf download {{fast_model}}
+
+# Run a model server in the foreground (Ctrl+C to stop)
+serve-quality:
+    {{serve}} --model {{quality_model}} --port 8081 --max-tokens 4096
+
+serve-fast:
+    {{serve}} --model {{fast_model}} --port 8082 --max-tokens 2048 --chat-template-args '{"enable_thinking": false}'
+
+# Install / remove the always-on launchd services
+models-up:
+    QUALITY_MODEL={{quality_model}} FAST_MODEL={{fast_model}} scripts/install-model-agents.sh
+
+models-down:
+    -launchctl bootout gui/$(id -u)/com.rag-platform.qwen-quality
+    -launchctl bootout gui/$(id -u)/com.rag-platform.qwen-fast
+
+# Are both model servers healthy?
+models-health:
+    @curl -sf http://127.0.0.1:8081/health && echo "  quality :8081 ok" || echo "  quality :8081 DOWN"
+    @curl -sf http://127.0.0.1:8082/health && echo "  fast    :8082 ok" || echo "  fast    :8082 DOWN"
+
+# Follow the model server logs
+models-logs:
+    tail -f ~/Library/Logs/rag-platform/qwen-*.log
+
+# Measure TTFT and tokens/s
+bench *args:
+    uv run scripts/bench_models.py {{args}}
