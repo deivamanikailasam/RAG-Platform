@@ -1,0 +1,9 @@
+# ---- Core CLI (Step 1) ----
+brew "git"                  # newer than Apple's bundled git
+brew "gh"                   # GitHub CLI: repos, PRs, Actions from the terminal
+brew "jq"                   # query/transform JSON (API responses, traces, configs)
+brew "yq"                   # same for YAML (Compose, Kubernetes, Helm files)
+brew "just"                 # task runner: one-word commands like `just up`, `just test`
+brew "direnv"               # loads per-project environment variables when you cd in
+brew "wget"                 # downloading models and datasets
+brew "tree"                 # inspect folder structures
