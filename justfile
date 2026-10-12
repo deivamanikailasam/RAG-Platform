@@ -341,3 +341,8 @@ prompts-check-main:
 [positional-arguments]
 cards *args:
     uv run python scripts/cards.py "$@"
+
+# ---- Evaluation harness (Step 26) ----
+# just evals run retrieval | run answer --prompt rag-answer --label staging [--judge] | gate <run> | …
+evals *args:
+    sops exec-env secrets/dev.enc.env 'uv run python scripts/evals.py {{args}}'
