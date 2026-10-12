@@ -8,6 +8,9 @@ Local-first, enterprise-grade RAG platform (Project 0 of the RAG curriculum).
     just install-hooks # install the git hooks (pre-commit, commit-msg, pre-push) once per clone
     just check         # every gate CI runs: tools, lockfile, all hooks and tests
 
+Secrets (Step 6): create your age key, put its public key in `.sops.yaml`, then
+`just secrets-init` once; run things with `just with-secrets <cmd>`. See [secrets/README.md](secrets/README.md).
+
 ## Layout
 - `libs/` shared Python packages · `services/` deployable apps · `infra/` compose, k8s, config
 - `evals/` evaluation data and runs · `tests/` cross-service tests · `docs/adr/` decision records
