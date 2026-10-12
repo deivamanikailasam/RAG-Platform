@@ -99,9 +99,43 @@ services:
       resources:
         limits: { memory: 4g, cpus: "4" }
 
+  qdrant:                                                     # dedicated vector database: a DERIVED index of rag-db (Step 12)
+    image: qdrant/qdrant:v1.19.2@sha256:b7b0444c4c351c970b98e90a6f89c2ee4287c65b44e52b4cb503fa5b2aa927ad   # pin by digest (Step 9 method)
+    # Keys come from secret FILES and are exported only inside the container process.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        export QDRANT__SERVICE__API_KEY="$$(cat /run/secrets/qdrant_api_key)"
+        QDRANT__SERVICE__READ_ONLY_API_KEY="$$(cat /run/secrets/qdrant_read_only_api_key)" &&
+        exec /qdrant/entrypoint.sh
+    environment:
+      QDRANT__TELEMETRY_DISABLED: "true"        # don't send usage reports (same habit as Step 1)
+      QDRANT__SERVICE__JWT_RBAC: "true"         # allow scoped tokens signed with the admin key
+      QDRANT__LOG_LEVEL: INFO
+    secrets: [qdrant_api_key, qdrant_read_only_api_key]
+    volumes:
+      - qdrant-data:/qdrant/storage
+      - qdrant-snapshots:/qdrant/snapshots
+    ports:
+      - "127.0.0.1:6333:6333"                   # REST API + web dashboard
+      - "127.0.0.1:6334:6334"                   # gRPC API
+      # 6335 (cluster-internal, unauthenticated) is deliberately NOT published
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits: { memory: 2g, cpus: "2" }
+
 volumes:
   litellm-db-data:                                            # keys, teams, budgets and spend logs live here
   rag-db-data:                                                # documents, chunks and vectors (Step 11)
+  qdrant-data:                                                # collections, points and HNSW graphs (Step 12): rebuildable from rag-db
+  qdrant-snapshots:                                           # Qdrant snapshot files (Step 12)
 
 secrets:
   litellm_master_key:
@@ -120,3 +154,7 @@ secrets:
     environment: RAG_DB_APP_PASSWORD            # rag_app: services read/write rows
   rag_db_readonly_password:
     environment: RAG_DB_READONLY_PASSWORD       # rag_readonly: evaluation and analytics
+  qdrant_api_key:
+    environment: QDRANT_API_KEY                 # admin: create/delete collections, write, mint tokens
+  qdrant_read_only_api_key:
+    environment: QDRANT_READ_ONLY_API_KEY       # read-only, for quick checks

@@ -17,6 +17,9 @@ POSTGRES_PASSWORD=$(rand)
 RAG_DB_MIGRATOR_PASSWORD=$(rand)
 RAG_DB_APP_PASSWORD=$(rand)
 RAG_DB_READONLY_PASSWORD=$(rand)
+# --- Qdrant (Step 12): admin key (also signs JWTs) and read-only key ---
+QDRANT_API_KEY=$(openssl rand -hex 32)
+QDRANT_READ_ONLY_API_KEY=$(openssl rand -hex 32)
 MINIO_ROOT_USER=rag-admin
 MINIO_ROOT_PASSWORD=$(rand)
 REDIS_PASSWORD=$(rand)
