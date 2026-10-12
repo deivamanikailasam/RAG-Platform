@@ -10,6 +10,8 @@ model_list:
       timeout: 600                                            # long answers on a 27B model can take minutes
     model_info:
       mode: chat
+      input_cost_per_token: 0.0000028                         # shadow price: $2/h ÷ (3600 × prefill tok/s), see docs/finops
+      output_cost_per_token: 0.0000278                        # shadow price: $2/h ÷ (3600 × decode tok/s)
 
   - model_name: qwen-fast                                     # rewriting, routing, quick replies (thinking off at the server)
     litellm_params:
@@ -19,6 +21,8 @@ model_list:
       timeout: 120
     model_info:
       mode: chat
+      input_cost_per_token: 0.0000007                         # shadow price (docs/finops/shadow-pricing.md)
+      output_cost_per_token: 0.0000069
 
   - model_name: embedder                                      # TEI OpenAI-compatible route; served name from Step 8
     litellm_params:
@@ -27,6 +31,8 @@ model_list:
       api_key: os.environ/TEI_API_KEY
     model_info:
       mode: embedding
+      input_cost_per_token: 0.00000002                        # cheap, but not zero, so heavy indexing still shows up
+      output_cost_per_token: 0
 
   - model_name: reranker                                      # TEI /rerank via LiteLLM's Hugging Face rerank provider
     litellm_params:
@@ -38,8 +44,17 @@ model_list:
 
 litellm_settings:
   drop_params: true             # silently drop OpenAI parameters a backend doesn't support, instead of erroring
-  num_retries: 1                # one retry on transient errors (fallbacks come in Step 10)
   request_timeout: 600
+  num_retries: 1                # retry the same model once on a transient error
+  allowed_fails: 3              # after 3 failures in a minute…
+  cooldown_time: 30             # …skip that backend for 30 seconds
+  fallbacks:                    # chat models back each other up
+    - qwen-fast: [qwen-quality]     # fast is down → slower but correct answers
+    - qwen-quality: [qwen-fast]     # quality is down → faster, possibly weaker answers
+  # NO fallback for embedder: another embedder = another vector space (Step 8 contract)
+  # NO fallback for reranker: the app skips reranking instead (graceful degradation)
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
+  store_model_in_db: false      # models are defined ONLY in this git-reviewed file, never in the UI
+  # DATABASE_URL and LITELLM_SALT_KEY come from the environment (secret files, Step 10 wrapper)

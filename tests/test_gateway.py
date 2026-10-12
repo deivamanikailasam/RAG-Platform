@@ -85,11 +85,10 @@ def test_config_holds_no_secrets() -> None:
     assert config["general_settings"]["master_key"] == "os.environ/LITELLM_MASTER_KEY"
     for deployment in config["model_list"]:
         assert deployment["litellm_params"]["api_key"] in {"not-used", "os.environ/TEI_API_KEY"}
-    assert config["litellm_settings"] == {
-        "drop_params": True,
-        "num_retries": 1,
-        "request_timeout": 600,
-    }
+    settings = config["litellm_settings"]
+    assert settings["drop_params"] is True
+    assert settings["num_retries"] == 1
+    assert settings["request_timeout"] == 600
 
 
 # --- Compose service ------------------------------------------------------------------------
