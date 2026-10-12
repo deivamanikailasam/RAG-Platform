@@ -13,6 +13,10 @@ rand() { openssl rand -base64 48 | tr -d '/+=\n' | cut -c1-32; }   # 32 random l
 cat > "$out" <<EOF
 # --- Data stores (Steps 11-15) ---
 POSTGRES_PASSWORD=$(rand)
+# --- rag-db roles (Step 11): letters/digits only, safe inside a database URL ---
+RAG_DB_MIGRATOR_PASSWORD=$(rand)
+RAG_DB_APP_PASSWORD=$(rand)
+RAG_DB_READONLY_PASSWORD=$(rand)
 MINIO_ROOT_USER=rag-admin
 MINIO_ROOT_PASSWORD=$(rand)
 REDIS_PASSWORD=$(rand)

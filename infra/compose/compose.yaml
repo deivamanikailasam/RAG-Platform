@@ -57,8 +57,51 @@ services:
       resources:
         limits: { memory: 2g, cpus: "2" }
 
+  rag-db:                                                     # the platform's document + vector store (Step 11)
+    image: pgvector/pgvector:0.8.7-pg17@sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d   # Postgres 17 + pgvector 0.8.7, pinned by digest
+    environment:
+      POSTGRES_DB: rag
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/rag_db_superuser_password
+    secrets: [rag_db_superuser_password, rag_db_migrator_password, rag_db_app_password, rag_db_readonly_password]
+    volumes:
+      - rag-db-data:/var/lib/postgresql/data
+      - ../config/rag-db/init:/docker-entrypoint-initdb.d:ro  # one-time bootstrap: roles, extensions, schema
+    command:
+      - postgres
+      - -c
+      - shared_buffers=1GB                      # Postgres's own cache (~25% of the container's memory)
+      - -c
+      - effective_cache_size=3GB                # hint: total memory available for caching
+      - -c
+      - maintenance_work_mem=1GB                # HNSW builds are much faster when the graph fits here
+      - -c
+      - work_mem=32MB                           # per sort/hash operation
+      - -c
+      - max_connections=100
+      - -c
+      - shared_preload_libraries=pg_stat_statements   # per-query statistics for Step 20
+      - -c
+      - log_min_duration_statement=500          # log any query slower than 500 ms
+      - -c
+      - password_encryption=scram-sha-256
+    shm_size: 1g                                # parallel index builds need shared memory (Docker's default is 64 MB)
+    ports:
+      - "127.0.0.1:5432:5432"                   # localhost only: for migrations and admin tools on your Mac
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d rag"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits: { memory: 4g, cpus: "4" }
+
 volumes:
   litellm-db-data:                                            # keys, teams, budgets and spend logs live here
+  rag-db-data:                                                # documents, chunks and vectors (Step 11)
 
 secrets:
   litellm_master_key:
@@ -69,3 +112,11 @@ secrets:
     environment: LITELLM_SALT_KEY               # encrypts credentials LiteLLM stores in its DB: NEVER change it
   litellm_db_password:
     environment: LITELLM_DB_PASSWORD
+  rag_db_superuser_password:
+    environment: POSTGRES_PASSWORD              # the rag-db superuser (admin only, via docker compose exec)
+  rag_db_migrator_password:
+    environment: RAG_DB_MIGRATOR_PASSWORD       # rag_migrator: schema changes through dbmate
+  rag_db_app_password:
+    environment: RAG_DB_APP_PASSWORD            # rag_app: services read/write rows
+  rag_db_readonly_password:
+    environment: RAG_DB_READONLY_PASSWORD       # rag_readonly: evaluation and analytics
