@@ -126,16 +126,16 @@ def test_gateway_is_hardened() -> None:
 def test_keys_come_from_secret_files_not_the_environment() -> None:
     service = _litellm()
     assert "environment" not in service  # would show the keys in `docker inspect`
-    assert service["secrets"] == ["litellm_master_key", "tei_api_key"]
+    # Step 10 adds the salt key and the database password to the Step 9 pair.
+    assert service["secrets"][:2] == ["litellm_master_key", "tei_api_key"]
     assert service["entrypoint"] == ["/bin/sh", "-c"]
     (command,) = service["command"]
     assert 'export LITELLM_MASTER_KEY="$$(cat /run/secrets/litellm_master_key)"' in command
-    assert 'TEI_API_KEY="$$(cat /run/secrets/tei_api_key)" &&' in command
+    assert 'TEI_API_KEY="$$(cat /run/secrets/tei_api_key)"' in command
     assert "exec litellm --config /app/config.yaml --host 0.0.0.0 --port 4000" in command
-    assert _load(COMPOSE)["secrets"] == {
-        "litellm_master_key": {"environment": "LITELLM_MASTER_KEY"},
-        "tei_api_key": {"environment": "TEI_API_KEY"},
-    }
+    secrets = _load(COMPOSE)["secrets"]
+    assert secrets["litellm_master_key"] == {"environment": "LITELLM_MASTER_KEY"}
+    assert secrets["tei_api_key"] == {"environment": "TEI_API_KEY"}
 
 
 # --- smoke test against a fake gateway --------------------------------------------------------

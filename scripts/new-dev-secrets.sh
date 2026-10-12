@@ -20,6 +20,9 @@ REDIS_PASSWORD=$(rand)
 KEYCLOAK_ADMIN_PASSWORD=$(rand)
 # --- Gateway (Step 9): LiteLLM master keys must start with sk- ---
 LITELLM_MASTER_KEY=sk-$(rand)
+# --- Gateway database and salt key (Step 10). The salt key encrypts what LiteLLM stores: NEVER rotate it casually ---
+LITELLM_DB_PASSWORD=$(rand)
+LITELLM_SALT_KEY=$(openssl rand -hex 32)
 # --- Embedding and reranker servers (Step 8): TEI API key ---
 TEI_API_KEY=$(openssl rand -hex 24)
 # --- Observability (Steps 20, 22) ---
