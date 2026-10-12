@@ -126,6 +126,8 @@ def test_keycloak_settings_fix_the_issuer_and_expose_health_and_metrics_internal
         "KC_CACHE": "local",
         "KC_LOG_CONSOLE_OUTPUT": "json",
         "KC_BOOTSTRAP_ADMIN_USERNAME": "temp-admin",
+        "KC_TRACING_ENABLED": "true",  # Step 19: sign-ins and token requests as spans
+        "KC_TRACING_ENDPOINT": "http://otel-collector:4317",
     }
 
 

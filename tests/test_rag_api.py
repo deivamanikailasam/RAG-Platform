@@ -167,6 +167,7 @@ def test_container_is_locked_down_and_localhost_only() -> None:
         "rag-db": "service_healthy",
         "litellm": "service_healthy",
         "opa": "service_started",  # Step 18: the static OPA image has no healthcheck
+        "otel-collector": "service_started",  # Step 19: the Collector image has no shell either
     }
 
 

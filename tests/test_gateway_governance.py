@@ -71,7 +71,7 @@ def test_gateway_database_is_private_pinned_and_hardened() -> None:
 def test_gateway_gets_database_url_and_salt_key_from_secret_files() -> None:
     compose = _load(COMPOSE)
     litellm = compose["services"]["litellm"]
-    assert "environment" not in litellm
+    assert not any(k.startswith(("DATABASE", "LITELLM")) for k in litellm.get("environment", {}))
     assert litellm["secrets"] == [
         "litellm_master_key",
         "tei_api_key",

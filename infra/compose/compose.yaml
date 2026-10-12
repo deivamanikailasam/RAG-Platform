@@ -43,6 +43,10 @@ services:
       valkey:     { condition: service_healthy }             # …and the response cache (Step 15)
     volumes:
       - ../config/litellm/config.yaml:/app/config.yaml:ro     # config is read-only inside the container
+    environment:                                              # LiteLLM's OpenTelemetry callback (Step 19)
+      OTEL_EXPORTER: otlp_http
+      OTEL_ENDPOINT: http://otel-collector:4318
+      OTEL_SERVICE_NAME: litellm
     ports:
       - "127.0.0.1:4000:4000"                                 # localhost only (Step 3 rule)
     extra_hosts:
@@ -290,6 +294,8 @@ services:
       KC_METRICS_ENABLED: "true"                      # /metrics on port 9000, for Prometheus (Step 20)
       KC_CACHE: local                                 # single node; clustering comes with Kubernetes
       KC_LOG_CONSOLE_OUTPUT: json                     # structured logs, for Loki (Step 21)
+      KC_TRACING_ENABLED: "true"                      # sign-ins and token requests as spans (Step 19)
+      KC_TRACING_ENDPOINT: http://otel-collector:4317
       KC_BOOTSTRAP_ADMIN_USERNAME: temp-admin         # used only on the very first start
     secrets: [keycloak_admin_password, keycloak_db_password, keycloak_ingestion_secret,
               keycloak_provisioner_secret]
@@ -326,6 +332,9 @@ services:
       - --watch                               # dev: reload when you save a policy file
       - --log-format=json
       - --set=decision_logs.console=true      # every decision to stdout, as JSON
+      - --set=distributed_tracing.type=grpc   # Step 19: a span per decision, joined to the caller's trace
+      - --set=distributed_tracing.address=otel-collector:4317
+      - --set=distributed_tracing.service_name=opa
     environment:
       OPA_API_TOKEN: ${OPA_API_TOKEN}         # read by system.authz via opa.runtime()
     volumes:
@@ -343,6 +352,26 @@ services:
       resources:
         limits: { memory: 256m, cpus: "0.5" }
 
+  otel-collector:                                             # one pipe for traces, metrics and logs (Step 19)
+    image: otel/opentelemetry-collector-contrib:0.162.0@sha256:39923a8e431bd1f57be82411999d389fcfe40857492e4365456d97a4c1f74be6   # pin by digest (Step 9 method)
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ../config/otel-collector/config.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "127.0.0.1:4317:4317"                 # OTLP gRPC: native macOS processes and scripts can send too
+      - "127.0.0.1:4318:4318"                 # OTLP HTTP
+      - "127.0.0.1:13133:13133"               # health check
+    # No healthcheck: the image holds only the Collector (no shell). Check from the host instead:
+    # curl -s localhost:13133/ returns status JSON. Senders never fail when the Collector is down;
+    # their exporters drop data and retry.
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 512m, cpus: "1" }   # memory_limiter works as a percentage of this
+
   rag-api:                                                    # the platform's first service: verifies every Keycloak token (Step 17)
     build:
       context: ../..                                          # repository root
@@ -354,6 +383,11 @@ services:
       RAG_API_GATEWAY_URL: http://litellm:4000/v1
       RAG_API_DB_HOST: rag-db
       RAG_API_OPA_URL: http://opa:8181                        # the policy decision point (Step 18)
+      OTEL_SERVICE_NAME: rag-api                              # telemetry (Step 19): standard OTEL_* variables only
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_RESOURCE_ATTRIBUTES: service.version=0.1.0
+      OTEL_TRACES_SAMPLER: parentbased_traceidratio
+      OTEL_TRACES_SAMPLER_ARG: "1.0"                          # keep every trace in dev; lower in production
     secrets:
       - rag_api_gateway_key                                   # -> /run/secrets/rag_api_gateway_key
       - rag_api_db_password                                   # -> /run/secrets/rag_api_db_password
@@ -373,6 +407,7 @@ services:
       rag-db:   { condition: service_healthy }
       litellm:  { condition: service_healthy }
       opa:      { condition: service_started }        # Step 18: no healthcheck in the static image
+      otel-collector: { condition: service_started }  # Step 19: no shell, so no healthcheck
     restart: unless-stopped
     deploy:
       resources:

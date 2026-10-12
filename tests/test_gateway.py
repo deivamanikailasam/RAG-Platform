@@ -124,7 +124,13 @@ def test_gateway_is_hardened() -> None:
 
 def test_keys_come_from_secret_files_not_the_environment() -> None:
     service = _litellm()
-    assert "environment" not in service  # would show the keys in `docker inspect`
+    # Keys would show in `docker inspect`. Since Step 19 the only variables are the non-secret
+    # OpenTelemetry settings.
+    assert set(service.get("environment", {})) <= {
+        "OTEL_EXPORTER",
+        "OTEL_ENDPOINT",
+        "OTEL_SERVICE_NAME",
+    }
     # Step 10 adds the salt key and the database password to the Step 9 pair.
     assert service["secrets"][:2] == ["litellm_master_key", "tei_api_key"]
     assert service["entrypoint"] == ["/bin/sh", "-c"]
