@@ -6,6 +6,8 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Term | Meaning | Step |
 |---|---|---:|
 | 0.0.0.0 / * | "Every interface": a port bound here is reachable by anyone who can reach your machine on the network. | 3 |
+| Acknowledgement (XACK) | A worker's "done" signal for a stream message. Until it arrives, the message stays pending for that worker. | 15 |
+| ACL (access control list, Valkey) | Per-user rules for which keys (`~pattern`), pub/sub channels (`&pattern`) and commands (`+@category`, `-@category`) a user may use; `user default off` disables anonymous access. | 15 |
 | Active parameters | In a Mixture of Experts model, the parameters actually used for each token (about 3B in Qwen3.6-35B-A3B, the "A3B"); they set the speed. | 7 |
 | ADR (Architecture Decision Record) | A short Markdown file recording one significant decision: context, decision, alternatives and consequences. | 4 |
 | age | A small, modern encryption tool with short keys (`age1…`); makes the key pair SOPS uses. A simpler, safer replacement for GPG. | 6 |
@@ -16,6 +18,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | ANN (approximate nearest neighbour) | Finding nearly the closest vectors very fast, instead of exactly the closest by checking every one. | 11 |
 | arm64 / aarch64 vs amd64 / x86_64 | Processor families; Apple Silicon is arm64, amd64-only images need slower emulation. | 3 |
 | Asymmetric retrieval | Embedding questions and documents differently (queries get a task instruction, documents don't), because a short question and a long passage are different kinds of text. | 8 |
+| At-least-once delivery | Every job is delivered at least once, but may be delivered twice after a crash (the worker finished but died before acknowledging). | 15 |
 | Auto-fix | A check that changes files to fix the problem itself; you review the change and `git add` it again. | 5 |
 | B-tree | The default Postgres index, for exact values and ranges (an ID, a date); like a sorted phone book. | 11 |
 | Batch | Several texts sent together and embedded in one GPU pass; much faster per text than one at a time. | 8 |
@@ -29,16 +32,21 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Brewfile | A plain text file listing Homebrew formulas and casks; `brew bundle` installs everything in it. | 1 |
 | Bucket / key / object (S3) | A top-level container in object storage / the object's name, which can look like a path but is just a string (`raw/remote.pdf`) / the bytes plus metadata. | 14 |
 | Budget / budget period | The maximum spend (here in shadow dollars) a key or team may reach before requests are refused, and how often it resets (e.g. `30d`). | 10 |
+| Cache hit / miss | Hit: the answer was already stored and comes back in milliseconds. Miss: it had to be computed (the LLM ran) and is then stored. | 15 |
+| Cache key | The value a cache looks answers up by. It must include everything that changes the answer (prompt with retrieved context, model, parameters, user's permission scope, tenant), or answers leak between users. | 15 |
+| Cache poisoning | A wrong, stale or someone-else's answer stored in a cache and then served to other requests, e.g. because the cache key left out the permission scope. | 15 |
 | Cask | A Homebrew package that is a normal Mac app with a window. | 1 |
 | Chat template | The model-specific recipe that turns a list of messages into the exact text format the model was trained on. | 7 |
 | Ciphertext | The scrambled, encrypted version of a value; unreadable without the right key. | 6 |
 | CLI | Command-line interface: a program you control by typing commands. | 1 |
 | CODEOWNERS | A GitHub file naming who must review changes to which folders. | 4 |
 | Collection (Qdrant) | Qdrant's equivalent of a table: a set of points sharing vector settings. | 12 |
+| Command category (Valkey) | A named group of commands used in ACLs, e.g. `@dangerous` (FLUSHALL, KEYS, CONFIG, DEBUG…) or `@admin`; `+@all -@dangerous` means everything except those. | 15 |
 | Command Line Tools | Apple's free kit of basic developer programs: compiler, `make`, `git`, system headers. | 1 |
 | Commit | A save point in git history, with a message explaining what changed and why. | 4 |
 | Compiler | A program that turns human-written source code into a program the computer can run. | 1 |
 | Compose project | The group of containers, networks and volumes one Compose file starts, sharing a name (`name: rag-platform`) that prefixes every container (`rag-platform-litellm-1`). | 9 |
+| Consumer group | A set of workers sharing one stream; each message goes to exactly one worker in the group, and the group remembers what was delivered and acknowledged. | 15 |
 | Container | A running copy of an image: a self-contained "apartment" with a program and everything it needs. | 3 |
 | Container runtime | The software that downloads images and runs containers (OrbStack, Docker Desktop, Colima, Podman). | 3 |
 | Content addressing | Naming an object by a hash of its content (`sha256`), so identical files share a name and changes are detectable. | 14 |
@@ -49,6 +57,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Cosine similarity | A score for how closely two vectors point the same way: near 1 = very similar meaning, near 0 = unrelated. For unit-length vectors it equals the dot product. | 8 |
 | Cross-encoder | A model (the reranker) that reads the query and one document together and scores their relevance; precise but slow, so only used on a shortlist. | 8 |
 | Data key | The random key SOPS creates per file to lock every value; it is itself locked once per recipient. | 6 |
+| Dead-letter queue (DLQ) | Where jobs go after failing too many times (here: 3 deliveries), so they stop retrying forever and a human can inspect them. | 15 |
 | Decode | The second phase of generation: the model writes the answer one token at a time; its speed is limited by memory bandwidth. | 7 |
 | Dedicated vector database | A database built only for storing vectors and finding the nearest ones fast, with filters (Qdrant, Milvus, Weaviate), rather than a general database with a vector extension. | 12 |
 | Default privileges (ALTER DEFAULT PRIVILEGES) | A standing instruction that every table a given role creates from now on automatically gets certain grants, so new tables are never invisible to the app. | 11 |
@@ -61,6 +70,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Dimensions (of an embedding) | How many numbers an embedding vector has (Qwen3-Embedding-0.6B: up to 1,024); more can hold more nuance but costs storage and search time. | 8 |
 | direnv | A tool that loads a project's settings automatically when you enter its folder. | 1 |
 | Distance operator | pgvector's comparison symbols: `<=>` cosine distance, `<#>` negative inner product, `<->` Euclidean (L2), `<+>` L1. | 11 |
+| Distributed lock | A short-lived "I'm working on this" marker shared by all workers (`SET key token NX PX 30000`): only one holder, expires on its own, released only with the owner's token. | 15 |
 | Docker Compose | A file (`compose.yaml`) listing many containers and how they connect; `docker compose up` starts them all. | 3 |
 | Docker engine / CLI | The engine runs containers inside the VM; the `docker` command is how you talk to it. | 3 |
 | Drift | When the dependency list (`pyproject.toml`) and the lockfile (`uv.lock`) no longer match; `uv sync --locked` catches it. | 2 |
@@ -71,6 +81,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Endpoint | A specific URL path on a server, e.g. `/v1/chat/completions` or `/health`. | 7 |
 | Envelope encryption | Values are locked with a random data key, and the data key is locked separately for each recipient, so adding a person never means re-encrypting every value by hand. | 6 |
 | Environment variable | A named value handed to a program when it starts (`DB_PASSWORD=…`); fine for settings, easy to leak for secrets. | 6 |
+| Eviction / maxmemory policy | What a memory-capped store deletes when it is full. `volatile-lru` removes the least-recently-used keys that have a TTL; `allkeys-lru` may remove any key, including queued jobs. | 15 |
 | EXPLAIN | Asks Postgres how it will run a query, e.g. whether it uses an index; `EXPLAIN ANALYZE` also runs it and shows real timings. | 11 |
 | Explain API | Adding `"explain": true` to a search so OpenSearch returns the arithmetic behind each score (tf, idf, length adjustment). | 13 |
 | Extension (Postgres) | An add-on that teaches Postgres new tricks; `vector` (pgvector) adds vector types and indexes. | 11 |
@@ -93,8 +104,10 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Homebrew | The standard package manager ("app store for developer tools") on macOS. | 1 |
 | host.docker.internal | The address a container uses to reach programs running on the host Mac itself. | 3 |
 | Hybrid search | Running keyword (BM25) and vector search together and fusing their normalised scores; robust across exact-code and paraphrase questions. | 13 |
+| Idempotency | Doing a job twice has the same effect as doing it once ("upsert chunks for document X at hash Y", not "append chunks"). Required with at-least-once delivery. | 15 |
 | Image | The frozen blueprint a container is started from: a program plus all its dependencies. | 3 |
 | Image tag vs digest | A tag (`v1.104.0`) is a movable label; a digest (`@sha256:…`) is the exact, unchangeable fingerprint of one image. | 9 |
+| In-memory key-value store | A database that keeps data in RAM and retrieves it by a key (a name). Extremely fast, but limited by memory; Valkey and Redis are examples. | 15 |
 | Infrastructure as code | Defining your environment in version-controlled files instead of setting it up by hand. | 1 |
 | Internal user | A user stored inside OpenSearch's own security index (here `rag_search`, `rag_indexer`). | 13 |
 | Interpreter | The `python` program itself: the engine that reads and runs Python code, e.g. CPython 3.12. | 2 |
@@ -150,7 +163,9 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Path-style addressing | Putting the bucket name in the URL path (`http://host:8333/bucket/key`) instead of the host name; common for self-hosted S3 stores. | 14 |
 | Payload | The JSON metadata stored with a Qdrant point (tenant, access groups, title, text…). | 12 |
 | Payload index | An index on a payload field so filters on it are fast. Without one, filtering scans. | 12 |
+| Pending entry | A stream message delivered to a consumer but not yet acknowledged; if the consumer crashed, another worker can reclaim it (`XAUTOCLAIM`). | 15 |
 | PEP | Python Enhancement Proposal: an official Python standard (e.g. PEP 621 `pyproject.toml`, PEP 735 dependency groups, PEP 668 protected system Pythons). | 2 |
+| Persistence: RDB / AOF | How an in-memory store survives restarts. RDB: periodic snapshots to disk. AOF (append-only file): a log of every write, replayed at start-up; `appendfsync everysec` loses at most about 1 s. | 15 |
 | pg_dump | Postgres's logical backup tool: writes a database's structure and data to a file that `pg_restore` can load again. | 11 |
 | Plaintext | Readable, unencrypted text. | 6 |
 | Point | One item stored in Qdrant: an ID, one or more vectors, and a payload. Here, one chunk. | 12 |
@@ -218,6 +233,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | SSH key | A private key that stays on your Mac and a public `.pub` key you give GitHub, to prove it's you without a password. | 4 |
 | Staged files | The files you have `git add`-ed: exactly what the next commit will contain, and what hooks check. | 5 |
 | Stemming | Reducing words to a common root ("Fridays" → "fridai") so variations of a word match. | 13 |
+| Stream (Valkey/Redis) | An append-only log of messages, each with an increasing ID (`XADD`); with consumer groups it works as a crash-safe job queue. | 15 |
 | Streaming (SSE) | Sending an answer token by token as it is generated, over Server-Sent Events, instead of all at the end. | 9 |
 | Supersede | Replace an accepted ADR with a newer ADR that points back to it; the old one is never edited. | 4 |
 | Synonyms (search) | Rules treating different terms as equivalent ("wfh" = "work from home" = "remote work"), best applied at query time with `synonym_graph`. | 13 |
@@ -237,10 +253,12 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Truncation / max sequence length | The longest text a model reads; anything beyond is cut off, silently in TEI by default (`--auto-truncate`). | 8 |
 | Trunk-based development | `main` (the trunk) is always working; every change goes through a short-lived branch and a PR. | 4 |
 | TTFT (time to first token) | How long you wait before the first word appears; mostly set by prefill and prompt length. | 7 |
+| TTL (time to live) | An expiry time on a key; it disappears automatically afterwards. Every cache entry gets one. | 15 |
 | Type checker | A tool (e.g. `mypy`) that reads type hints and checks they are used consistently, catching wrong-kind-of-value bugs before running. | 5 |
 | Type hint | A label saying what kind of value a variable or function expects or returns, e.g. `def chunk(text: str) -> list[str]`. | 5 |
 | Unified memory | Apple Silicon memory shared by the CPU and GPU; every GB given to the container VM is a GB the models lose. | 3 |
 | uv | Astral's all-in-one Python tool: interpreters, virtual environments, locking and tool installs. | 2 |
+| Valkey | The open-source (BSD), Redis-compatible in-memory store maintained under the Linux Foundation, forked from Redis in 2024 after Redis's licence change. | 15 |
 | Versioning / version ID | Keeping every overwrite of an object as a separate version, each with its own ID, so nothing is silently lost. | 14 |
 | Virtual environment | A private folder of packages (`.venv`) for one project, tied to one interpreter. | 2 |
 | Virtual key | A per-app or per-person key issued by the gateway, with its own budget, limits and allowed models; needs a database (Step 10). | 9 |
