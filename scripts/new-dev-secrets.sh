@@ -43,6 +43,8 @@ KEYCLOAK_ADMIN_PASSWORD=$(rand)
 KEYCLOAK_DB_PASSWORD=$(rand)
 KEYCLOAK_PROVISIONER_SECRET=$(rand)
 KEYCLOAK_INGESTION_SECRET=$(rand)
+# --- Policy engine (Step 18): the token rag-api presents to OPA; OPA's system.authz checks it ---
+OPA_API_TOKEN=$(openssl rand -base64 48 | tr -d '/+=\n' | cut -c1-40)
 # --- Gateway (Step 9): LiteLLM master keys must start with sk- ---
 LITELLM_MASTER_KEY=sk-$(rand)
 # --- Gateway database and salt key (Step 10). The salt key encrypts what LiteLLM stores: NEVER rotate it casually ---

@@ -140,7 +140,12 @@ def test_issuer_is_the_public_name_and_jwks_the_internal_address() -> None:
 
 
 def test_secrets_arrive_as_files_from_the_step_10_and_11_values() -> None:
-    assert _service()["secrets"] == ["rag_api_gateway_key", "rag_api_db_password"]
+    # + the OPA token since Step 18 (checked in tests/test_policy_engine.py)
+    assert _service()["secrets"] == [
+        "rag_api_gateway_key",
+        "rag_api_db_password",
+        "rag_api_opa_token",
+    ]
     secrets = yaml.safe_load(COMPOSE.read_text())["secrets"]
     assert secrets["rag_api_gateway_key"] == {"environment": "RAG_API_GATEWAY_KEY"}
     assert secrets["rag_api_db_password"] == {"environment": "RAG_DB_APP_PASSWORD"}
@@ -161,6 +166,7 @@ def test_container_is_locked_down_and_localhost_only() -> None:
         "keycloak": "service_healthy",
         "rag-db": "service_healthy",
         "litellm": "service_healthy",
+        "opa": "service_started",  # Step 18: the static OPA image has no healthcheck
     }
 
 

@@ -312,6 +312,37 @@ services:
       resources:
         limits: { memory: 1536m, cpus: "2" }
 
+  opa:                                                        # policy decision point: rag-api asks, OPA decides (Step 18)
+    image: openpolicyagent/opa:1.21.1-static@sha256:4675ab04ad1627f74741d2d9c5142698c79e18b7b09f192587d31d6dba20838e   # pin by digest (Step 9 method)
+    command:
+      - run
+      - --server
+      - --addr=0.0.0.0:8181
+      - --authentication=token                # read "Authorization: Bearer ..." as the caller's identity
+      - --authorization=basic                 # ...and let system.authz decide what that identity may do
+      - --bundle
+      - /policies
+      - --ignore=*_test.rego                  # tests stay out of the running server
+      - --watch                               # dev: reload when you save a policy file
+      - --log-format=json
+      - --set=decision_logs.console=true      # every decision to stdout, as JSON
+    environment:
+      OPA_API_TOKEN: ${OPA_API_TOKEN}         # read by system.authz via opa.runtime()
+    volumes:
+      - ../../policies:/policies:ro           # policies come from Git, read-only
+    ports:
+      - "127.0.0.1:8181:8181"
+    # No healthcheck: the -static image holds only the opa binary (no shell, no curl). rag-api
+    # protects itself instead (503 when OPA doesn't answer); Prometheus watches /health from Step 20.
+    user: "65532:65532"                       # OPA warns when run as root; it doesn't need it
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 256m, cpus: "0.5" }
+
   rag-api:                                                    # the platform's first service: verifies every Keycloak token (Step 17)
     build:
       context: ../..                                          # repository root
@@ -322,9 +353,11 @@ services:
       RAG_API_OIDC_JWKS_URL: http://keycloak:8080/realms/rag/protocol/openid-connect/certs
       RAG_API_GATEWAY_URL: http://litellm:4000/v1
       RAG_API_DB_HOST: rag-db
+      RAG_API_OPA_URL: http://opa:8181                        # the policy decision point (Step 18)
     secrets:
       - rag_api_gateway_key                                   # -> /run/secrets/rag_api_gateway_key
       - rag_api_db_password                                   # -> /run/secrets/rag_api_db_password
+      - rag_api_opa_token                                     # -> /run/secrets/rag_api_opa_token (Step 18)
     ports:
       - "127.0.0.1:8000:8000"
     # The guide sets read_only: true here. Compose refuses it together with secrets that come from
@@ -339,6 +372,7 @@ services:
       keycloak: { condition: service_healthy }
       rag-db:   { condition: service_healthy }
       litellm:  { condition: service_healthy }
+      opa:      { condition: service_started }        # Step 18: no healthcheck in the static image
     restart: unless-stopped
     deploy:
       resources:
@@ -407,3 +441,5 @@ secrets:
     environment: RAG_API_GATEWAY_KEY            # rag-api (Step 17): the Step 10 virtual key "rag-api-dev"
   rag_api_db_password:
     environment: RAG_DB_APP_PASSWORD            # rag-api (Step 17): the Step 11 rag_app role
+  rag_api_opa_token:
+    environment: OPA_API_TOKEN                  # rag-api (Step 18): asks OPA for decisions; OPA reads the same value
