@@ -21,5 +21,6 @@
 | [0017](0017-validate-jwts-locally-in-every-service.md) | Validate JWTs locally in every service | Accepted |
 | [0018](0018-use-opa-as-the-policy-decision-point.md) | Use OPA as the policy decision point | Accepted |
 | [0019](0019-use-opentelemetry-and-a-central-collector.md) | Use OpenTelemetry and a central Collector | Accepted |
+| [0020](0020-use-prometheus-alertmanager-and-grafana.md) | Use Prometheus, Alertmanager and Grafana with SLO-based alerting | Accepted |
 
 New ADR: `just adr "Short title"`, then fill it in and add a row here.
