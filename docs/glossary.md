@@ -24,17 +24,21 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Allow-list | The only models a key may use; a request for anything else is refused (401/403). | 10 |
 | Analytics | Anonymous usage statistics a tool sends back to its makers. | 1 |
 | Analyzer | The recipe a search engine uses to turn text into searchable terms: a tokenizer plus token filters (lowercase, synonyms, stemming). | 13 |
+| Anchoring (audit log) | Copying the newest hash of a chain (and the events) somewhere the database's administrators can't change, such as an object-locked bucket, so a later rewrite of the chain becomes visible. | 23 |
 | ANN (approximate nearest neighbour) | Finding nearly the closest vectors very fast, instead of exactly the closest by checking every one. | 11 |
+| Append-only | Rows may be added, never changed or removed; enforced here by a trigger that refuses `UPDATE`, `DELETE` and `TRUNCATE`, even for the table's owner. | 23 |
 | arm64 / aarch64 vs amd64 / x86_64 | Processor families; Apple Silicon is arm64, amd64-only images need slower emulation. | 3 |
 | Asymmetric retrieval | Embedding questions and documents differently (queries get a task instruction, documents don't), because a short question and a long passage are different kinds of text. | 8 |
 | At-least-once delivery | Every job is delivered at least once, but may be delivered twice after a crash (the worker finished but died before acknowledging). | 15 |
 | Attributes (span) | Key–value facts recorded on a span, e.g. `rag.candidates = 5`; facts about the request, never its content. | 19 |
 | Audience (`aud`) | The claim saying who a token is meant for (here `rag-api`). An API must reject tokens meant for someone else. | 16 |
+| Audit log | A permanent, minimal record of security-relevant actions (who, what, when, result), kept for years and protected from tampering. Not for debugging. | 23 |
 | Authentication vs authorisation | Who are you? (sign-in) versus what may you do? (permissions). Keycloak does the first and carries the facts (groups, roles) for the second. | 16 |
 | Authorisation policy | The written rules that say who may do which action and see which things; here `policies/rag/authz/authz.rego` plus its `data.json`. | 18 |
 | Authorization code + PKCE | The sign-in flow for web apps: the browser gets a one-time code and swaps it for tokens, proving with a random "code verifier" (PKCE) that it is the same app that started the sign-in. | 16 |
 | Authorization header | The HTTP request header that carries credentials; for APIs it is `Authorization: Bearer <access token>`. | 17 |
 | Auto-fix | A check that changes files to fix the problem itself; you review the change and `git add` it again. | 5 |
+| Break-glass | Emergency super-powers (here the database superuser), used rarely, deliberately and visibly. | 23 |
 | B-tree | The default Postgres index, for exact values and ranges (an ID, a date); like a sorted phone book. | 11 |
 | Batch | Several texts sent together and embedded in one GPU pass; much faster per text than one at a time. | 8 |
 | Bearer token | A token that works for whoever holds ("bears") it, sent as `Authorization: Bearer <token>`. Guard it like a password and never log it. | 17 |
@@ -88,6 +92,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Cosine similarity | A score for how closely two vectors point the same way: near 1 = very similar meaning, near 0 = unrelated. For unit-length vectors it equals the dot product. | 8 |
 | Counter (metric) | A number that only goes up, such as requests served; dashboards turn it into a rate. | 19 |
 | Cross-encoder | A model (the reranker) that reads the query and one document together and scores their relevance; precise but slow, so only used on a shortlist. | 8 |
+| Crypto-shredding | Making data unreadable by destroying a key or a lookup instead of deleting it; reconciles "never delete" with the right to erasure (e.g. deleting the Keycloak account behind an audit `sub`). | 23 |
 | Dashboards as code | Generating dashboard definitions (Grafana JSON) from reviewed code in Git (`scripts/build_dashboards.py`) instead of clicking in the UI, with a check that fails when the committed JSON is out of date. | 20 |
 | Data filtering / partial evaluation (OPA) | OPA evaluating a policy with some facts still unknown and turning the rest into a filter, even a SQL `WHERE` clause, that a database can apply. | 18 |
 | Data key | The random key SOPS creates per file to lock every value; it is itself locked once per recipient. | 6 |
@@ -141,6 +146,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Gateway (AI / LLM gateway) | A server in front of all model servers: every request passes through it for authentication, allow-listing, routing, limits and logging. | 9 |
 | GenAI semantic conventions | The emerging standard `gen_ai.*` attribute names for model calls (operation, model, token usage), so LLM tools and vendor dashboards understand each other. | 19 |
 | Generation (LLM observability) | An observation for one LLM call: prompt, completion, model, tokens and cost (recorded from Step 33). | 22 |
+| Genesis (hash chain) | The starting point of a hash chain: here 32 zero bytes, used as the "previous hash" of row 1. | 23 |
 | GIN index | A Postgres "inverted" index for values with many parts: arrays, JSON and words. | 11 |
 | Git hook | A script git runs automatically at a set moment: before a commit, after the message is written, before a push. | 5 |
 | .gitattributes | Rules for how git treats file types (line endings, binary files, generated files). | 4 |
@@ -151,6 +157,8 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Grouping (alerts) | Alertmanager combining related alerts (same `alertname` and `service` here) into one notification instead of one per time series. | 20 |
 | halfvec | A pgvector type that stores each number in 2 bytes instead of 4: half the storage, negligible quality loss for embeddings. | 11 |
 | Hash | A short fingerprint calculated from a file's contents; change one byte and it changes completely. | 2 |
+| Hash chain | Records linked by including each previous record's hash in the next one's hash, so editing any record breaks every later link. | 23 |
+| Head (hash chain) | The newest hash of a chain; it summarises the entire chain up to that point. | 23 |
 | Headless initialisation | Creating an application's organisation, project, API keys and first admin from configuration at first start, with no clicking (Langfuse's `LANGFUSE_INIT_*` variables). | 22 |
 | Healthcheck | A command Compose runs inside a container every few seconds to ask "are you working?"; failures mark it unhealthy. | 9 |
 | Histogram (metric) | A metric that records a distribution of values (e.g. latencies), from which p50/p95/p99 are computed. | 19 |
@@ -207,6 +215,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Loki | Grafana's log store: indexes only a few labels per stream and keeps the text in compressed chunks that are scanned at query time, so it is cheap to run. | 21 |
 | macOS Keychain | The Mac's built-in encrypted password store, unlocked by your login; home for personal tokens. | 6 |
 | maintenance_work_mem | Postgres memory for maintenance work such as building indexes; HNSW builds are much faster when the graph fits in it. | 11 |
+| Manifest (audit archive) | A small file describing one archived batch of audit events: first and last row, head hash, previous head and the segment's checksum. | 23 |
 | Mapping | An OpenSearch index's schema: each field's type (`text`, `keyword`, `knn_vector` …) and analyzer. | 13 |
 | Masking hook | A function in our own process that rewrites every value (tokens, keys, emails → `****`) before it is sent to Langfuse. | 22 |
 | Master key | The gateway's root credential (`LITELLM_MASTER_KEY`); it can do everything, so it is for admins only. | 9 |
@@ -215,6 +224,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | MDM | Mobile Device Management: how company IT installs and controls software on employees' Macs (e.g. Jamf, Kandji). | 1 |
 | Meaning space | The many-dimensional map an embedding model places texts on, where similar meanings sit close together. | 8 |
 | Memory bandwidth | How fast data moves between memory and the GPU; each decoded token reads the model's weights, so it is the speed limit for tokens per second. | 7 |
+| Merkle tree | A tree of hashes in which each parent hashes its children; allows small proofs that an entry is included in a large log. | 23 |
 | Metric | A number measured over time (requests per second, latency, errors); answers "is something wrong?". | 19 |
 | MFA / TOTP | Multi-factor authentication: a second proof besides the password. TOTP is the six-digit, time-based code from an authenticator app. | 16 |
 | Migration | A versioned, reviewable script that changes the database structure, applied in order and recorded in the database. | 11 |
@@ -281,6 +291,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Protocol mapper | A Keycloak rule that puts an extra fact into tokens, such as the `groups` claim or an extra audience. | 16 |
 | Provider prefix | The part of a LiteLLM `model` before the first `/` (e.g. `openai/`): which API protocol to speak to the backend. | 9 |
 | Provisioning (Grafana) | Grafana reading its data sources and dashboards from files at start-up, so they are code in Git rather than settings clicked into its database. | 20 |
+| Pseudonymous id | A stable identifier (like a token's `sub`) that points to a person without naming them; the name is looked up elsewhere, under its own access rules. | 23 |
 | Pull request (PR) | A request to review a branch and merge it into `main`. | 4 |
 | Pull vs push (metrics) | Prometheus either fetches (scrapes) `/metrics` from a target (pull), or receives metrics sent to it, here over OTLP from the Collector (push). | 20 |
 | Push / pull | Send your commits to the remote / fetch other people's commits from it. | 4 |
@@ -317,6 +328,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Retry | Trying the same model again after a temporary error, before any fallback. | 10 |
 | Reverse proxy | A server that sits in front of other servers, receives every request, applies rules and forwards it. | 9 |
 | Revocation | Making an old secret stop working, e.g. deleting an API token. | 6 |
+| RFC 3161 timestamp | A signed statement from a timestamping authority that some hash existed at a given time. | 23 |
 | Role / privilege (database) | A database identity / what it's allowed to do (connect, read, write, create tables). | 11 |
 | Role mapping | The link in OpenSearch's security plugin that gives a user (or backend role) the permissions of a role. | 13 |
 | Rotation | Replacing a secret with a new value on a schedule, or immediately after a suspected leak. | 6 |
@@ -334,16 +346,19 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Scrape | Prometheus fetching a target's `/metrics` page on a schedule (every 15 s here), optionally with a bearer token read from a secret file. | 20 |
 | Search engine | A system built to find documents by their words (and now vectors) fast, with relevance ranking; e.g. OpenSearch, Elasticsearch. | 13 |
 | Search pipeline | Processing steps OpenSearch applies around a search, e.g. normalising and combining scores for hybrid search (`rag-hybrid`). | 13 |
+| Search-path hijacking | Tricking a privileged database function into calling an attacker's look-alike object; prevented by fixing the function's `search_path` (with `pg_temp` last). | 23 |
 | Secret | Any value that grants access: a password, API key, token, private key or encryption key. | 6 |
 | Secret file / /run/secrets | A secret delivered to a container as a small in-memory file, the standard Docker and Kubernetes pattern. | 6 |
 | Secret scanner | A check (e.g. gitleaks, detect-private-key) that looks for keys, tokens and passwords before they are committed. | 5 |
 | SecretStr | A pydantic type that prints as `**********`; the real value needs a deliberate `.get_secret_value()`. | 6 |
+| `SECURITY DEFINER` | A Postgres function that runs with the rights of its owner, not its caller; lets rag-api append audit events without any rights on the table. | 23 |
 | Security plugin | OpenSearch's built-in TLS, users, roles and permissions; never disable it. | 13 |
 | Semantic conventions | Agreed attribute names (`http.request.method`, `gen_ai.request.model`) so every tool understands the data. | 19 |
 | Semantic Versioning | MAJOR.MINOR.PATCH version numbers: breaking change → major, `feat` → minor, `fix` → patch. | 4 |
 | Service account | A non-human identity tied to a confidential client, used with client credentials (e.g. `service-account-ingestion-worker`). | 16 |
 | Service graph | Who-calls-whom metrics (`traces_service_graph_request_total{client, server}`) that Tempo computes from client/server spans; Grafana draws them as boxes and arrows. | 21 |
 | Session / user / tags | Ways to group LLM traces: a conversation, a (pseudonymous) person, free-form labels. | 22 |
+| SHA-256 | A hash function producing a 32-byte fingerprint: the same input always gives the same output, one changed bit changes it completely, and it can't be reversed or collided in practice. | 23 |
 | Shadow price | An internal, notional price for something with no bill (your own GPU time), so usage can be compared and budgeted; here $2/hour ÷ tokens per second. | 10 |
 | Shard / replica | The pieces an index is split into / copies of them for safety; one node uses 1 shard and 0 replicas. | 13 |
 | shared_buffers | Postgres's own memory cache for table and index pages, typically about 25% of the memory it may use. | 11 |
@@ -376,6 +391,8 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Structured metadata (Loki) | Extra per-line key/value facts (such as OTLP attributes) that Loki stores and can search without turning them into labels, so they don't create new streams. | 21 |
 | Supersede | Replace an accepted ADR with a newer ADR that points back to it; the old one is never edited. | 4 |
 | Synonyms (search) | Rules treating different terms as equivalent ("wfh" = "work from home" = "remote work"), best applied at query time with `synonym_graph`. | 13 |
+| Table lock | A lock on a whole table; `LOCK TABLE … IN EXCLUSIVE MODE` lets only one writer append at a time (so the chain can't fork) while readers carry on. | 23 |
+| Tamper-evident vs tamper-proof | Evident: changes can't be hidden. Proof: changes are impossible. Nothing digital is tamper-proof against its own administrators; evident is the honest goal. | 23 |
 | Team (LiteLLM) | A group of virtual keys sharing a budget and a model list, e.g. a department or product. | 10 |
 | TEI (Text Embeddings Inference) | Hugging Face's Rust server for embedding and reranking models, with batching, API keys and metrics; runs natively with Metal on Apple Silicon. | 8 |
 | Telemetry | Usage information a program sends to its makers; switched off on purpose (Qdrant here, Homebrew analytics in Step 1). | 12 |
@@ -399,6 +416,8 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | traceparent (W3C Trace Context) | The standard HTTP header that carries the trace id and parent span id to the next service. | 19 |
 | TraceQL | Tempo's query language for finding traces by span facts, e.g. `{resource.service.name="rag-api" && duration > 2s}`. | 21 |
 | Transitive dependency | A dependency of a dependency: a package you never chose that comes along because one you chose needs it. | 2 |
+| Transparency log | A public append-only log built on a Merkle tree (Certificate Transparency, Sigstore Rekor) that lets outsiders verify entries without trusting the operator. | 23 |
+| Trigger (database) | Code the database runs automatically before or after a change; here a statement trigger that refuses any change to the audit table. | 23 |
 | Truncation / max sequence length | The longest text a model reads; anything beyond is cut off, silently in TEI by default (`--auto-truncate`). | 8 |
 | Trunk-based development | `main` (the trunk) is always working; every change goes through a short-lived branch and a PR. | 4 |
 | TTFT (time to first token) | How long you wait before the first word appears; mostly set by prefill and prompt length. | 7 |
