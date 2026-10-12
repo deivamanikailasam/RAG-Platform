@@ -138,3 +138,10 @@ search-models-down:
 health: models-health
     @curl -sf -o /dev/null http://127.0.0.1:8083/health && echo "  embedder:8083 ok" || echo "  embedder:8083 DOWN"
     @curl -sf -o /dev/null http://127.0.0.1:8084/health && echo "  reranker:8084 ok" || echo "  reranker:8084 DOWN"
+
+# Embeddings demo (instruction, Matryoshka, reranking) and benchmark; both need TEI_API_KEY
+embed-demo:
+    sops exec-env secrets/dev.enc.env "uv run scripts/embed_demo.py"
+
+bench-embed:
+    sops exec-env secrets/dev.enc.env "uv run scripts/bench_embeddings.py"
