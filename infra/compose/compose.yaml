@@ -312,6 +312,38 @@ services:
       resources:
         limits: { memory: 1536m, cpus: "2" }
 
+  rag-api:                                                    # the platform's first service: verifies every Keycloak token (Step 17)
+    build:
+      context: ../..                                          # repository root
+      dockerfile: services/rag-api/Dockerfile
+    image: rag-platform/rag-api:dev
+    environment:
+      RAG_API_OIDC_ISSUER: http://localhost:8180/realms/rag   # must match the token's "iss"
+      RAG_API_OIDC_JWKS_URL: http://keycloak:8080/realms/rag/protocol/openid-connect/certs
+      RAG_API_GATEWAY_URL: http://litellm:4000/v1
+      RAG_API_DB_HOST: rag-db
+    secrets:
+      - rag_api_gateway_key                                   # -> /run/secrets/rag_api_gateway_key
+      - rag_api_db_password                                   # -> /run/secrets/rag_api_db_password
+    ports:
+      - "127.0.0.1:8000:8000"
+    # The guide sets read_only: true here. Compose refuses it together with secrets that come from
+    # environment variables ("cannot create secret ... in read-only service: `file` is the sole
+    # supported option"), and file-sourced secrets would mean plaintext on disk. So the root
+    # filesystem stays technically writable, but the app still can't modify its own files: it runs as
+    # uid 10001 and everything under /app belongs to root (checked in tests/test_rag_api.py).
+    tmpfs: [/tmp]                                             # scratch space in RAM only
+    cap_drop: [ALL]                                           # no special Linux privileges at all
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      keycloak: { condition: service_healthy }
+      rag-db:   { condition: service_healthy }
+      litellm:  { condition: service_healthy }
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 512m, cpus: "1" }
+
 volumes:
   litellm-db-data:                                            # keys, teams, budgets and spend logs live here
   rag-db-data:                                                # documents, chunks and vectors (Step 11)
@@ -371,3 +403,7 @@ secrets:
     environment: KEYCLOAK_INGESTION_SECRET      # ingestion-worker client secret (client credentials)
   keycloak_provisioner_secret:
     environment: KEYCLOAK_PROVISIONER_SECRET    # rag-provisioner client secret: manages users only
+  rag_api_gateway_key:
+    environment: RAG_API_GATEWAY_KEY            # rag-api (Step 17): the Step 10 virtual key "rag-api-dev"
+  rag_api_db_password:
+    environment: RAG_DB_APP_PASSWORD            # rag-api (Step 17): the Step 11 rag_app role

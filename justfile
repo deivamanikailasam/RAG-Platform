@@ -244,3 +244,11 @@ kc-users:
 # Keycloak: sign in (device flow) and as a machine (client credentials), look inside the tokens, sign out
 kc-whoami:
     just with-secrets uv run --with httpx scripts/kc_whoami.py
+
+# Rebuild and restart the API after code changes (Step 17)
+api-up:
+    sops exec-env secrets/dev.enc.env 'docker compose -f infra/compose/compose.yaml up -d --build rag-api'
+
+# Call the API as a person, a machine, with no token and with a forged token
+api-demo:
+    just with-secrets uv run --with httpx scripts/api_demo.py
