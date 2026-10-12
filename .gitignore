@@ -20,6 +20,8 @@ build/
 
 # --- Data and models: far too big for git, and may be sensitive ---
 data/
+# ...but documentation ABOUT the data stores (Step 14) is not data
+!docs/data/
 models/
 *.gguf
 *.safetensors
