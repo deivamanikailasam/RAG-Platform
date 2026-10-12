@@ -80,3 +80,32 @@ r.text  # 'Instruct: …\nQuery:hybrid work'
 ```
 
 The everyday workflow is the CLI: `just prompts list | lint | new | lock | promote | render | diff`.
+
+## `rag_common.cards`: model, dataset and system cards with lineage (Step 25)
+
+Cards are short YAML files in the repository's `cards/` folder (`cards/models/`, `cards/datasets/`,
+`cards/systems/`, plus `cards/policy.yaml`) saying what each AI component is, who owns it, what it
+may and may not be used for, its limits, licence and personal data, and what it was built from.
+
+- `Catalogue.load(root, inventory=..., gateway=..., prompts=...)` validates every card against a
+  strict schema (unknown fields and the YAML `on:` trap are refused, the id must match the file name)
+  and loads the facts cards are checked against: `models.yaml`, the LiteLLM config and the prompt
+  registry. A malformed card raises `CardError`.
+- `catalogue.check(today)` applies every rule and returns `Finding`s: errors (wrong now) and
+  warnings (wrong with time, such as an overdue review).
+- `edges()`, `downstream(node)`, `upstream(node)` and `mermaid()` answer lineage questions from card
+  inputs, prompt-to-model links and gateway fallbacks.
+- `documents(catalogue)` renders the readable pages written to `docs/cards/`.
+
+```python
+from pathlib import Path
+
+from rag_common.cards import Catalogue
+
+cat = Catalogue.load(Path("cards"), inventory=Path("infra/model-serving/models.yaml"),
+                     gateway=Path("infra/config/litellm/config.yaml"), prompts=Path("prompts"))
+[n for _, n, _ in cat.downstream("model:embedder")]
+# ['dataset:company-chunks', 'prompt:query-instruction', 'system:rag-api', 'dataset:audit-log', …]
+```
+
+The everyday workflow is the CLI: `just cards lint | docs | impact | lineage`.
