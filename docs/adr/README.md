@@ -22,5 +22,6 @@
 | [0018](0018-use-opa-as-the-policy-decision-point.md) | Use OPA as the policy decision point | Accepted |
 | [0019](0019-use-opentelemetry-and-a-central-collector.md) | Use OpenTelemetry and a central Collector | Accepted |
 | [0020](0020-use-prometheus-alertmanager-and-grafana.md) | Use Prometheus, Alertmanager and Grafana with SLO-based alerting | Accepted |
+| [0021](0021-use-tempo-and-loki-for-traces-and-logs.md) | Use Tempo and Loki for traces and logs | Accepted |
 
 New ADR: `just adr "Short title"`, then fill it in and add a row here.
