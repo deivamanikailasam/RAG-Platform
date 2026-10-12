@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 import jwt
@@ -16,13 +17,24 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 
 from rag_api.audit import AuditEvent, AuditUnavailable
 from rag_api.llmtrace import LlmTracer
-from rag_api.main import app, get_audit, get_llm, get_policy, get_search, get_verifier
+from rag_api.main import (
+    app,
+    get_audit,
+    get_llm,
+    get_policy,
+    get_prompt_label,
+    get_prompts,
+    get_search,
+    get_verifier,
+)
 from rag_api.policy import Decision, DocumentRef, PolicyUnavailable, SearchFilter
 from rag_api.search import Candidate, Hit
 from rag_common.auth import OIDCSettings, Principal, TokenVerifier
+from rag_common.prompts import Registry
 from rag_common.telemetry import setup_telemetry
 
 ISSUER = "http://localhost:8180/realms/rag"
+PROMPTS = Path(__file__).resolve().parents[3] / "prompts"  # the REAL registry, as shipped (Step 24)
 
 
 class FakeIdP:
@@ -152,6 +164,10 @@ def client(
     app.dependency_overrides[get_audit] = lambda: audit
     # Langfuse is off unless a test switches it on (test_llmtrace.py)
     app.dependency_overrides[get_llm] = lambda: LlmTracer(None)
+    # The real prompt registry (Step 24): every API test also proves the shipped prompts load
+    registry = Registry.load(PROMPTS)
+    app.dependency_overrides[get_prompts] = lambda: registry
+    app.dependency_overrides[get_prompt_label] = lambda: "production"
     yield TestClient(app)
     app.dependency_overrides.clear()
 

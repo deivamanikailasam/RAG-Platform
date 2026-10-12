@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -13,7 +14,11 @@ from opentelemetry import trace
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader, NumberDataPoint
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
+from rag_common.prompts import Registry
 from rag_common.telemetry import JsonFormatter  # setup_telemetry is no longer imported here
+
+# The REAL registry, as shipped (the same path as conftest.PROMPTS)
+PROMPTS = Path(__file__).resolve().parents[3] / "prompts"
 
 if TYPE_CHECKING:  # type hints only: the objects themselves arrive as fixtures
     from conftest import FakeIdP
@@ -116,6 +121,10 @@ def test_alert_worthy_counters_start_at_zero(monkeypatch: pytest.MonkeyPatch) ->
 
     monkeypatch.setattr(main, "setup_logging", lambda: None)  # keep the test's own providers
     monkeypatch.setattr(main, "setup_telemetry", lambda _name: lambda: None)
+    # Start-up also loads the prompt registry (Step 24): use the real one, without env settings
+    registry = Registry.load(PROMPTS)
+    monkeypatch.setattr(main, "get_prompts", lambda: registry)
+    monkeypatch.setattr(main, "get_prompt_label", lambda: "production")
     with TestClient(main.app):  # entering the context runs lifespan() start-up
         pass
     data = METRICS.get_metrics_data()

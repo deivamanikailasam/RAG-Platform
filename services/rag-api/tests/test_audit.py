@@ -44,6 +44,7 @@ def test_search_records_who_got_which_documents(
         "dropped_by_policy": 1,
         "k": 3,
         "query_chars": len(QUESTION),
+        "prompts": ["query-instruction@1"],  # which prompt versions shaped it (Step 24)
     }
     assert e.trace_id is not None  # links the event to its trace in Tempo
     assert len(e.trace_id) == 32

@@ -16,6 +16,7 @@ from opentelemetry import metrics, trace
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.psycopg import PsycopgInstrumentor
+from opentelemetry.metrics import CallbackOptions, Observation
 from pydantic import BaseModel, Field
 
 from rag_api.audit import (
@@ -31,6 +32,7 @@ from rag_api.policy import Decision, OpaClient, PolicyEngine, PolicyUnavailable
 from rag_api.search import Hit, PgSearch, SearchBackend
 from rag_api.settings import Settings
 from rag_common.auth import AuthError, KeyServiceUnavailable, OIDCSettings, Principal, TokenVerifier
+from rag_common.prompts import PromptError, Registry
 from rag_common.telemetry import setup_logging, setup_telemetry
 
 log = logging.getLogger("rag_api")
@@ -64,6 +66,22 @@ AUDIT_FAILURES = meter.create_counter(
     description="Audit events that could not be stored (should be 0)",
 )
 
+REQUIRED_PROMPTS = ("query-instruction",)  # prompts this service can't run without
+
+
+def check_prompts(registry: Registry, label: str) -> None:
+    """Refuse to start if this environment's label leaves a required prompt without a version."""
+    if missing := [n for n in REQUIRED_PROMPTS if n not in registry.active(label)]:
+        raise PromptError(f"no '{label}' version of required prompt(s) {missing}")
+
+
+def prompt_info(registry: Registry, label: str) -> list[Observation]:
+    """One "info" series per active prompt: value 1, the facts in the labels (a Prometheus idiom)."""
+    return [
+        Observation(1, {"prompt": name, "version": p.version, "sha": sha[:12], "label": label})
+        for name, (p, sha) in sorted(registry.active(label).items())
+    ]
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -78,6 +96,18 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     DROPPED.add(0)
     for outcome in ("allowed", "denied"):
         AUDIT_FAILURES.add(0, {"outcome": outcome})
+    # Load and check the prompt registry now: a broken or edited prompt stops the start-up,
+    # instead of failing the first user request.
+    registry, label = get_prompts(), get_prompt_label()
+    check_prompts(registry, label)
+    log.info("prompts (%s): %s", label, {n: p.ref for n, (p, _) in registry.active(label).items()})
+
+    def observe(_: CallbackOptions) -> list[Observation]:
+        return prompt_info(registry, label)
+
+    meter.create_observable_gauge(
+        "rag.prompt.info", callbacks=[observe], description="Active prompt versions (value 1)"
+    )
     yield
     if get_audit.cache_info().currsize:
         get_audit().close()  # close the pool's connections cleanly
@@ -112,8 +142,17 @@ def get_verifier() -> TokenVerifier:
 
 
 @lru_cache
+def get_prompts() -> Registry:
+    return Registry.load(get_settings().prompts_dir)  # verifies every file against the lock
+
+
+def get_prompt_label() -> str:
+    return get_settings().prompt_label
+
+
+@lru_cache
 def get_search() -> SearchBackend:
-    return PgSearch(get_settings())
+    return PgSearch(get_settings(), get_prompts())
 
 
 @lru_cache
@@ -287,11 +326,14 @@ def search(
     policy: Annotated[PolicyEngine, Depends(get_policy)],
     llm: Annotated[LlmTracer, Depends(get_llm)],
     audit: Annotated[AuditLog, Depends(get_audit)],
+    prompts: Annotated[Registry, Depends(get_prompts)],
+    label: Annotated[str, Depends(get_prompt_label)],
 ) -> list[Hit]:
     p, f = auth.principal, auth.decision.filter
     started, outcome = time.perf_counter(), "error"
+    query_prompt, _ = prompts.get("query-instruction", label=label)
     # Langfuse trace (Step 22): same trace id as the OTel trace, content masked, kept separate.
-    with llm.search(p, req.query, req.k) as llm_trace:
+    with llm.search(p, req.query, req.k, {"query-instruction": query_prompt.ref}) as llm_trace:
         try:
             # 1. PRE-filter inside the database query, using the filter the POLICY computed (fast).
             with tracer.start_as_current_span("rag.retrieve") as span:
@@ -342,7 +384,7 @@ def search(
                 audit_event(
                     p, "search", "allowed", "documents",
                     returned_ids=[c.ref.id for c in returned], dropped_by_policy=len(dropped),
-                    k=req.k, query_chars=len(req.query),
+                    k=req.k, query_chars=len(req.query), prompts=[query_prompt.ref],
                 ),
             )  # fmt: skip
             outcome = "ok"

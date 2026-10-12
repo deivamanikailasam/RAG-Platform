@@ -23,6 +23,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 FROM python:3.12-slim-bookworm@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258
 RUN useradd --system --uid 10001 --no-create-home app
 COPY --from=build /app/.venv /app/.venv
+# The reviewed, locked registry (Step 24). Owned by root, so the app user (10001) can read but not change it.
+COPY prompts /app/prompts
 ENV PATH=/app/.venv/bin:$PATH PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 USER 10001
 EXPOSE 8000

@@ -121,3 +121,13 @@ def test_langfuse_content_never_reaches_normal_telemetry(
 def test_off_by_default(client: TestClient, idp: FakeIdP, search: FakeSearch) -> None:
     assert not build_llm_tracer(base_url=None, public_key=None, secret_key=None).enabled
     _search(client, idp, search)  # still works with Langfuse switched off
+
+
+def test_trace_records_which_prompt_versions_were_used(
+    client: TestClient, idp: FakeIdP, search: FakeSearch, langfuse_spans: InMemorySpanExporter
+) -> None:
+    """From any Langfuse trace you can tell exactly which prompt files produced it (Step 24)."""
+    _search(client, idp, search)
+    root = _attrs(langfuse_spans)["rag-search"]
+    prompts = json.loads(root["langfuse.observation.metadata.prompts"])
+    assert prompts == {"query-instruction": "query-instruction@1"}

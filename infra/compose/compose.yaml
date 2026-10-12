@@ -462,6 +462,7 @@ services:
       RAG_API_LANGFUSE_BASE_URL: http://langfuse-web:3000     # Step 22: LLM traces; leave empty to switch off
       RAG_API_LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}     # identifies the project; not secret
       RAG_API_AUDIT_DB_HOST: rag-db                           # Step 23: the audit database, as audit_writer
+      RAG_API_PROMPT_LABEL: production                        # Step 24: which prompt versions run here; a staging stack sets: staging
     secrets:
       - rag_api_gateway_key                                   # -> /run/secrets/rag_api_gateway_key
       - rag_api_db_password                                   # -> /run/secrets/rag_api_db_password

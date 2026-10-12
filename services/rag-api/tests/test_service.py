@@ -17,9 +17,19 @@ from pydantic import SecretStr
 from rag_api import search as search_module
 from rag_api.main import app, get_search, get_verifier
 from rag_api.policy import DocumentRef, OpaClient, PolicyUnavailable
-from rag_api.search import INSTRUCTION, PgSearch
+from rag_api.search import PgSearch
 from rag_api.settings import Settings
 from rag_common.auth import KeyServiceUnavailable, Principal
+from rag_common.prompts import Registry
+
+# The REAL registry, as shipped (the same path as conftest.PROMPTS)
+PROMPTS = Path(__file__).resolve().parents[3] / "prompts"
+
+# The query instruction now lives in the prompt registry (Step 24); the text must not have changed.
+INSTRUCTION = (
+    "Instruct: Given an employee question, retrieve passages from company "
+    "documents that answer it\nQuery:"
+)
 
 
 class DownKeys:
@@ -123,7 +133,7 @@ def test_no_clearance_returns_nothing_without_any_call(
         raise AssertionError("no database call expected")
 
     monkeypatch.setattr("rag_api.search.psycopg.connect", boom)
-    backend = PgSearch(_settings(tmp_path))
+    backend = PgSearch(_settings(tmp_path), Registry.load(PROMPTS))
     # The policy found no clearance at all (e.g. a service account without groups).
     no_clearance = backend.search(
         "anything", groups=frozenset({"all-staff"}), classifications=frozenset(), k=5, user="sub-1"
@@ -163,7 +173,7 @@ def test_search_tags_the_gateway_call_with_the_user_and_applies_the_policy_filte
 
     monkeypatch.setattr("rag_api.search.psycopg.connect", fake_connect)
     monkeypatch.setattr(search_module, "register_vector", lambda conn: None)
-    backend = PgSearch(_settings(tmp_path))
+    backend = PgSearch(_settings(tmp_path), Registry.load(PROMPTS))
     monkeypatch.setattr(backend, "_gw", SimpleNamespace(embeddings=FakeEmbeddings()))
 
     found = backend.search(

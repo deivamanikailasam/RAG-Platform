@@ -5,6 +5,7 @@
 !uv.lock
 !libs/
 !services/
+!prompts/
 **/.venv
 **/__pycache__
 **/*.py[cod]

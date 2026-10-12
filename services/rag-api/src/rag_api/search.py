@@ -14,11 +14,8 @@ from pydantic import BaseModel
 
 from rag_api.policy import DocumentRef
 from rag_api.settings import Settings
+from rag_common.prompts import Registry
 
-INSTRUCTION = (
-    "Instruct: Given an employee question, retrieve passages from company "
-    "documents that answer it\nQuery:"
-)
 # The filter VALUES come from the policy (OPA); this query only applies them.
 SQL = """
 SELECT d.id, d.title, d.classification, d.acl_groups,
@@ -63,7 +60,9 @@ class SearchBackend(Protocol):
 
 
 class PgSearch:
-    def __init__(self, s: Settings) -> None:
+    def __init__(self, s: Settings, prompts: Registry) -> None:
+        # The query instruction is a registered prompt (Step 24), part of the embedding contract.
+        self._prompts, self._label = prompts, s.prompt_label
         self._gw = OpenAI(base_url=s.gateway_url, api_key=s.gateway_key.get_secret_value())
         self._dsn = (
             f"host={s.db_host} dbname=rag user=rag_app password={s.db_password.get_secret_value()}"
@@ -88,9 +87,10 @@ class PgSearch:
             kind=trace.SpanKind.CLIENT,
             attributes={"gen_ai.operation.name": "embeddings", "gen_ai.request.model": "embedder"},
         ) as span:
-            emb = self._gw.embeddings.create(
-                model="embedder", input=[INSTRUCTION + query], user=user
-            )
+            text = self._prompts.render(
+                "query-instruction", {"query": query}, label=self._label
+            ).text
+            emb = self._gw.embeddings.create(model="embedder", input=[text or ""], user=user)
             span.set_attribute("gen_ai.usage.input_tokens", emb.usage.prompt_tokens)
         with psycopg.connect(self._dsn) as conn:
             register_vector(conn)

@@ -1,6 +1,8 @@
 """Configuration: plain values from RAG_API_* environment variables, secrets from files in
 /run/secrets."""
 
+from pathlib import Path
+
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -21,6 +23,9 @@ class Settings(BaseSettings):
     audit_db_host: str = "rag-db"
     audit_db_port: int = 5432
     audit_db_password: SecretStr  # file /run/secrets/rag_api_audit_db_password
+    # Prompt registry (Step 24): the folder baked into the image, and which label this environment runs
+    prompts_dir: Path = Path("/app/prompts")
+    prompt_label: str = "production"  # staging environments set "staging"
     opa_url: str = "http://opa:8181"  # the policy decision point (Step 18)
     opa_token: SecretStr  # file /run/secrets/rag_api_opa_token
     # Langfuse (Step 22). Leave langfuse_base_url empty to switch LLM tracing off.

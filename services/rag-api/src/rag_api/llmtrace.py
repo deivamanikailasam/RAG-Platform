@@ -12,7 +12,7 @@ The Langfuse trace reuses the request's OpenTelemetry trace id, so Tempo and Lan
 from __future__ import annotations
 
 import re
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from typing import Any
 
@@ -90,7 +90,9 @@ class LlmTracer:
         return self._client is not None
 
     @contextmanager
-    def search(self, p: Principal, question: str, k: int) -> Iterator[SearchTrace]:
+    def search(
+        self, p: Principal, question: str, k: int, prompts: Mapping[str, str] | None = None
+    ) -> Iterator[SearchTrace]:
         if self._client is None:
             yield SearchTrace(None)
             return
@@ -103,6 +105,8 @@ class LlmTracer:
             as_type="chain",
             trace_context=trace_context,
             input={"question": question if self._capture_question else "[not captured]", "k": k},
+            # which registered prompt versions shaped this request (Step 24), e.g. rag-answer@2
+            metadata={"prompts": dict(prompts or {})},
         ) as root:
             # user id = the stable pseudonymous "sub", never a name or email
             with propagate_attributes(user_id=p.subject, tags=["rag-api", "search"]):
