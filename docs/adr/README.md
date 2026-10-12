@@ -27,5 +27,6 @@
 | [0023](0023-use-a-hash-chained-audit-log-anchored-in-write-once-storage.md) | Use a hash-chained audit log anchored in write-once storage | Accepted |
 | [0024](0024-manage-prompts-as-versioned-files-in-a-registry.md) | Manage prompts as versioned files in a registry | Accepted |
 | [0025](0025-document-models-datasets-and-systems-as-checked-cards-with-lineage.md) | Document models, datasets and systems as checked cards with lineage | Accepted |
+| [0026](0026-evaluate-retrieval-and-prompts-offline-with-versioned-datasets-and-gates.md) | Evaluate retrieval and prompts offline with versioned datasets and gates | Accepted |
 
 New ADR: `just adr "Short title"`, then fill it in and add a row here.
