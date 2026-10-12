@@ -112,6 +112,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Docker Compose | A file (`compose.yaml`) listing many containers and how they connect; `docker compose up` starts them all. | 3 |
 | Docker engine / CLI | The engine runs containers inside the VM; the `docker` command is how you talk to it. | 3 |
 | Drift | When the dependency list (`pyproject.toml`) and the lockfile (`uv.lock`) no longer match; `uv sync --locked` catches it. | 2 |
+| Dual logging | Docker keeping a local copy of a container's recent output even when a remote logging driver (like `fluentd`) ships it elsewhere, so `docker compose logs` keeps working. | 21 |
 | EditorConfig | A small `.editorconfig` file telling every editor the same formatting basics (indentation, line endings). | 4 |
 | Embedding / vector | A fixed-length list of numbers representing a text's meaning: a point in meaning space. | 8 |
 | Embedding contract | Everything that defines how vectors were made (model + revision, dimensions, query instruction, normalisation, pooling, chunk limit); change any part and the index must be rebuilt. | 8 |
@@ -121,6 +122,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Environment variable | A named value handed to a program when it starts (`DB_PASSWORD=…`); fine for settings, easy to leak for secrets. | 6 |
 | Error budget | The amount of failure an SLO allows: with 99% of searches succeeding over 28 days, 1% may fail. Budget left: ship features; budget burning: prioritise reliability. | 20 |
 | Eviction / maxmemory policy | What a memory-capped store deletes when it is full. `volatile-lru` removes the least-recently-used keys that have a TTL; `allkeys-lru` may remove any key, including queued jobs. | 15 |
+| Exemplar | A sample trace id attached to one metric data point, so a dot on a graph links straight to a real request's trace. | 21 |
 | EXPLAIN | Asks Postgres how it will run a query, e.g. whether it uses an index; `EXPLAIN ANALYZE` also runs it and shows real timings. | 11 |
 | Explain API | Adding `"explain": true` to a search so OpenSearch returns the arithmetic behind each score (tf, idf, length adjustment). | 13 |
 | Exporter (Prometheus) | A small adapter that reads a system's own statistics and serves them as `/metrics` for Prometheus, e.g. `postgres_exporter` for rag-db, logged in as the read-only `rag_metrics` role. | 20 |
@@ -185,14 +187,19 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Least privilege | Giving each identity only the access it needs and nothing more. | 10 |
 | Legal hold | An indefinite object lock with no date, applied during investigations, until someone explicitly removes it. | 14 |
 | Lifecycle rule | An automatic action on objects by age, e.g. "delete temp files after 1 day" or "expire old versions after 90 days". | 14 |
+| Line filter (LogQL) | A LogQL step that keeps only lines containing (`|=`), not containing (`!=`) or matching (`|~`) some text, e.g. `|= "4bf92f35…"` to find one request's lines. | 21 |
 | Lineage | The recorded chain from an output (an answer) back to its inputs (chunks → document → exact file version). | 14 |
 | Linter / static analysis | A tool (e.g. `ruff check`) that reads code without running it and flags likely bugs and risky patterns, each as a coded rule like `B006`. | 5 |
 | Liveness / readiness | Two health questions: "is the process alive?" (restart it if not) and "can it serve traffic yet?". | 9 |
 | localhost / 127.0.0.1 | "This machine only": a port bound here is reachable only from your own Mac. | 3 |
 | Lockfile | A file recording the exact version and hash of every package in the full dependency tree (`uv.lock`). | 2 |
+| Log aggregation | Collecting every container's log lines into one central, searchable store with retention (Loki here) instead of reading files on each machine. | 21 |
 | Log rotation | Keeping only the newest few log files of a limited size and deleting the oldest (here 3 × 10 MB). | 3 |
+| Logging driver (Docker) | Where the Docker engine sends a container's stdout/stderr: `json-file` (default, local disk) or a network destination such as `fluentd`, which the Collector's `fluent_forward` receiver understands. | 21 |
 | Login events (Keycloak) | Keycloak's record of sign-ins and failures (`LOGIN`, `LOGIN_ERROR`, …) with time, IP address and client; kept 30 days here. | 16 |
+| LogQL | Loki's query language: pick streams by label (`{service_name="rag-api"}`), then filter lines (`|= "text"`) and parse them (`| json`). | 21 |
 | Log–trace correlation | Putting the trace and span id in every log line, so you can jump from a trace to the exact log lines of that request and back. | 19 |
+| Loki | Grafana's log store: indexes only a few labels per stream and keeps the text in compressed chunks that are scanned at query time, so it is cheap to run. | 21 |
 | macOS Keychain | The Mac's built-in encrypted password store, unlocked by your login; home for personal tokens. | 6 |
 | maintenance_work_mem | Postgres memory for maintenance work such as building indexes; HNSW builds are much faster when the graph fits in it. | 11 |
 | Mapping | An OpenSearch index's schema: each field's type (`text`, `keyword`, `knn_vector` …) and analyzer. | 13 |
@@ -234,6 +241,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Package manager | A program that installs, updates and removes other software and tracks what's installed. | 1 |
 | PAP (Policy Administration Point) | Where the rules are written and changed; here Git and pull requests on `policies/`. | 18 |
 | Parent / child span | Spans nest: a request's server span is the parent of the steps inside it, which can have children of their own; this nesting draws the waterfall. | 19 |
+| Parser (LogQL) | A LogQL step such as `| json` or `| logfmt` that turns each line's text into fields you can filter on, e.g. `| json | level="ERROR"`. | 21 |
 | Password grant (ROPC) | The "resource owner password credentials" grant, where an app collects your password and swaps it for tokens. Modern OAuth guidance says never: the app sees the password and MFA can't work. | 16 |
 | PATH | The ordered list of folders your shell searches when you type a command. First match wins. | 1 |
 | Path-style addressing | Putting the bucket name in the URL path (`http://host:8333/bucket/key`) instead of the host name; common for self-hosted S3 stores. | 14 |
@@ -289,11 +297,13 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Rego | OPA's policy language: you write rules that become true or produce values, and OPA evaluates them against `input` and `data`. | 18 |
 | Relational database / table / row / column | Data stored in tables; each row is a record (one chunk), each column a field (its text, its vector). | 11 |
 | Remote / origin | A copy of the repository on a server (GitHub); `origin` is its default nickname. | 4 |
+| Remote write | The Prometheus protocol for pushing samples into a Prometheus server (enabled with `--web.enable-remote-write-receiver`); Tempo uses it to deliver span metrics and the service graph. | 21 |
 | Repository | The project's filing cabinet: all files plus their full history of changes (git). | 4 |
 | Required action | Something a user must do at their next sign-in: change a temporary password, set up MFA (`CONFIGURE_TOTP`), verify an email. | 16 |
 | Rescoring | After a fast search on compressed vectors, re-ranking the top candidates using the original vectors to recover accuracy. | 12 |
 | Resource (OpenTelemetry) | Facts about the process sending telemetry (`service.name`, version, environment), attached to every span and metric. | 19 |
 | Restart policy | The rule Docker uses to restart a container that stops or crashes (`restart: unless-stopped`). | 9 |
+| Retention | How long a store keeps data before deleting it: 7 days for traces (Tempo `block_retention`) and logs (Loki `retention_period` plus `compactor.retention_enabled`). | 21 |
 | Retrieve-then-rerank | The two-stage search pattern: a fast embedder finds ~50 candidates, then a slow, precise reranker picks the best few for the LLM. | 8 |
 | Retry | Trying the same model again after a temporary error, before any fallback. | 10 |
 | Reverse proxy | A server that sits in front of other servers, receives every request, applies rules and forwards it. | 9 |
@@ -322,6 +332,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Semantic conventions | Agreed attribute names (`http.request.method`, `gen_ai.request.model`) so every tool understands the data. | 19 |
 | Semantic Versioning | MAJOR.MINOR.PATCH version numbers: breaking change → major, `feat` → minor, `fix` → patch. | 4 |
 | Service account | A non-human identity tied to a confidential client, used with client credentials (e.g. `service-account-ingestion-worker`). | 16 |
+| Service graph | Who-calls-whom metrics (`traces_service_graph_request_total{client, server}`) that Tempo computes from client/server spans; Grafana draws them as boxes and arrows. | 21 |
 | Shadow price | An internal, notional price for something with no bill (your own GPU time), so usage can be compared and budgeted; here $2/hour ÷ tokens per second. | 10 |
 | Shard / replica | The pieces an index is split into / copies of them for safety; one node uses 1 shard and 0 replicas. | 13 |
 | shared_buffers | Postgres's own memory cache for table and index pages, typically about 25% of the memory it may use. | 11 |
@@ -336,6 +347,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | SOPS | "Secrets OPerationS": encrypts the values in YAML, JSON or `.env` files while leaving the names readable. | 6 |
 | Source of truth | The one authoritative store that decides what exists and who may see it; every other copy is derived from it. | 12 |
 | Span | One timed step in a request: name, start, duration, status and attributes. | 19 |
+| Span metrics | Request rate, errors and duration per service and span name (`traces_spanmetrics_*`), computed from traces by Tempo's metrics generator. | 21 |
 | Sparse vector | A vector that's mostly zeros, stored as (position, value) pairs; used for keyword-like retrieval (SPLADE, BM25-style). | 12 |
 | Speculative decoding | A small draft model guesses a few tokens ahead and the big model checks them in one pass, speeding up decoding (`--draft-model`). | 7 |
 | Squash merge | Merging a PR so all its small commits become one clean commit on `main`. | 4 |
@@ -345,9 +357,11 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | SSO session | Your sign-in at Keycloak itself. While it lasts (30 idle minutes, 10 hours at most here), other apps sign you in without asking again. | 16 |
 | Staged files | The files you have `git add`-ed: exactly what the next commit will contain, and what hooks check. | 5 |
 | Stemming | Reducing words to a common root ("Fridays" → "fridai") so variations of a word match. | 13 |
+| Stream (Loki) | All log lines that share exactly the same set of labels; each unique label combination is a separate stream, so labels must have few values. | 21 |
 | Stream (Valkey/Redis) | An append-only log of messages, each with an increasing ID (`XADD`); with consumer groups it works as a crash-safe job queue. | 15 |
 | Streaming (SSE) | Sending an answer token by token as it is generated, over Server-Sent Events, instead of all at the end. | 9 |
 | Structured logging | Writing logs as JSON objects instead of free text, so they can be filtered and joined by field. | 19 |
+| Structured metadata (Loki) | Extra per-line key/value facts (such as OTLP attributes) that Loki stores and can search without turning them into labels, so they don't create new streams. | 21 |
 | Supersede | Replace an accepted ADR with a newer ADR that points back to it; the old one is never edited. | 4 |
 | Synonyms (search) | Rules treating different terms as equivalent ("wfh" = "work from home" = "remote work"), best applied at query time with `synonym_graph`. | 13 |
 | Team (LiteLLM) | A group of virtual keys sharing a budget and a model list, e.g. a department or product. | 10 |
@@ -355,6 +369,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Telemetry | Usage information a program sends to its makers; switched off on purpose (Qdrant here, Homebrew analytics in Step 1). | 12 |
 | Telemetry (observability) | The data a system reports about itself (traces, metrics, logs) for its own operators; not to be confused with usage data sent to a vendor. | 19 |
 | Term frequency (tf) | How often a query word appears in a document; more helps in BM25, with diminishing returns. | 13 |
+| Tempo | Grafana's trace store: keeps every span cheaply in blocks, finds traces by id or TraceQL, and can generate metrics from them. | 21 |
 | text vs keyword field | `text` is analysed for full-text search; `keyword` is stored exactly, for filters and IDs. | 13 |
 | Thinking mode | Qwen models' optional hidden reasoning before the answer; better on hard questions, slower and more tokens (`enable_thinking`). | 7 |
 | Throughput | How much work a server finishes per second, e.g. chunks embedded per second. | 8 |
@@ -368,7 +383,9 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Tokenizer (search) | The analyzer step that splits text into words (tokens); not the same as an LLM's tokenizer. | 13 |
 | Tokens per second (tok/s) | How fast an answer streams once it starts; mostly set by memory bandwidth. | 7 |
 | Trace | All the spans of one request, across all services, sharing one trace id. | 19 |
+| Trace backend | A store that keeps traces and finds them by id or by query (Tempo here; Jaeger is another). | 21 |
 | traceparent (W3C Trace Context) | The standard HTTP header that carries the trace id and parent span id to the next service. | 19 |
+| TraceQL | Tempo's query language for finding traces by span facts, e.g. `{resource.service.name="rag-api" && duration > 2s}`. | 21 |
 | Transitive dependency | A dependency of a dependency: a package you never chose that comes along because one you chose needs it. | 2 |
 | Truncation / max sequence length | The longest text a model reads; anything beyond is cut off, silently in TEI by default (`--auto-truncate`). | 8 |
 | Trunk-based development | `main` (the trunk) is always working; every change goes through a short-lived branch and a PR. | 4 |
