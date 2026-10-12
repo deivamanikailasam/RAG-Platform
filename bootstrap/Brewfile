@@ -7,3 +7,6 @@ brew "just"                 # task runner: one-word commands like `just up`, `ju
 brew "direnv"               # loads per-project environment variables when you cd in
 brew "wget"                 # downloading models and datasets
 brew "tree"                 # inspect folder structures
+
+# ---- Python toolchain (Step 2) ----
+brew "uv"                   # Python versions, venvs, dependency locking, tool installs; replaces pip/pyenv/pipx/pip-tools

@@ -1,0 +1,16 @@
+# Reference copy of ~/.config/uv/uv.toml: global uv settings (Step 2).
+# Copy to ~/.config/uv/uv.toml during workstation setup:
+#   mkdir -p ~/.config/uv && cp bootstrap/home/.config/uv/uv.toml ~/.config/uv/uv.toml
+
+# Use only uv-managed interpreters: never Apple's /usr/bin/python3 or Homebrew's.
+python-preference = "only-managed"
+
+# Don't download interpreters silently; installing one is a deliberate act (`uv python install`).
+python-downloads = "manual"
+
+# ---- Company setting (not needed now) ----
+# Companies usually don't let machines download straight from public PyPI; they use an internal
+# mirror (a scanned, approved copy). Uncomment and point at your mirror to use it.
+# [[index]]
+# url = "https://artifactory.example.com/api/pypi/pypi-remote/simple"
+# default = true

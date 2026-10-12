@@ -13,3 +13,4 @@ Phases: **A** Workstation · **B** Model serving · **C** Data stores · **D** I
 | Step | Title | Phase | Write-up |
 |---:|---|---|---|
 | 1 | Homebrew and the Brewfile | A · Workstation | [step-01-homebrew-brewfile.md](step-01-homebrew-brewfile.md) |
+| 2 | Python toolchain with uv | A · Workstation | [step-02-python-uv.md](step-02-python-uv.md) |
