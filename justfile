@@ -313,3 +313,13 @@ audit-test:
     trap 'docker stop audit-test-pg >/dev/null' EXIT
     until docker exec audit-test-pg pg_isready -h 127.0.0.1 -U postgres -q; do sleep 1; done
     AUDIT_TEST_ADMIN_DSN=postgres://postgres@127.0.0.1:55432/postgres uv run pytest
+
+audit_reader_dsn := "postgres://audit_reader:$AUDIT_DB_READER_PASSWORD@127.0.0.1:5432/audit"
+
+# Copy new audit events + head hash to the write-once bucket. Hourly.
+audit-anchor:
+    sops exec-env secrets/dev.enc.env 'AUDIT_DB_DSN="{{audit_reader_dsn}}" uv run python scripts/audit_chain.py anchor'
+
+# Check database chain, archive, and that they agree. Daily, and on request. Exit 1 = problems.
+audit-verify:
+    sops exec-env secrets/dev.enc.env 'AUDIT_DB_DSN="{{audit_reader_dsn}}" uv run python scripts/audit_chain.py verify'

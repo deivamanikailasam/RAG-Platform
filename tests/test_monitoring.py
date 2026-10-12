@@ -148,7 +148,7 @@ def test_every_alert_has_a_severity_a_summary_and_an_existing_runbook() -> None:
     assert set(alerts) == {
         "RagSearchErrorBudgetFastBurn", "RagSearchErrorBudgetSlowBurn", "RagSearchSlow",
         "RagPolicyQueryMismatch", "KeycloakLoginFailuresHigh", "TargetDown",
-        "OtelCollectorLosingData",
+        "OtelCollectorLosingData", "RagAuditWriteFailing",  # Step 23
     }  # fmt: skip
     for name, rule in alerts.items():
         assert rule["labels"]["severity"] in {"critical", "warning"}, name
@@ -158,7 +158,12 @@ def test_every_alert_has_a_severity_a_summary_and_an_existing_runbook() -> None:
         assert name in runbook.read_text(), f"{name}: runbook doesn't mention the alert"
     # pages are reserved for user harm and security-control misfires
     critical = {n for n, r in alerts.items() if r["labels"]["severity"] == "critical"}
-    assert critical == {"RagSearchErrorBudgetFastBurn", "RagPolicyQueryMismatch"}
+    # Step 23: a failing audit write means searches are being refused right now
+    assert critical == {
+        "RagSearchErrorBudgetFastBurn",
+        "RagPolicyQueryMismatch",
+        "RagAuditWriteFailing",
+    }
 
 
 def test_collector_counters_are_named_explicitly_without_total() -> None:
@@ -168,15 +173,15 @@ def test_collector_counters_are_named_explicitly_without_total() -> None:
     assert expr.count("or vector(0)") == 6
 
 
-def test_unit_tests_cover_every_rule_file_with_seven_cases() -> None:
+def test_unit_tests_cover_every_rule_file_with_eight_cases() -> None:
     tests = _yaml(PROM / "tests" / "rules_test.yml")
     files = {(PROM / "tests" / f).resolve() for f in tests["rule_files"]}
     assert files == {p.resolve() for p in RULES.glob("*.yml")}
-    assert len(tests["tests"]) == 7
+    assert len(tests["tests"]) == 8  # Step 23 adds RagAuditWriteFailing
     tested = {c["alertname"] for t in tests["tests"] for c in t["alert_rule_test"]}
     assert tested >= {
         "RagSearchErrorBudgetFastBurn", "RagSearchErrorBudgetSlowBurn", "RagSearchSlow",
-        "RagPolicyQueryMismatch", "TargetDown", "OtelCollectorLosingData",
+        "RagPolicyQueryMismatch", "TargetDown", "OtelCollectorLosingData", "RagAuditWriteFailing",
     }  # fmt: skip
 
 

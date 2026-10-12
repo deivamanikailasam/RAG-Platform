@@ -105,3 +105,21 @@ tests:
             exp_annotations:
               summary: "The OpenTelemetry Collector is dropping or failing to send telemetry"
               runbook: docs/runbooks/otel-collector-losing-data.md
+
+  # 8. The audit database is unreachable for a few minutes -> page (searches are being refused).
+  - interval: 1m
+    input_series:
+      - series: 'rag_audit_write_failures_total{outcome="allowed"}'
+        values: "0 0 0 4 9 9 9 9 9 9 9 9 9 9"
+      - series: 'rag_audit_write_failures_total{outcome="denied"}'
+        values: "0x13"
+    alert_rule_test:
+      - { eval_time: 2m, alertname: RagAuditWriteFailing, exp_alerts: [] }
+      - eval_time: 5m
+        alertname: RagAuditWriteFailing
+        exp_alerts:
+          - exp_labels: { severity: critical, service: rag-api }
+            exp_annotations:
+              summary: "Audit events cannot be stored: rag-api is refusing requests until they can"
+              runbook: docs/runbooks/audit-log.md
+      - { eval_time: 13m, alertname: RagAuditWriteFailing, exp_alerts: [] }

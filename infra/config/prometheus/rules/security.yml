@@ -16,3 +16,11 @@ groups:
         annotations:
           summary: "{{ $value | humanize }} failed sign-ins in realm {{ $labels.realm }} in 10 min"
           runbook: docs/runbooks/keycloak-login-failures.md
+      # rag-api couldn't store audit events (Step 23). It fails closed, so searches are being REFUSED
+      # with 503 right now. Fix the audit database first; the runbook says how.
+      - alert: RagAuditWriteFailing
+        expr: sum(increase(rag_audit_write_failures_total[5m])) > 0
+        labels: { severity: critical, service: rag-api }
+        annotations:
+          summary: "Audit events cannot be stored: rag-api is refusing requests until they can"
+          runbook: docs/runbooks/audit-log.md

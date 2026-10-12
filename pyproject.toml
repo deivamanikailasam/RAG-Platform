@@ -10,6 +10,7 @@ dev = [
     "boto3>=1.43.0",               # AWS SDK: type-checks and tests the s3_*.py scripts against the object store (Step 14)
     "boto3-stubs[s3]>=1.43.0",     # type hints for boto3 S3 clients, so strict mypy can check those scripts (Step 14)
     "httpx>=0.28.1",               # HTTP client: kc_*.py / api_demo.py scripts (Steps 16-17) and FastAPI's test client
+    "moto[s3]>=5.1",               # in-process S3 with object lock: tests the audit anchor/verify script (Step 23)
     "mypy>=2.4.0",
     "openai>=3.29.0",              # OpenAI SDK: type-checks and tests the gateway smoke test (Step 9)
     "opensearch-py>=3.2.0",        # OpenSearch client: type-checks and tests the os_*.py scripts (Step 13)
