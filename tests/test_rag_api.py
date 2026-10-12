@@ -136,7 +136,9 @@ def test_issuer_is_the_public_name_and_jwks_the_internal_address() -> None:
     )
     assert env["RAG_API_GATEWAY_URL"] == "http://litellm:4000/v1"
     assert env["RAG_API_DB_HOST"] == "rag-db"
-    assert not any("KEY" in k or "PASSWORD" in k for k in env)  # secrets only as files
+    # Secrets only as files. The Langfuse PUBLIC key (Step 22) only identifies the project: not secret.
+    public = {"RAG_API_LANGFUSE_PUBLIC_KEY"}
+    assert not any("KEY" in k or "PASSWORD" in k for k in set(env) - public)
 
 
 def test_secrets_arrive_as_files_from_the_step_10_and_11_values() -> None:
@@ -145,6 +147,7 @@ def test_secrets_arrive_as_files_from_the_step_10_and_11_values() -> None:
         "rag_api_gateway_key",
         "rag_api_db_password",
         "rag_api_opa_token",
+        "rag_api_langfuse_secret_key",  # Step 22: checked in tests/test_langfuse.py
     ]
     secrets = yaml.safe_load(COMPOSE.read_text())["secrets"]
     assert secrets["rag_api_gateway_key"] == {"environment": "RAG_API_GATEWAY_KEY"}

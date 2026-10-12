@@ -450,10 +450,13 @@ services:
       OTEL_RESOURCE_ATTRIBUTES: service.version=0.1.0
       OTEL_TRACES_SAMPLER: parentbased_traceidratio
       OTEL_TRACES_SAMPLER_ARG: "1.0"                          # keep every trace in dev; lower in production
+      RAG_API_LANGFUSE_BASE_URL: http://langfuse-web:3000     # Step 22: LLM traces; leave empty to switch off
+      RAG_API_LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}     # identifies the project; not secret
     secrets:
       - rag_api_gateway_key                                   # -> /run/secrets/rag_api_gateway_key
       - rag_api_db_password                                   # -> /run/secrets/rag_api_db_password
       - rag_api_opa_token                                     # -> /run/secrets/rag_api_opa_token (Step 18)
+      - rag_api_langfuse_secret_key                           # -> /run/secrets/rag_api_langfuse_secret_key (Step 22)
     ports:
       - "127.0.0.1:8000:8000"
     # The guide sets read_only: true here. Compose refuses it together with secrets that come from

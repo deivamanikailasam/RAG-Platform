@@ -19,3 +19,8 @@ class Settings(BaseSettings):
     db_password: SecretStr  # file /run/secrets/rag_api_db_password
     opa_url: str = "http://opa:8181"  # the policy decision point (Step 18)
     opa_token: SecretStr  # file /run/secrets/rag_api_opa_token
+    # Langfuse (Step 22). Leave langfuse_base_url empty to switch LLM tracing off.
+    langfuse_base_url: str | None = None  # http://langfuse-web:3000
+    langfuse_public_key: str | None = None  # pk-lf-… (identifies the project, not secret)
+    langfuse_secret_key: SecretStr | None = None  # file /run/secrets/rag_api_langfuse_secret_key
+    langfuse_capture_question: bool = True  # False: record that a question was asked, not its text

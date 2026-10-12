@@ -11,11 +11,15 @@ import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
+from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
-from rag_api.main import app, get_policy, get_search, get_verifier
+from rag_api.llmtrace import LlmTracer
+from rag_api.main import app, get_llm, get_policy, get_search, get_verifier
 from rag_api.policy import Decision, DocumentRef, PolicyUnavailable, SearchFilter
 from rag_api.search import Candidate, Hit
 from rag_common.auth import OIDCSettings, Principal, TokenVerifier
+from rag_common.telemetry import setup_telemetry
 
 ISSUER = "http://localhost:8180/realms/rag"
 
@@ -91,6 +95,14 @@ class FakePolicy:
 
 
 @pytest.fixture(scope="session")
+def otel() -> tuple[InMemorySpanExporter, InMemoryMetricReader]:
+    """The process-wide OpenTelemetry setup (it can only be installed once), kept in memory."""
+    spans, reader = InMemorySpanExporter(), InMemoryMetricReader()
+    setup_telemetry("rag-api-test", span_exporter=spans, metric_reader=reader)
+    return spans, reader
+
+
+@pytest.fixture(scope="session")
 def idp() -> FakeIdP:
     return FakeIdP()
 
@@ -112,6 +124,8 @@ def client(idp: FakeIdP, search: FakeSearch, policy: FakePolicy) -> Iterator[Tes
     app.dependency_overrides[get_verifier] = lambda: TokenVerifier(settings, idp)
     app.dependency_overrides[get_search] = lambda: search
     app.dependency_overrides[get_policy] = lambda: policy
+    # Langfuse is off unless a test switches it on (test_llmtrace.py)
+    app.dependency_overrides[get_llm] = lambda: LlmTracer(None)
     yield TestClient(app)
     app.dependency_overrides.clear()
 

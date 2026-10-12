@@ -15,6 +15,7 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi>=0.66b1",
     "opentelemetry-instrumentation-httpx>=0.66b1",
     "opentelemetry-instrumentation-psycopg>=0.66b1",
+    "langfuse>=4.17",         # LLM traces with content, masked, on its own tracer provider (Step 22)
 ]
 
 [tool.uv.sources]

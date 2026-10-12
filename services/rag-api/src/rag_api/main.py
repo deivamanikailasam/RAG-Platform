@@ -18,6 +18,7 @@ from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.psycopg import PsycopgInstrumentor
 from pydantic import BaseModel, Field
 
+from rag_api.llmtrace import LlmTracer, build_llm_tracer
 from rag_api.policy import Decision, OpaClient, PolicyEngine, PolicyUnavailable
 from rag_api.search import Hit, PgSearch, SearchBackend
 from rag_api.settings import Settings
@@ -63,6 +64,8 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         SEARCHES.add(0, {"outcome": outcome})
     DROPPED.add(0)
     yield
+    if get_llm.cache_info().currsize:  # only if it was ever created
+        get_llm().shutdown()  # flush buffered Langfuse traces
     shutdown_telemetry()  # on stop: send what's still buffered
 
 
@@ -94,6 +97,17 @@ def get_verifier() -> TokenVerifier:
 @lru_cache
 def get_search() -> SearchBackend:
     return PgSearch(get_settings())
+
+
+@lru_cache
+def get_llm() -> LlmTracer:
+    s = get_settings()
+    return build_llm_tracer(
+        base_url=s.langfuse_base_url,
+        public_key=s.langfuse_public_key,
+        secret_key=s.langfuse_secret_key.get_secret_value() if s.langfuse_secret_key else None,
+        capture_question=s.langfuse_capture_question,
+    )
 
 
 @lru_cache
@@ -212,53 +226,59 @@ def search(
     auth: Annotated[Authorized, Depends(authorize("search"))],
     backend: Annotated[SearchBackend, Depends(get_search)],
     policy: Annotated[PolicyEngine, Depends(get_policy)],
+    llm: Annotated[LlmTracer, Depends(get_llm)],
 ) -> list[Hit]:
     p, f = auth.principal, auth.decision.filter
     started, outcome = time.perf_counter(), "error"
-    try:
-        # 1. PRE-filter inside the database query, using the filter the POLICY computed (fast).
-        with tracer.start_as_current_span("rag.retrieve") as span:
-            # Facts about the request, never its content: the question itself may hold personal
-            # or confidential data, so only its length is recorded.
-            span.set_attributes(
-                {
-                    "enduser.id": p.subject,
-                    "rag.query.chars": len(req.query),
-                    "rag.k": req.k,
-                    "rag.filter.classifications": sorted(f.classifications),
-                    "rag.filter.group_count": len(f.groups),
-                }
-            )
-            candidates = backend.search(
-                req.query,
-                groups=f.groups,
-                classifications=f.classifications,
-                k=req.k,
-                user=p.subject,
-            )
-            span.set_attribute("rag.candidates", len(candidates))
-        # 2. POST-check every candidate with the policy's full rule (safe). If the two ever
-        #    disagree, the document is dropped and we log it: a bug in the query, never a leak.
-        with tracer.start_as_current_span("rag.authz.post_check") as span:
-            try:
-                allowed = policy.readable(p, [c.ref for c in candidates])
-            except PolicyUnavailable as e:
-                log.error("policy engine unavailable: %s", e)
-                raise HTTPException(
-                    status.HTTP_503_SERVICE_UNAVAILABLE, "Policy engine unavailable"
-                ) from e
-            dropped = [c.ref.id for c in candidates if c.ref.id not in allowed]
-            span.set_attributes(
-                {"rag.returned": len(candidates) - len(dropped), "rag.dropped": len(dropped)}
-            )
-        if dropped:
-            DROPPED.add(len(dropped))
-            log.error("query/policy mismatch: dropped documents %s for sub=%s", dropped, p.subject)
-        outcome = "ok"
-        return [c.hit for c in candidates if c.ref.id in allowed]
-    finally:
-        SEARCHES.add(1, {"outcome": outcome})
-        SEARCH_TIME.record(time.perf_counter() - started, {"outcome": outcome})
+    # Langfuse trace (Step 22): same trace id as the OTel trace, content masked, kept separate.
+    with llm.search(p, req.query, req.k) as llm_trace:
+        try:
+            # 1. PRE-filter inside the database query, using the filter the POLICY computed (fast).
+            with tracer.start_as_current_span("rag.retrieve") as span:
+                # Facts about the request, never its content: the question itself may hold
+                # personal or confidential data, so only its length is recorded.
+                span.set_attributes(
+                    {
+                        "enduser.id": p.subject,
+                        "rag.query.chars": len(req.query),
+                        "rag.k": req.k,
+                        "rag.filter.classifications": sorted(f.classifications),
+                        "rag.filter.group_count": len(f.groups),
+                    }
+                )
+                candidates = backend.search(
+                    req.query,
+                    groups=f.groups,
+                    classifications=f.classifications,
+                    k=req.k,
+                    user=p.subject,
+                )
+                span.set_attribute("rag.candidates", len(candidates))
+            # 2. POST-check every candidate with the policy's full rule (safe). If the two ever
+            #    disagree, the document is dropped and we log it: a bug in the query, never a leak.
+            with tracer.start_as_current_span("rag.authz.post_check") as span:
+                try:
+                    allowed = policy.readable(p, [c.ref for c in candidates])
+                except PolicyUnavailable as e:
+                    log.error("policy engine unavailable: %s", e)
+                    raise HTTPException(
+                        status.HTTP_503_SERVICE_UNAVAILABLE, "Policy engine unavailable"
+                    ) from e
+                dropped = [c.ref.id for c in candidates if c.ref.id not in allowed]
+                span.set_attributes(
+                    {"rag.returned": len(candidates) - len(dropped), "rag.dropped": len(dropped)}
+                )
+            llm_trace.retrieved(candidates, allowed)
+            if dropped:
+                DROPPED.add(len(dropped))
+                log.error(
+                    "query/policy mismatch: dropped documents %s for sub=%s", dropped, p.subject
+                )
+            outcome = "ok"
+            return [c.hit for c in candidates if c.ref.id in allowed]
+        finally:
+            SEARCHES.add(1, {"outcome": outcome})
+            SEARCH_TIME.record(time.perf_counter() - started, {"outcome": outcome})
 
 
 @app.get("/v1/admin/ping")

@@ -13,19 +13,20 @@ from opentelemetry import trace
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader, NumberDataPoint
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
-from rag_common.telemetry import JsonFormatter, setup_telemetry
+from rag_common.telemetry import JsonFormatter  # setup_telemetry is no longer imported here
 
 if TYPE_CHECKING:  # type hints only: the objects themselves arrive as fixtures
     from conftest import FakeIdP
 
 QUESTION = "What is the salary of Carol Chen?"  # the kind of text that must never reach telemetry
-SPANS = InMemorySpanExporter()
-METRICS = InMemoryMetricReader()
+SPANS: InMemorySpanExporter
+METRICS: InMemoryMetricReader
 
 
-@pytest.fixture(scope="module", autouse=True)
-def _telemetry() -> None:
-    setup_telemetry("rag-api-test", span_exporter=SPANS, metric_reader=METRICS)
+@pytest.fixture(autouse=True)
+def _exporters(otel: tuple[InMemorySpanExporter, InMemoryMetricReader]) -> None:
+    global SPANS, METRICS
+    SPANS, METRICS = otel
 
 
 @pytest.fixture
