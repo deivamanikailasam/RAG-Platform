@@ -21,3 +21,4 @@ Phases: **A** Workstation · **B** Model serving · **C** Data stores · **D** I
 | 7 | Serving both Qwen models with mlx-lm | B · Model serving | [step-07-model-serving-mlx-lm.md](step-07-model-serving-mlx-lm.md) |
 | 8 | Embedding and reranker servers | B · Model serving | [step-08-embedding-reranker-servers.md](step-08-embedding-reranker-servers.md) |
 | 9 | The LiteLLM gateway: one front door for every model | B · Model serving | [step-09-litellm-gateway.md](step-09-litellm-gateway.md) |
+| 10 | Budgets, rate limits and fallbacks | B · Model serving | [step-10-budgets-rate-limits-fallbacks.md](step-10-budgets-rate-limits-fallbacks.md) |
