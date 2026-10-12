@@ -21,3 +21,6 @@ brew "sops"                 # encrypts values inside .env / YAML / JSON files, k
 
 # ---- Embeddings & reranking (Step 8) ----
 brew "text-embeddings-inference"  # Hugging Face TEI: fast embedding/reranking server, native Metal build on Apple Silicon
+
+# ---- Database migrations (Step 11) ----
+brew "dbmate"               # simple, language-agnostic SQL migrations (up/down), single binary

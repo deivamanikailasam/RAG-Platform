@@ -10,6 +10,10 @@ rerank_model  := "BAAI/bge-reranker-v2-m3"
 # Container stack (Step 9): one Compose file for every platform service
 compose       := "docker compose -f infra/compose/compose.yaml"
 
+# The RAG database (Step 11): migrations connect as rag_migrator, never as the superuser.
+# search_path lists "public" too, because the pgvector types (halfvec, vector) live there.
+rag_db_url    := "postgres://rag_migrator:$RAG_DB_MIGRATOR_PASSWORD@127.0.0.1:5432/rag?sslmode=disable&search_path=rag,public"
+
 # List available recipes (runs when you type just "just")
 default:
     @just --list
@@ -180,3 +184,11 @@ gateway-admin *args:
 # Prove the gateway's controls work (creates and blocks throwaway keys)
 gateway-test:
     sops exec-env secrets/dev.enc.env 'uv run scripts/gateway_limits_test.py'
+
+# Database migrations:   just db-migrate new create_core_tables | up | status | rollback
+db-migrate *args="status":
+    sops exec-env secrets/dev.enc.env 'DATABASE_URL="{{rag_db_url}}" dbmate --migrations-dir infra/db/rag/migrations --no-dump-schema {{args}}'
+
+# Admin SQL shell (superuser, inside the container: no password on your Mac)
+db-psql:
+    docker compose -f infra/compose/compose.yaml exec rag-db psql -U postgres -d rag
