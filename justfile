@@ -172,3 +172,11 @@ gateway-health:
 # End-to-end smoke test through the gateway (chat, streaming, embeddings, rerank, security checks)
 gateway-smoke:
     sops exec-env secrets/dev.enc.env "uv run --with openai scripts/gateway_smoke.py"
+
+# Gateway administration (master key, decrypted in memory)
+gateway-admin *args:
+    sops exec-env secrets/dev.enc.env 'uv run scripts/gateway_admin.py {{args}}'
+
+# Prove the gateway's controls work (creates and blocks throwaway keys)
+gateway-test:
+    sops exec-env secrets/dev.enc.env 'uv run scripts/gateway_limits_test.py'
