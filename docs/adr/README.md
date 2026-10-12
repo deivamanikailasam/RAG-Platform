@@ -17,5 +17,6 @@
 | [0013](0013-use-opensearch-for-keyword-and-hybrid-search-as-a-derived-index.md) | Use OpenSearch for keyword and hybrid search as a derived index | Accepted |
 | [0014](0014-use-seaweedfs-as-the-s3-compatible-object-store-instead-of-minio.md) | Use SeaweedFS as the S3-compatible object store instead of MinIO | Accepted |
 | [0015](0015-use-valkey-for-cache-queues-and-locks.md) | Use Valkey for cache, queues and locks | Accepted |
+| [0016](0016-use-keycloak-for-identity.md) | Use Keycloak for identity | Accepted |
 
 New ADR: `just adr "Short title"`, then fill it in and add a row here.
