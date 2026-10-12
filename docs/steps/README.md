@@ -18,3 +18,4 @@ Phases: **A** Workstation · **B** Model serving · **C** Data stores · **D** I
 | 4 | Repository, git conventions and your first ADRs | A · Workstation | [step-04-repository-git-adrs.md](step-04-repository-git-adrs.md) |
 | 5 | Linting, formatting and pre-commit hooks | A · Workstation | [step-05-linting-formatting-pre-commit.md](step-05-linting-formatting-pre-commit.md) |
 | 6 | Local secrets handling | A · Workstation | [step-06-local-secrets.md](step-06-local-secrets.md) |
+| 7 | Serving both Qwen models with mlx-lm | B · Model serving | [step-07-model-serving-mlx-lm.md](step-07-model-serving-mlx-lm.md) |

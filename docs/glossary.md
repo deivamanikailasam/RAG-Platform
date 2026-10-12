@@ -6,6 +6,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Term | Meaning | Step |
 |---|---|---:|
 | 0.0.0.0 / * | "Every interface": a port bound here is reachable by anyone who can reach your machine on the network. | 3 |
+| Active parameters | In a Mixture of Experts model, the parameters actually used for each token (about 3B in Qwen3.6-35B-A3B, the "A3B"); they set the speed. | 7 |
 | ADR (Architecture Decision Record) | A short Markdown file recording one significant decision: context, decision, alternatives and consequences. | 4 |
 | age | A small, modern encryption tool with short keys (`age1…`); makes the key pair SOPS uses. A simpler, safer replacement for GPG. | 6 |
 | Analytics | Anonymous usage statistics a tool sends back to its makers. | 1 |
@@ -16,6 +17,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Branch protection / ruleset | GitHub settings that block direct pushes to `main` and require PRs, checks and signed commits. | 4 |
 | Brewfile | A plain text file listing Homebrew formulas and casks; `brew bundle` installs everything in it. | 1 |
 | Cask | A Homebrew package that is a normal Mac app with a window. | 1 |
+| Chat template | The model-specific recipe that turns a list of messages into the exact text format the model was trained on. | 7 |
 | Ciphertext | The scrambled, encrypted version of a value; unreadable without the right key. | 6 |
 | CLI | Command-line interface: a program you control by typing commands. | 1 |
 | CODEOWNERS | A GitHub file naming who must review changes to which folders. | 4 |
@@ -24,8 +26,11 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Compiler | A program that turns human-written source code into a program the computer can run. | 1 |
 | Container | A running copy of an image: a self-contained "apartment" with a program and everything it needs. | 3 |
 | Container runtime | The software that downloads images and runs containers (OrbStack, Docker Desktop, Colima, Podman). | 3 |
+| Context window | The maximum number of tokens (prompt + answer) a model can handle at once. | 7 |
 | Conventional Commits | A commit-message format `type(scope)!: description` (e.g. `feat(gateway): …`) readable by people and tools. | 4 |
+| CORS | Browser rules for which websites may call a server from inside a web page; too open (`*`) and any site you visit could call your local model. | 7 |
 | Data key | The random key SOPS creates per file to lock every value; it is itself locked once per recipient. | 6 |
+| Decode | The second phase of generation: the model writes the answer one token at a time; its speed is limited by memory bandwidth. | 7 |
 | Dependency | A package your project needs in order to work. | 2 |
 | Dependency group | A named set of extra dependencies in `pyproject.toml` (PEP 735), e.g. `dev` for test tools not needed in production. | 2 |
 | Dev dependency | A package needed only while developing (e.g. pytest), not when the app runs in production. | 2 |
@@ -35,6 +40,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Drift | When the dependency list (`pyproject.toml`) and the lockfile (`uv.lock`) no longer match; `uv sync --locked` catches it. | 2 |
 | EditorConfig | A small `.editorconfig` file telling every editor the same formatting basics (indentation, line endings). | 4 |
 | Encryption | Scrambling data so only someone with the right key can unscramble it. | 6 |
+| Endpoint | A specific URL path on a server, e.g. `/v1/chat/completions` or `/health`. | 7 |
 | Envelope encryption | Values are locked with a random data key, and the data key is locked separately for each recipient, so adding a person never means re-encrypting every value by hand. | 6 |
 | Environment variable | A named value handed to a program when it starts (`DB_PASSWORD=…`); fine for settings, easy to leak for secrets. | 6 |
 | False positive | A check flags something that is actually fine; silence it narrowly, with a comment explaining why. | 5 |
@@ -51,16 +57,23 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Interpreter | The `python` program itself: the engine that reads and runs Python code, e.g. CPython 3.12. | 2 |
 | justfile | A menu of named command shortcuts run with `just <recipe>` (e.g. `just check`), reused by CI. | 4 |
 | Key pair (public / private key) | Two matching keys: anyone can lock with the public key, only the private key unlocks. Share the public one, guard the private one. | 6 |
+| KV cache | The model's working memory of everything read so far; grows with prompt and answer length and is a big part of memory use. | 7 |
+| launchd | macOS's built-in service manager: starts programs at login and restarts them if they crash (agents live in `~/Library/LaunchAgents/`). | 7 |
 | Linter / static analysis | A tool (e.g. `ruff check`) that reads code without running it and flags likely bugs and risky patterns, each as a coded rule like `B006`. | 5 |
 | localhost / 127.0.0.1 | "This machine only": a port bound here is reachable only from your own Mac. | 3 |
 | Lockfile | A file recording the exact version and hash of every package in the full dependency tree (`uv.lock`). | 2 |
 | Log rotation | Keeping only the newest few log files of a limited size and deleting the oldest (here 3 × 10 MB). | 3 |
 | macOS Keychain | The Mac's built-in encrypted password store, unlocked by your login; home for personal tokens. | 6 |
 | MDM | Mobile Device Management: how company IT installs and controls software on employees' Macs (e.g. Jamf, Kandji). | 1 |
+| Memory bandwidth | How fast data moves between memory and the GPU; each decoded token reads the model's weights, so it is the speed limit for tokens per second. | 7 |
+| Mixture of Experts (MoE) | A model that stores many specialist sub-networks but uses only a few per token: memory like a big model, speed like a small one. | 7 |
+| Model inventory | A reviewed list of which exact models a platform serves: repo, revision, licence, port, role and who approved it (`infra/model-serving/models.yaml`). | 7 |
+| Model revision | The exact git commit (40-character SHA) of a model repository on Hugging Face; the same name isn't always the same model. | 7 |
 | Monorepo | One repository holding all services, libraries, infrastructure and docs. | 4 |
 | Named volume | Docker-managed storage inside the VM that survives container deletion; use it for database data. | 3 |
 | Network interface | A way your machine connects to networks: Wi-Fi, Ethernet, or localhost. | 3 |
 | --no-verify | A git flag that skips local hooks; the reason CI must repeat the same checks. | 5 |
+| OpenAI-compatible API | The same request and response format as OpenAI's API, so any tool that speaks "OpenAI" can call a local model. | 7 |
 | OrbStack | A lightweight macOS container runtime: Linux VM + Docker engine + Compose + single-node Kubernetes. | 3 |
 | Package manager | A program that installs, updates and removes other software and tracks what's installed. | 1 |
 | PATH | The ordered list of folders your shell searches when you type a command. First match wins. | 1 |
@@ -69,9 +82,12 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Polyrepo | One repository per service or library. | 4 |
 | Port | A numbered "door" through which a program accepts network connections, e.g. 5432 for Postgres. | 3 |
 | pre-commit (the tool) | A framework that installs and runs git hooks from one file, `.pre-commit-config.yaml`. | 5 |
+| Prefill | The first phase of generation: the model reads every prompt token in one parallel pass; limited by compute, it sets TTFT. | 7 |
+| Prompt cache | Reusing the KV cache of a prompt start sent before (e.g. the same system prompt), which makes TTFT much faster. | 7 |
 | Pull request (PR) | A request to review a branch and merge it into `main`. | 4 |
 | Push / pull | Send your commits to the remote / fetch other people's commits from it. | 4 |
 | pyproject.toml | The standard Python project file listing the dependency ranges you'll accept (PEP 621). | 2 |
+| Quantization | Storing each of a model's numbers in fewer bits (8-bit, 4-bit): smaller and faster, at the cost of a little accuracy. | 7 |
 | Recipient | Someone (or a machine) whose public key can open a SOPS file: you, CI, a teammate. | 6 |
 | Remote / origin | A copy of the repository on a server (GitHub); `origin` is its default nickname. | 4 |
 | Repository | The project's filing cabinet: all files plus their full history of changes (git). | 4 |
@@ -86,14 +102,20 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Shift left | Moving checks earlier in the process (editor, commit) where fixing problems is cheapest. | 5 |
 | Signed commit | A commit stamped with your private key so GitHub can show it as Verified (really from you). | 4 |
 | SOPS | "Secrets OPerationS": encrypts the values in YAML, JSON or `.env` files while leaving the names readable. | 6 |
+| Speculative decoding | A small draft model guesses a few tokens ahead and the big model checks them in one pass, speeding up decoding (`--draft-model`). | 7 |
 | Squash merge | Merging a PR so all its small commits become one clean commit on `main`. | 4 |
 | src layout | Putting a package's code under `src/<name>/` so tests import the installed package, not the raw folder. | 4 |
 | SSDLC | Secure Software Development Lifecycle: building security checks (static analysis, secret scanning) into every change. | 5 |
 | SSH key | A private key that stays on your Mac and a public `.pub` key you give GitHub, to prove it's you without a password. | 4 |
 | Staged files | The files you have `git add`-ed: exactly what the next commit will contain, and what hooks check. | 5 |
 | Supersede | Replace an accepted ADR with a newer ADR that points back to it; the old one is never edited. | 4 |
+| Thinking mode | Qwen models' optional hidden reasoning before the answer; better on hard questions, slower and more tokens (`enable_thinking`). | 7 |
+| Token | The unit a model reads and writes: roughly ¾ of an English word. | 7 |
+| Tokenizer | The model's dictionary for converting text to tokens and back. | 7 |
+| Tokens per second (tok/s) | How fast an answer streams once it starts; mostly set by memory bandwidth. | 7 |
 | Transitive dependency | A dependency of a dependency: a package you never chose that comes along because one you chose needs it. | 2 |
 | Trunk-based development | `main` (the trunk) is always working; every change goes through a short-lived branch and a PR. | 4 |
+| TTFT (time to first token) | How long you wait before the first word appears; mostly set by prefill and prompt length. | 7 |
 | Type checker | A tool (e.g. `mypy`) that reads type hints and checks they are used consistently, catching wrong-kind-of-value bugs before running. | 5 |
 | Type hint | A label saying what kind of value a variable or function expects or returns, e.g. `def chunk(text: str) -> list[str]`. | 5 |
 | Unified memory | Apple Silicon memory shared by the CPU and GPU; every GB given to the container VM is a GB the models lose. | 3 |
@@ -101,4 +123,5 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Virtual environment | A private folder of packages (`.venv`) for one project, tied to one interpreter. | 2 |
 | Virtual machine (VM) | A computer simulated inside your computer; on a Mac, containers run inside a small Linux VM. | 3 |
 | Wheel | A pre-built Python package, ready to install, like flat-pack furniture. | 2 |
+| Wired memory / GPU working-set limit | The share of unified memory macOS lets the GPU lock for itself (`iogpu.wired_limit_mb`); large models need it big enough. | 7 |
 | Workspace (uv) | Several Python packages in one repository sharing one `uv.lock` and one `.venv`. | 4 |
