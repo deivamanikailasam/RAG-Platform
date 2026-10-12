@@ -9,6 +9,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Active parameters | In a Mixture of Experts model, the parameters actually used for each token (about 3B in Qwen3.6-35B-A3B, the "A3B"); they set the speed. | 7 |
 | ADR (Architecture Decision Record) | A short Markdown file recording one significant decision: context, decision, alternatives and consequences. | 4 |
 | age | A small, modern encryption tool with short keys (`age1…`); makes the key pair SOPS uses. A simpler, safer replacement for GPG. | 6 |
+| Alias (Qdrant) | A stable name (`rag_chunks`) pointing at a real collection; applications use it, and it can be switched to another collection instantly and atomically. | 12 |
 | Allow-list | The only models a key may use; a request for anything else is refused (401/403). | 10 |
 | Analytics | Anonymous usage statistics a tool sends back to its makers. | 1 |
 | ANN (approximate nearest neighbour) | Finding nearly the closest vectors very fast, instead of exactly the closest by checking every one. | 11 |
@@ -20,6 +21,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Bi-encoder | A model (the embedder) that turns the query and each document into vectors separately, so document vectors can be computed once in advance and compared in milliseconds. | 8 |
 | Bind mount | A host folder shared into a container; fine for config and code, slow for databases on a Mac. | 3 |
 | Blast radius | How much damage one leaked or misbehaving credential can do; small, scoped, expiring keys keep it small. | 10 |
+| Blue/green | Building the new version beside the old one, then switching traffic all at once, with the old one kept for rollback. | 12 |
 | Branch | A separate line of work (a draft) where you change things without touching `main`. | 4 |
 | Branch protection / ruleset | GitHub settings that block direct pushes to `main` and require PRs, checks and signed commits. | 4 |
 | Brewfile | A plain text file listing Homebrew formulas and casks; `brew bundle` installs everything in it. | 1 |
@@ -29,6 +31,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Ciphertext | The scrambled, encrypted version of a value; unreadable without the right key. | 6 |
 | CLI | Command-line interface: a program you control by typing commands. | 1 |
 | CODEOWNERS | A GitHub file naming who must review changes to which folders. | 4 |
+| Collection (Qdrant) | Qdrant's equivalent of a table: a set of points sharing vector settings. | 12 |
 | Command Line Tools | Apple's free kit of basic developer programs: compiler, `make`, `git`, system headers. | 1 |
 | Commit | A save point in git history, with a message explaining what changed and why. | 4 |
 | Compiler | A program that turns human-written source code into a program the computer can run. | 1 |
@@ -43,10 +46,12 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Cross-encoder | A model (the reranker) that reads the query and one document together and scores their relevance; precise but slow, so only used on a shortlist. | 8 |
 | Data key | The random key SOPS creates per file to lock every value; it is itself locked once per recipient. | 6 |
 | Decode | The second phase of generation: the model writes the answer one token at a time; its speed is limited by memory bandwidth. | 7 |
+| Dedicated vector database | A database built only for storing vectors and finding the nearest ones fast, with filters (Qdrant, Milvus, Weaviate), rather than a general database with a vector extension. | 12 |
 | Default privileges (ALTER DEFAULT PRIVILEGES) | A standing instruction that every table a given role creates from now on automatically gets certain grants, so new tables are never invisible to the app. | 11 |
 | Dependency | A package your project needs in order to work. | 2 |
 | Dependency group | A named set of extra dependencies in `pyproject.toml` (PEP 735), e.g. `dev` for test tools not needed in production. | 2 |
 | Deployment (LiteLLM) | One real backend behind a model alias; an alias can have several, for load-balancing or failover. | 9 |
+| Derived index | A copy organised for fast lookup, always rebuildable from the source of truth. | 12 |
 | Dev dependency | A package needed only while developing (e.g. pytest), not when the app runs in production. | 2 |
 | Dimensions (of an embedding) | How many numbers an embedding vector has (Qwen3-Embedding-0.6B: up to 1,024); more can hold more nuance but costs storage and search time. | 8 |
 | direnv | A tool that loads a project's settings automatically when you enter its folder. | 1 |
@@ -88,6 +93,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Iterative scan | pgvector 0.8+ setting (`hnsw.iterative_scan`) that keeps scanning the index until enough rows pass the filters, avoiding silently short results. | 11 |
 | IVFFlat | An older pgvector index that groups vectors into lists (clusters) and searches only the nearest lists; faster to build, usually lower recall than HNSW. | 11 |
 | justfile | A menu of named command shortcuts run with `just <recipe>` (e.g. `just check`), reused by CI. | 4 |
+| JWT (JSON Web Token) | A small signed token carrying its own permissions and expiry; anyone can read it, but only the holder of the signing key can create or change it. | 12 |
 | Key pair (public / private key) | Two matching keys: anyone can lock with the public key, only the private key unlocks. Share the public one, guard the private one. | 6 |
 | KV cache | The model's working memory of everything read so far; grows with prompt and answer length and is a big part of memory use. | 7 |
 | launchd | macOS's built-in service manager: starts programs at login and restarts them if they crash (agents live in `~/Library/LaunchAgents/`). | 7 |
@@ -111,6 +117,8 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Model inventory | A reviewed list of which exact models a platform serves: repo, revision, licence, port, role and who approved it (`infra/model-serving/models.yaml`). | 7 |
 | Model revision | The exact git commit (40-character SHA) of a model repository on Hugging Face; the same name isn't always the same model. | 7 |
 | Monorepo | One repository holding all services, libraries, infrastructure and docs. | 4 |
+| Multitenancy / tenant | Serving many customers or departments from one system / one such customer, whose data must stay separate. | 12 |
+| Named vectors | Several vectors stored per point under different names, e.g. `dense` and `sparse`. | 12 |
 | Named volume | Docker-managed storage inside the VM that survives container deletion; use it for database data. | 3 |
 | Network interface | A way your machine connects to networks: Wi-Fi, Ethernet, or localhost. | 3 |
 | no-new-privileges | A container security option that stops any process inside it gaining extra privileges, e.g. through setuid programs. | 9 |
@@ -120,9 +128,12 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | OrbStack | A lightweight macOS container runtime: Linux VM + Docker engine + Compose + single-node Kubernetes. | 3 |
 | Package manager | A program that installs, updates and removes other software and tracks what's installed. | 1 |
 | PATH | The ordered list of folders your shell searches when you type a command. First match wins. | 1 |
+| Payload | The JSON metadata stored with a Qdrant point (tenant, access groups, title, text…). | 12 |
+| Payload index | An index on a payload field so filters on it are fast. Without one, filtering scans. | 12 |
 | PEP | Python Enhancement Proposal: an official Python standard (e.g. PEP 621 `pyproject.toml`, PEP 735 dependency groups, PEP 668 protected system Pythons). | 2 |
 | pg_dump | Postgres's logical backup tool: writes a database's structure and data to a file that `pg_restore` can load again. | 11 |
 | Plaintext | Readable, unencrypted text. | 6 |
+| Point | One item stored in Qdrant: an ID, one or more vectors, and a payload. Here, one chunk. | 12 |
 | Polyrepo | One repository per service or library. | 4 |
 | Pooling | How an embedding model squeezes its per-token outputs into one vector (Qwen3-Embedding uses the last token). | 8 |
 | Port | A numbered "door" through which a program accepts network connections, e.g. 5432 for Postgres. | 3 |
@@ -137,12 +148,14 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Quantization | Storing each of a model's numbers in fewer bits (8-bit, 4-bit): smaller and faster, at the cost of a little accuracy. | 7 |
 | Query instruction | A one-sentence task description prefixed to queries (not documents) for instruction-aware embedders: `Instruct: {task}\nQuery:{query}`. | 8 |
 | Rate limit (RPM / TPM) | How many requests per minute / tokens per minute a key may use; going over returns 429 Too Many Requests. | 10 |
+| RBAC (role-based access control) | Deciding what each user, key or token may read or write by the role or permissions it carries. | 12 |
 | Re-indexing | Re-embedding every stored document because the embedding contract changed; planned like a migration. | 8 |
 | Recall | Of the truly closest results, the share the fast (approximate) search actually returned. | 11 |
 | Recipient | Someone (or a machine) whose public key can open a SOPS file: you, CI, a teammate. | 6 |
 | Relational database / table / row / column | Data stored in tables; each row is a record (one chunk), each column a field (its text, its vector). | 11 |
 | Remote / origin | A copy of the repository on a server (GitHub); `origin` is its default nickname. | 4 |
 | Repository | The project's filing cabinet: all files plus their full history of changes (git). | 4 |
+| Rescoring | After a fast search on compressed vectors, re-ranking the top candidates using the original vectors to recover accuracy. | 12 |
 | Restart policy | The rule Docker uses to restart a container that stops or crashes (`restart: unless-stopped`). | 9 |
 | Retrieve-then-rerank | The two-stage search pattern: a fast embedder finds ~50 candidates, then a slow, precise reranker picks the best few for the LLM. | 8 |
 | Retry | Trying the same model again after a temporary error, before any fallback. | 10 |
@@ -152,6 +165,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Rotation | Replacing a secret with a new value on a schedule, or immediately after a suspected leak. | 6 |
 | Routing | Choosing which real backend (deployment) answers a request for a given model alias. | 9 |
 | Salt key (LITELLM_SALT_KEY) | A secret LiteLLM uses to encrypt credentials it stores in its database; it must never change, or those become unreadable. | 10 |
+| Scalar quantization (int8) | Storing each vector number as a 1-byte integer instead of 2–4 bytes: about 4× smaller and faster to scan. | 12 |
 | Schema (database) | A named folder of tables inside a database (we use `rag`); also "the structure" of the tables. | 11 |
 | Secret | Any value that grants access: a password, API key, token, private key or encryption key. | 6 |
 | Secret file / /run/secrets | A secret delivered to a container as a small in-memory file, the standard Docker and Kubernetes pattern. | 6 |
@@ -164,7 +178,10 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Shift left | Moving checks earlier in the process (editor, commit) where fixing problems is cheapest. | 5 |
 | Showback / chargeback | Showing each team what it used / actually billing its cost centre for it. | 10 |
 | Signed commit | A commit stamped with your private key so GitHub can show it as Verified (really from you). | 4 |
+| Snapshot | A point-in-time backup file of a collection. | 12 |
 | SOPS | "Secrets OPerationS": encrypts the values in YAML, JSON or `.env` files while leaving the names readable. | 6 |
+| Source of truth | The one authoritative store that decides what exists and who may see it; every other copy is derived from it. | 12 |
+| Sparse vector | A vector that's mostly zeros, stored as (position, value) pairs; used for keyword-like retrieval (SPLADE, BM25-style). | 12 |
 | Speculative decoding | A small draft model guesses a few tokens ahead and the big model checks them in one pass, speeding up decoding (`--draft-model`). | 7 |
 | Squash merge | Merging a PR so all its small commits become one clean commit on `main`. | 4 |
 | src layout | Putting a package's code under `src/<name>/` so tests import the installed package, not the raw folder. | 4 |
@@ -175,6 +192,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Supersede | Replace an accepted ADR with a newer ADR that points back to it; the old one is never edited. | 4 |
 | Team (LiteLLM) | A group of virtual keys sharing a budget and a model list, e.g. a department or product. | 10 |
 | TEI (Text Embeddings Inference) | Hugging Face's Rust server for embedding and reranking models, with batching, API keys and metrics; runs natively with Metal on Apple Silicon. | 8 |
+| Telemetry | Usage information a program sends to its makers; switched off on purpose (Qdrant here, Homebrew analytics in Step 1). | 12 |
 | Thinking mode | Qwen models' optional hidden reasoning before the answer; better on hard questions, slower and more tokens (`enable_thinking`). | 7 |
 | Throughput | How much work a server finishes per second, e.g. chunks embedded per second. | 8 |
 | Token | The unit a model reads and writes: roughly ¾ of an English word. | 7 |

@@ -23,3 +23,4 @@ Phases: **A** Workstation · **B** Model serving · **C** Data stores · **D** I
 | 9 | The LiteLLM gateway: one front door for every model | B · Model serving | [step-09-litellm-gateway.md](step-09-litellm-gateway.md) |
 | 10 | Budgets, rate limits and fallbacks | B · Model serving | [step-10-budgets-rate-limits-fallbacks.md](step-10-budgets-rate-limits-fallbacks.md) |
 | 11 | Postgres + pgvector: the document and vector store | C · Data stores | [step-11-postgres-pgvector.md](step-11-postgres-pgvector.md) |
+| 12 | Qdrant: a dedicated vector database | C · Data stores | [step-12-qdrant-vector-database.md](step-12-qdrant-vector-database.md) |
