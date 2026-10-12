@@ -53,6 +53,11 @@ litellm_settings:
     - qwen-quality: [qwen-fast]     # quality is down → faster, possibly weaker answers
   # NO fallback for embedder: another embedder = another vector space (Step 8 contract)
   # NO fallback for reranker: the app skips reranking instead (graceful degradation)
+  cache: true                   # exact-match response cache (Step 15)
+  cache_params:
+    type: redis                 # Valkey speaks the Redis protocol; connection from REDIS_URL (secret file, wrapper)
+    ttl: 600                    # 10 minutes: long enough for reruns, short enough to stay fresh
+    namespace: "litellm.cache"
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY

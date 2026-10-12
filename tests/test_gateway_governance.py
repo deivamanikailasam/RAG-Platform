@@ -77,13 +77,17 @@ def test_gateway_gets_database_url_and_salt_key_from_secret_files() -> None:
         "tei_api_key",
         "litellm_salt_key",
         "litellm_db_password",
+        "valkey_litellm_password",  # Step 15: the response cache's Valkey user
     ]
-    assert litellm["depends_on"] == {"litellm-db": {"condition": "service_healthy"}}
+    assert litellm["depends_on"] == {
+        "litellm-db": {"condition": "service_healthy"},
+        "valkey": {"condition": "service_healthy"},  # Step 15
+    }
     (command,) = litellm["command"]
     assert 'LITELLM_SALT_KEY="$$(cat /run/secrets/litellm_salt_key)"' in command
     assert (
         'DATABASE_URL="postgresql://litellm:$$(cat /run/secrets/litellm_db_password)'
-        '@litellm-db:5432/litellm" &&' in command
+        '@litellm-db:5432/litellm"' in command
     )
     assert compose["secrets"]["litellm_salt_key"] == {"environment": "LITELLM_SALT_KEY"}
     assert compose["secrets"]["litellm_db_password"] == {"environment": "LITELLM_DB_PASSWORD"}

@@ -33,12 +33,14 @@ services:
         export LITELLM_MASTER_KEY="$$(cat /run/secrets/litellm_master_key)"
         TEI_API_KEY="$$(cat /run/secrets/tei_api_key)"
         LITELLM_SALT_KEY="$$(cat /run/secrets/litellm_salt_key)"
-        DATABASE_URL="postgresql://litellm:$$(cat /run/secrets/litellm_db_password)@litellm-db:5432/litellm" &&
+        DATABASE_URL="postgresql://litellm:$$(cat /run/secrets/litellm_db_password)@litellm-db:5432/litellm"
+        REDIS_URL="redis://litellm:$$(cat /run/secrets/valkey_litellm_password)@valkey:6379/0" &&
         exec litellm --config /app/config.yaml --host 0.0.0.0 --port 4000
-    secrets: [litellm_master_key, tei_api_key, litellm_salt_key, litellm_db_password]
+    secrets: [litellm_master_key, tei_api_key, litellm_salt_key, litellm_db_password,
+              valkey_litellm_password]
     depends_on:
-      litellm-db:
-        condition: service_healthy                            # don't start until the database answers
+      litellm-db: { condition: service_healthy }             # don't start until the database answers
+      valkey:     { condition: service_healthy }             # …and the response cache (Step 15)
     volumes:
       - ../config/litellm/config.yaml:/app/config.yaml:ro     # config is read-only inside the container
     ports:
