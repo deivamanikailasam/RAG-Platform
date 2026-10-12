@@ -12,6 +12,9 @@ dependencies = [
     "pgvector>=0.4",
     "openai>=2.0",
     "httpx>=0.28",            # talks to OPA, the policy decision point (Step 18)
+    "opentelemetry-instrumentation-fastapi>=0.66b1",
+    "opentelemetry-instrumentation-httpx>=0.66b1",
+    "opentelemetry-instrumentation-psycopg>=0.66b1",
 ]
 
 [tool.uv.sources]

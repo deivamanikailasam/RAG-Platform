@@ -1,0 +1,93 @@
+"""Telemetry: one connected trace per search, useful attributes, metrics, and NO secrets or
+content."""
+
+from __future__ import annotations
+
+import json
+import logging
+from typing import TYPE_CHECKING
+
+import pytest
+from fastapi.testclient import TestClient
+from opentelemetry import trace
+from opentelemetry.sdk.metrics.export import InMemoryMetricReader, NumberDataPoint
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+from rag_common.telemetry import JsonFormatter, setup_telemetry
+
+if TYPE_CHECKING:  # type hints only: the objects themselves arrive as fixtures
+    from conftest import FakeIdP
+
+QUESTION = "What is the salary of Carol Chen?"  # the kind of text that must never reach telemetry
+SPANS = InMemorySpanExporter()
+METRICS = InMemoryMetricReader()
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _telemetry() -> None:
+    setup_telemetry("rag-api-test", span_exporter=SPANS, metric_reader=METRICS)
+
+
+@pytest.fixture
+def searched(client: TestClient, idp: FakeIdP) -> str:
+    SPANS.clear()
+    token = idp.mint()
+    r = client.post(
+        "/v1/search", json={"query": QUESTION}, headers={"Authorization": f"Bearer {token}"}
+    )
+    assert r.status_code == 200
+    return token
+
+
+def test_one_trace_with_every_stage(searched: str) -> None:
+    spans = {s.name: s for s in SPANS.get_finished_spans()}
+    assert {"POST /v1/search", "rag.authz.decide", "rag.retrieve", "rag.authz.post_check"} <= set(
+        spans
+    )
+    assert len({s.context.trace_id for s in spans.values()}) == 1  # all one request
+    server = spans["POST /v1/search"]
+    for name in ("rag.authz.decide", "rag.retrieve", "rag.authz.post_check"):
+        parent = spans[name].parent
+        assert parent is not None
+        assert parent.trace_id == server.context.trace_id
+
+
+def test_useful_attributes(searched: str) -> None:
+    spans = {s.name: s for s in SPANS.get_finished_spans()}
+    retrieve = spans["rag.retrieve"].attributes or {}
+    assert retrieve["rag.candidates"] == 1
+    assert retrieve["rag.query.chars"] == len(QUESTION)
+    assert retrieve["enduser.id"] == "8f1c0000-alice"
+    assert (spans["rag.authz.decide"].attributes or {})["rag.authz.allow"] is True
+    assert (spans["rag.authz.post_check"].attributes or {})["rag.dropped"] == 0
+
+
+def test_no_token_and_no_question_text_in_any_span(searched: str) -> None:
+    for span in SPANS.get_finished_spans():
+        dumped = json.dumps(dict(span.attributes or {}), default=str) + span.name
+        assert searched not in dumped, f"token leaked into span {span.name}"
+        assert "Carol" not in dumped, f"question text leaked into span {span.name}"
+
+
+def test_metrics_count_searches(searched: str) -> None:
+    data = METRICS.get_metrics_data()
+    assert data is not None
+    names = {
+        m.name: m for rm in data.resource_metrics for sm in rm.scope_metrics for m in sm.metrics
+    }
+    assert {"rag.search.requests", "rag.search.duration", "rag.authz.decisions"} <= set(names)
+    ok = [
+        p.value
+        for p in names["rag.search.requests"].data.data_points
+        if isinstance(p, NumberDataPoint) and p.attributes == {"outcome": "ok"}
+    ]
+    assert ok, "no successful search was counted"
+    assert ok[0] >= 1
+
+
+def test_log_lines_carry_the_trace_id() -> None:
+    with trace.get_tracer("test").start_as_current_span("work") as span:
+        record = logging.LogRecord("rag_api", logging.INFO, __file__, 1, "hello", None, None)
+        line = json.loads(JsonFormatter().format(record))
+    assert line["msg"] == "hello"
+    assert line["trace_id"] == format(span.get_span_context().trace_id, "032x")

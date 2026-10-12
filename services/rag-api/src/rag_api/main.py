@@ -3,22 +3,62 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+import time
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from opentelemetry import metrics, trace
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+from opentelemetry.instrumentation.psycopg import PsycopgInstrumentor
 from pydantic import BaseModel, Field
 
 from rag_api.policy import Decision, OpaClient, PolicyEngine, PolicyUnavailable
 from rag_api.search import Hit, PgSearch, SearchBackend
 from rag_api.settings import Settings
 from rag_common.auth import AuthError, KeyServiceUnavailable, OIDCSettings, Principal, TokenVerifier
+from rag_common.telemetry import setup_logging, setup_telemetry
 
 log = logging.getLogger("rag_api")
-app = FastAPI(title="rag-api", version="0.1.0")
+tracer = trace.get_tracer("rag_api")
+meter = metrics.get_meter("rag_api")
+
+# Metrics: a few numbers you'd put on a dashboard or alert on (Step 20).
+SEARCHES = meter.create_counter(
+    "rag.search.requests", unit="{request}", description="Searches by outcome"
+)
+SEARCH_TIME = meter.create_histogram(
+    "rag.search.duration", unit="s", description="End-to-end search time"
+)
+DECISIONS = meter.create_counter(
+    "rag.authz.decisions", unit="{decision}", description="Policy decisions"
+)
+DROPPED = meter.create_counter(
+    "rag.search.dropped_documents",
+    unit="{document}",
+    description="Query/policy mismatches (should be 0)",
+)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    setup_logging()
+    shutdown_telemetry = setup_telemetry("rag-api")
+    HTTPXClientInstrumentor().instrument()  # calls to OPA and the gateway: spans + traceparent header
+    PsycopgInstrumentor().instrument()  # one span per SQL statement (text only, never parameters)
+    yield
+    shutdown_telemetry()  # on stop: send what's still buffered
+
+
+app = FastAPI(title="rag-api", version="0.1.0", lifespan=lifespan)
+# One server span per request. Excluded: health checks (most of the traffic, no value) and the
+# tiny internal "receive"/"send" spans (noise).
+FastAPIInstrumentor.instrument_app(app, excluded_urls="healthz", exclude_spans=["receive", "send"])
 bearer = HTTPBearer(auto_error=False)  # we build the 401 ourselves, with the standard header
 
 
@@ -95,13 +135,17 @@ def authorize(action: str) -> Callable[[Principal, PolicyEngine], Authorized]:
         principal: Annotated[Principal, Depends(current_principal)],
         policy: Annotated[PolicyEngine, Depends(get_policy)],
     ) -> Authorized:
-        try:
-            decision = policy.decide(principal, action)
-        except PolicyUnavailable as e:
-            log.error("policy engine unavailable: %s", e)  # fail closed: no decision, no access
-            raise HTTPException(
-                status.HTTP_503_SERVICE_UNAVAILABLE, "Policy engine unavailable"
-            ) from e
+        with tracer.start_as_current_span("rag.authz.decide") as span:
+            span.set_attribute("rag.authz.action", action)
+            try:
+                decision = policy.decide(principal, action)
+            except PolicyUnavailable as e:
+                log.error("policy engine unavailable: %s", e)  # fail closed: no decision, no access
+                raise HTTPException(
+                    status.HTTP_503_SERVICE_UNAVAILABLE, "Policy engine unavailable"
+                ) from e
+            span.set_attribute("rag.authz.allow", decision.allow)
+            DECISIONS.add(1, {"action": action, "allow": decision.allow})
         if not decision.allow:
             log.warning(
                 "forbidden: sub=%s action=%s reasons=%s",
@@ -159,22 +203,51 @@ def search(
     policy: Annotated[PolicyEngine, Depends(get_policy)],
 ) -> list[Hit]:
     p, f = auth.principal, auth.decision.filter
-    # 1. PRE-filter inside the database query, using the filter the POLICY computed (fast).
-    candidates = backend.search(
-        req.query, groups=f.groups, classifications=f.classifications, k=req.k, user=p.subject
-    )
-    # 2. POST-check every candidate with the policy's full rule (safe). If the two ever disagree,
-    #    the document is dropped and we log it: that's a bug in the query, never a leak.
-    refs = [c.ref for c in candidates]
+    started, outcome = time.perf_counter(), "error"
     try:
-        allowed = policy.readable(p, refs)
-    except PolicyUnavailable as e:
-        log.error("policy engine unavailable: %s", e)
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Policy engine unavailable") from e
-    dropped = [c.ref.id for c in candidates if c.ref.id not in allowed]
-    if dropped:
-        log.error("query/policy mismatch: dropped documents %s for sub=%s", dropped, p.subject)
-    return [c.hit for c in candidates if c.ref.id in allowed]
+        # 1. PRE-filter inside the database query, using the filter the POLICY computed (fast).
+        with tracer.start_as_current_span("rag.retrieve") as span:
+            # Facts about the request, never its content: the question itself may hold personal
+            # or confidential data, so only its length is recorded.
+            span.set_attributes(
+                {
+                    "enduser.id": p.subject,
+                    "rag.query.chars": len(req.query),
+                    "rag.k": req.k,
+                    "rag.filter.classifications": sorted(f.classifications),
+                    "rag.filter.group_count": len(f.groups),
+                }
+            )
+            candidates = backend.search(
+                req.query,
+                groups=f.groups,
+                classifications=f.classifications,
+                k=req.k,
+                user=p.subject,
+            )
+            span.set_attribute("rag.candidates", len(candidates))
+        # 2. POST-check every candidate with the policy's full rule (safe). If the two ever
+        #    disagree, the document is dropped and we log it: a bug in the query, never a leak.
+        with tracer.start_as_current_span("rag.authz.post_check") as span:
+            try:
+                allowed = policy.readable(p, [c.ref for c in candidates])
+            except PolicyUnavailable as e:
+                log.error("policy engine unavailable: %s", e)
+                raise HTTPException(
+                    status.HTTP_503_SERVICE_UNAVAILABLE, "Policy engine unavailable"
+                ) from e
+            dropped = [c.ref.id for c in candidates if c.ref.id not in allowed]
+            span.set_attributes(
+                {"rag.returned": len(candidates) - len(dropped), "rag.dropped": len(dropped)}
+            )
+        if dropped:
+            DROPPED.add(len(dropped))
+            log.error("query/policy mismatch: dropped documents %s for sub=%s", dropped, p.subject)
+        outcome = "ok"
+        return [c.hit for c in candidates if c.ref.id in allowed]
+    finally:
+        SEARCHES.add(1, {"outcome": outcome})
+        SEARCH_TIME.record(time.perf_counter() - started, {"outcome": outcome})
 
 
 @app.get("/v1/admin/ping")

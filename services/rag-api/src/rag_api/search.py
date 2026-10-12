@@ -7,6 +7,7 @@ from typing import Protocol
 
 import psycopg
 from openai import OpenAI
+from opentelemetry import trace
 from pgvector import HalfVector
 from pgvector.psycopg import register_vector
 from pydantic import BaseModel
@@ -29,6 +30,8 @@ WHERE d.deleted_at IS NULL
 ORDER BY c.embedding <=> %(q)s
 LIMIT %(k)s
 """
+
+tracer = trace.get_tracer("rag_api.search")
 
 
 class Hit(BaseModel):
@@ -78,7 +81,17 @@ class PgSearch:
         if not classifications:
             return []  # fail closed: no clearance, no documents
         # "user" lets the gateway attribute cost and logs to the real person (Step 10 spend tracking)
-        emb = self._gw.embeddings.create(model="embedder", input=[INSTRUCTION + query], user=user)
+        # A GenAI span named the OpenTelemetry way ("{operation} {model}"). The HTTP call inside
+        # carries the trace id to LiteLLM, which continues the same trace.
+        with tracer.start_as_current_span(
+            "embeddings embedder",
+            kind=trace.SpanKind.CLIENT,
+            attributes={"gen_ai.operation.name": "embeddings", "gen_ai.request.model": "embedder"},
+        ) as span:
+            emb = self._gw.embeddings.create(
+                model="embedder", input=[INSTRUCTION + query], user=user
+            )
+            span.set_attribute("gen_ai.usage.input_tokens", emb.usage.prompt_tokens)
         with psycopg.connect(self._dsn) as conn:
             register_vector(conn)
             rows = conn.execute(

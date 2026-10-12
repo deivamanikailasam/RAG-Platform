@@ -135,7 +135,10 @@ def test_search_tags_the_gateway_call_with_the_user_and_applies_the_policy_filte
     class FakeEmbeddings:
         def create(self, **kw: Any) -> Any:
             seen["embed"] = kw
-            return SimpleNamespace(data=[SimpleNamespace(embedding=[0.5] * 4)])
+            return SimpleNamespace(
+                data=[SimpleNamespace(embedding=[0.5] * 4)],
+                usage=SimpleNamespace(prompt_tokens=12),  # read by the GenAI span (Step 19)
+            )
 
     class FakeConn:
         def __enter__(self) -> FakeConn:
