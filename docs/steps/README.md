@@ -28,3 +28,4 @@ Phases: **A** Workstation · **B** Model serving · **C** Data stores · **D** I
 | 14 | S3 object storage for original files (SeaweedFS) | C · Data stores | [step-14-s3-object-storage-seaweedfs.md](step-14-s3-object-storage-seaweedfs.md) |
 | 15 | Valkey (Redis-compatible): cache, queues and locks | C · Data stores | [step-15-valkey-cache-queues-locks.md](step-15-valkey-cache-queues-locks.md) |
 | 16 | Keycloak: realm, users and groups | D · Identity & policy | [step-16-keycloak-realm-users-groups.md](step-16-keycloak-realm-users-groups.md) |
+| 17 | JWT auth on the APIs | D · Identity & policy | [step-17-jwt-auth-on-the-apis.md](step-17-jwt-auth-on-the-apis.md) |

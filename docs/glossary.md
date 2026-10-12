@@ -6,6 +6,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Term | Meaning | Step |
 |---|---|---:|
 | 0.0.0.0 / * | "Every interface": a port bound here is reachable by anyone who can reach your machine on the network. | 3 |
+| 401 vs 403 | 401 Unauthorized means "I don't know who you are" (no token, or a bad one); 403 Forbidden means "I know who you are, and the answer is no" (a valid token without the needed role). | 17 |
 | Access token | The short-lived (5-minute) token an app shows to an API on every call; it carries who you are, your groups and roles, and when it expires. | 16 |
 | Acknowledgement (XACK) | A worker's "done" signal for a stream message. Until it arrives, the message stays pending for that worker. | 15 |
 | ACL (access control list, Valkey) | Per-user rules for which keys (`~pattern`), pub/sub channels (`&pattern`) and commands (`+@category`, `-@category`) a user may use; `user default off` disables anonymous access. | 15 |
@@ -13,6 +14,9 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Admin events (Keycloak) | Keycloak's record of every administrative change (user created, group membership added, lockout cleared), with the full details when enabled; audit evidence for "who changed what". | 16 |
 | ADR (Architecture Decision Record) | A short Markdown file recording one significant decision: context, decision, alternatives and consequences. | 4 |
 | age | A small, modern encryption tool with short keys (`age1…`); makes the key pair SOPS uses. A simpler, safer replacement for GPG. | 6 |
+| `alg: none` | A token header claiming the token is unsigned. Some old libraries accepted such tokens as valid, a famous vulnerability; our verifier never does. | 17 |
+| Algorithm allow-list | The fixed list of signing algorithms a verifier accepts (only `RS256` here), chosen by the server, never by the token, so an attacker can't pick a weaker one. | 17 |
+| Algorithm confusion | An attack that re-signs a token with HS256 using the server's PUBLIC key as the HMAC password; blocked by allowing only RS256. | 17 |
 | Alias (Qdrant) | A stable name (`rag_chunks`) pointing at a real collection; applications use it, and it can be switched to another collection instantly and atomically. | 12 |
 | Allow-list | The only models a key may use; a request for anything else is refused (401/403). | 10 |
 | Analytics | Anonymous usage statistics a tool sends back to its makers. | 1 |
@@ -24,9 +28,11 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Audience (`aud`) | The claim saying who a token is meant for (here `rag-api`). An API must reject tokens meant for someone else. | 16 |
 | Authentication vs authorisation | Who are you? (sign-in) versus what may you do? (permissions). Keycloak does the first and carries the facts (groups, roles) for the second. | 16 |
 | Authorization code + PKCE | The sign-in flow for web apps: the browser gets a one-time code and swaps it for tokens, proving with a random "code verifier" (PKCE) that it is the same app that started the sign-in. | 16 |
+| Authorization header | The HTTP request header that carries credentials; for APIs it is `Authorization: Bearer <access token>`. | 17 |
 | Auto-fix | A check that changes files to fix the problem itself; you review the change and `git add` it again. | 5 |
 | B-tree | The default Postgres index, for exact values and ranges (an ID, a date); like a sorted phone book. | 11 |
 | Batch | Several texts sent together and embedded in one GPU pass; much faster per text than one at a time. | 8 |
+| Bearer token | A token that works for whoever holds ("bears") it, sent as `Authorization: Bearer <token>`. Guard it like a password and never log it. | 17 |
 | Bi-encoder | A model (the embedder) that turns the query and each document into vectors separately, so document vectors can be computed once in advance and compared in milliseconds. | 8 |
 | Bind mount | A host folder shared into a container; fine for config and code, slow for databases on a Mac. | 3 |
 | Blast radius | How much damage one leaked or misbehaving credential can do; small, scoped, expiring keys keep it small. | 10 |
@@ -50,6 +56,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Client (OIDC) | An app registered with the identity provider. Public clients (browser, command line) can't keep a secret; confidential clients (servers, workers) can. | 16 |
 | Client credentials | The flow where a machine signs in with its own client id and secret, with no person involved; it gets an access token but no refresh token. | 16 |
 | Client scope | A reusable bundle of protocol mappers (and other token settings) that can be attached to many clients instead of repeating the mappers on each. | 16 |
+| Clock skew / leeway | Small differences between machines' clocks; a tolerance (30 s here) stops a verifier from rejecting a token that is only just fresh or only just expired. | 17 |
 | CODEOWNERS | A GitHub file naming who must review changes to which folders. | 4 |
 | Collection (Qdrant) | Qdrant's equivalent of a table: a set of points sharing vector settings. | 12 |
 | Command category (Valkey) | A named group of commands used in ACLs, e.g. `@dangerous` (FLUSHALL, KEYS, CONFIG, DEBUG…) or `@admin`; `+@all -@dangerous` means everything except those. | 15 |
@@ -75,6 +82,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Delete marker | With versioning on, "delete" only adds a marker that hides the object; older versions still exist until each is deleted by version ID. | 14 |
 | Dependency | A package your project needs in order to work. | 2 |
 | Dependency group | A named set of extra dependencies in `pyproject.toml` (PEP 735), e.g. `dev` for test tools not needed in production. | 2 |
+| Dependency injection (FastAPI) | FastAPI runs helper functions ("get the caller", "require this role") before an endpoint and passes their results in; tests swap them for fakes with `dependency_overrides`. | 17 |
 | Deployment (LiteLLM) | One real backend behind a model alias; an alias can have several, for load-balancing or failover. | 9 |
 | Derived index | A copy organised for fast lookup, always rebuildable from the source of truth. | 12 |
 | Dev dependency | A package needed only while developing (e.g. pytest), not when the app runs in production. | 2 |
@@ -97,6 +105,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | EXPLAIN | Asks Postgres how it will run a query, e.g. whether it uses an index; `EXPLAIN ANALYZE` also runs it and shows real timings. | 11 |
 | Explain API | Adding `"explain": true` to a search so OpenSearch returns the arithmetic behind each score (tf, idf, length adjustment). | 13 |
 | Extension (Postgres) | An add-on that teaches Postgres new tricks; `vector` (pgvector) adds vector types and indexes. | 11 |
+| Fail closed | When unsure, deny: no groups in the token means no documents, not all documents; an unreachable key service means 503, not "let it through". | 17 |
 | Fallback | Sending a request to a different model when the first one fails; fine between chat models, never between embedders (different vector spaces). | 10 |
 | False positive | A check flags something that is actually fine; silence it narrowly, with a comment explaining why. | 5 |
 | FinOps | The practice of making technology spend visible, attributed to teams, and managed against budgets; AI FinOps applies it to model usage. | 10 |
@@ -135,9 +144,12 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | justfile | A menu of named command shortcuts run with `just <recipe>` (e.g. `just check`), reused by CI. | 4 |
 | JVM heap | The working memory of a Java program such as OpenSearch; typically about half the container's memory, fixed and locked in RAM. | 13 |
 | JWKS (JSON Web Key Set) | The public keys an identity provider publishes (`…/protocol/openid-connect/certs`) so anyone can check its token signatures. | 16 |
+| JWKS cache | The verifier's local copy of the identity provider's public keys (5 minutes here), re-fetched when a token names an unknown `kid`; avoids a Keycloak call per request. | 17 |
 | JWT (JSON Web Token) | A small signed token carrying its own permissions and expiry; anyone can read it, but only the holder of the signing key can create or change it. | 12 |
 | k-NN plugin / Lucene engine | OpenSearch's vector search feature, here using Lucene's HNSW implementation. | 13 |
 | Key pair (public / private key) | Two matching keys: anyone can lock with the public key, only the private key unlocks. Share the public one, guard the private one. | 6 |
+| Key rotation | The identity provider switching to a new signing key; APIs must pick up the new key automatically (a JWKS re-fetch on an unknown `kid`) while old tokens expire. | 17 |
+| `kid` (key id) | A label in a JWT's header naming which of the identity provider's keys signed it, so the verifier knows which public key to check with. | 17 |
 | KV cache | The model's working memory of everything read so far; grows with prompt and answer length and is a big part of memory use. | 7 |
 | launchd | macOS's built-in service manager: starts programs at login and restarts them if they crash (agents live in `~/Library/LaunchAgents/`). | 7 |
 | Least privilege | Giving each identity only the access it needs and nothing more. | 10 |
@@ -166,17 +178,20 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Model inventory | A reviewed list of which exact models a platform serves: repo, revision, licence, port, role and who approved it (`infra/model-serving/models.yaml`). | 7 |
 | Model revision | The exact git commit (40-character SHA) of a model repository on Hugging Face; the same name isn't always the same model. | 7 |
 | Monorepo | One repository holding all services, libraries, infrastructure and docs. | 4 |
+| Multi-stage build | A Dockerfile with several `FROM` stages: one with build tools makes the result, the final small image copies only that result (here the finished `.venv`). | 17 |
 | Multitenancy / tenant | Serving many customers or departments from one system / one such customer, whose data must stay separate. | 12 |
 | Named vectors | Several vectors stored per point under different names, e.g. `dense` and `sparse`. | 12 |
 | Named volume | Docker-managed storage inside the VM that survives container deletion; use it for database data. | 3 |
 | Network interface | A way your machine connects to networks: Wi-Fi, Ethernet, or localhost. | 3 |
 | no-new-privileges | A container security option that stops any process inside it gaining extra privileges, e.g. through setuid programs. | 9 |
 | --no-verify | A git flag that skips local hooks; the reason CI must repeat the same checks. | 5 |
+| Non-root container | A container whose process runs as an ordinary user (uid 10001 here), so a compromised app can't change system files or its own code. | 17 |
 | Normalisation | Scaling a vector to length 1, so cosine similarity becomes a simple dot product. | 8 |
 | OAuth 2.0 / OpenID Connect (OIDC) | The standards for getting tokens. OAuth 2.0 covers access ("may this app call that API?"); OIDC adds identity (who signed in) on top. | 16 |
 | Object lock / retention (governance vs compliance) | Rules preventing deletion or overwrite of an object version until a retain-until date (WORM). Governance mode: privileged users can deliberately override; compliance mode: nobody can, not even admins. | 14 |
 | Object metadata | Extra key-value information stored with an object (content type, source URI, sha256…). | 14 |
 | Object storage / S3 API | Storing files as objects in buckets, reached over HTTP using Amazon's S3 protocol, now an industry standard spoken by AWS S3, SeaweedFS, Ceph and many more. | 14 |
+| Opaque token | A token that is just a random reference, not a readable JWT; only the identity provider can say what it means, via introspection. | 17 |
 | OpenAI-compatible API | The same request and response format as OpenAI's API, so any tool that speaks "OpenAI" can call a local model. | 7 |
 | OrbStack | A lightweight macOS container runtime: Linux VM + Docker engine + Compose + single-node Kubernetes. | 3 |
 | Package manager | A program that installs, updates and removes other software and tracks what's installed. | 1 |
@@ -198,6 +213,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Prefill | The first phase of generation: the model reads every prompt token in one parallel pass; limited by compute, it sets TTFT. | 7 |
 | Presigned URL | A link with a built-in signature and expiry that grants temporary access to one object (or one version) without the opener needing credentials. | 14 |
 | Primary key / foreign key | A row's unique ID / a column pointing to another table's row (a chunk → its document). | 11 |
+| Principal | The verified caller as the code sees it after token validation: user id (`sub`), username, calling app (`azp`), groups and roles. | 17 |
 | Prompt cache | Reusing the KV cache of a prompt start sent before (e.g. the same system prompt), which makes TTFT much faster. | 7 |
 | Protocol mapper | A Keycloak rule that puts an extra fact into tokens, such as the `groups` claim or an extra audience. | 16 |
 | Provider prefix | The part of a LiteLLM `model` before the first `/` (e.g. `openai/`): which API protocol to speak to the backend. | 9 |
@@ -210,6 +226,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Raw zone (bronze) | The part of a data platform holding immutable original data, from which everything else can be rebuilt. | 14 |
 | RBAC (role-based access control) | Deciding what each user, key or token may read or write by the role or permissions it carries. | 12 |
 | Re-indexing | Re-embedding every stored document because the embedding contract changed; planned like a migration. | 8 |
+| Read-only filesystem (container) | Starting a container so it can't write to its own files (`read_only: true`), with a small RAM `tmpfs` for scratch space; here code ownership by root gives the same protection because Compose can't combine it with environment-sourced secrets. | 17 |
 | Realm | A separate, self-contained space in Keycloak with its own users, groups, apps and settings. `master` is only for running Keycloak itself; our apps use `rag`. | 16 |
 | Realm role | A Keycloak role that says what someone may DO (`rag-user`, `rag-admin`, `rag-auditor`, `rag-ingest`). Here roles are attached to groups, never to people directly. | 16 |
 | Recall | Of the truly closest results, the share the fast (approximate) search actually returned. | 11 |
@@ -275,6 +292,9 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Throughput | How much work a server finishes per second, e.g. chunks embedded per second. | 8 |
 | Token | The unit a model reads and writes: roughly ¾ of an English word. | 7 |
 | Token filter | An analyzer step that changes the token stream: lowercase, synonyms, stemming. | 13 |
+| Token introspection (RFC 7662) | Asking the identity provider "is this token still valid?" on every request: instant revocation, at the cost of a network call each time. | 17 |
+| Token revocation | Cancelling a token before it expires. With local validation it only takes full effect when the (5-minute) access token expires. | 17 |
+| Token validation | Proving a token is genuine and meant for you (signature, algorithm, issuer, audience, expiry, type, calling app) before believing anything in it. | 17 |
 | Tokenizer | The model's dictionary for converting text to tokens and back. | 7 |
 | Tokenizer (search) | The analyzer step that splits text into words (tokens); not the same as an LLM's tokenizer. | 13 |
 | Tokens per second (tok/s) | How fast an answer streams once it starts; mostly set by memory bandwidth. | 7 |
@@ -296,3 +316,4 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Wired memory / GPU working-set limit | The share of unified memory macOS lets the GPU lock for itself (`iogpu.wired_limit_mb`); large models need it big enough. | 7 |
 | Workspace (uv) | Several Python packages in one repository sharing one `uv.lock` and one `.venv`. | 4 |
 | WORM (write once, read many) | Storage where data can be written once and then never changed or deleted until its retention ends; what object lock provides. | 14 |
+| `WWW-Authenticate` | The response header on a 401 telling the client a bearer token is required, or (with `error="invalid_token"`) that the one sent was not accepted. | 17 |
