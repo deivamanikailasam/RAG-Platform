@@ -26,6 +26,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Analyzer | The recipe a search engine uses to turn text into searchable terms: a tokenizer plus token filters (lowercase, synonyms, stemming). | 13 |
 | Anchoring (audit log) | Copying the newest hash of a chain (and the events) somewhere the database's administrators can't change, such as an object-locked bucket, so a later rewrite of the chain becomes visible. | 23 |
 | ANN (approximate nearest neighbour) | Finding nearly the closest vectors very fast, instead of exactly the closest by checking every one. | 11 |
+| Annotation (Grafana) | A marker drawn on Grafana graphs at the moment something happened, such as a new prompt version going live, so you can see whether quality or latency changed then. | 24 |
 | Append-only | Rows may be added, never changed or removed; enforced here by a trigger that refuses `UPDATE`, `DELETE` and `TRUNCATE`, even for the table's owner. | 23 |
 | arm64 / aarch64 vs amd64 / x86_64 | Processor families; Apple Silicon is arm64, amd64-only images need slower emulation. | 3 |
 | Asymmetric retrieval | Embedding questions and documents differently (queries get a task instruction, documents don't), because a short question and a long passage are different kinds of text. | 8 |
@@ -84,6 +85,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Container | A running copy of an image: a self-contained "apartment" with a program and everything it needs. | 3 |
 | Container runtime | The software that downloads images and runs containers (OrbStack, Docker Desktop, Colima, Podman). | 3 |
 | Content addressing | Naming an object by a hash of its content (`sha256`), so identical files share a name and changes are detectable. | 14 |
+| Content hash | A fingerprint (here SHA-256) computed from every byte of a file; any edit, even one character or a line ending, changes it. | 24 |
 | Context propagation | Passing the trace id from one service to the next (in the `traceparent` HTTP header) so their spans join one trace. | 19 |
 | Context window | The maximum number of tokens (prompt + answer) a model can handle at once. | 7 |
 | Conventional Commits | A commit-message format `type(scope)!: description` (e.g. `feat(gateway): …`) readable by people and tools. | 4 |
@@ -104,6 +106,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | `default` (Rego) | The value a rule takes when none of its bodies match, e.g. `default allow := false`; the building block of deny by default. | 18 |
 | Default privileges (ALTER DEFAULT PRIVILEGES) | A standing instruction that every table a given role creates from now on automatically gets certain grants, so new tables are never invisible to the app. | 11 |
 | Delete marker | With versioning on, "delete" only adds a marker that hides the object; older versions still exist until each is deleted by version ID. | 14 |
+| Delimiting | Wrapping untrusted text in clear markers (here XML-style tags like `<question>…</question>`) and telling the model that what's inside is data, not instructions. | 24 |
 | Deny by default | Nothing is allowed unless a rule explicitly allows it; in Rego, `default allow := false`. | 18 |
 | Dependency | A package your project needs in order to work. | 2 |
 | Dependency group | A named set of extra dependencies in `pyproject.toml` (PEP 735), e.g. `dev` for test tools not needed in production. | 2 |
@@ -172,6 +175,8 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Identity provider (IdP) | The service that signs people and machines in and vouches for them with signed tokens; Keycloak in this platform. | 16 |
 | Image | The frozen blueprint a container is started from: a program plus all its dependencies. | 3 |
 | Image tag vs digest | A tag (`v1.104.0`) is a movable label; a digest (`@sha256:…`) is the exact, unchangeable fingerprint of one image. | 9 |
+| Immutability (prompt versions) | A released prompt version can never change; a change means a new version, so `name@version` always means the same text. | 24 |
+| Info metric | A metric whose value is always 1 and whose labels carry facts, e.g. `rag_prompt_info{prompt, version, sha, label}`; a Prometheus convention for "what is running". | 24 |
 | Inhibition | An Alertmanager rule that mutes some alerts while another fires: here a critical alert mutes its warning twin with the same `alertname` and `service`. | 20 |
 | In-memory key-value store | A database that keeps data in RAM and retrieves it by a key (a name). Extremely fast, but limited by memory; Valkey and Redis are examples. | 15 |
 | Infrastructure as code | Defining your environment in version-controlled files instead of setting it up by hand. | 1 |
@@ -195,6 +200,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | `kid` (key id) | A label in a JWT's header naming which of the identity provider's keys signed it, so the verifier knows which public key to check with. | 17 |
 | KV cache | The model's working memory of everything read so far; grows with prompt and answer length and is a big part of memory use. | 7 |
 | Label (metric) | A key=value pair that identifies one slice of a metric, e.g. `outcome="error"`, `job="opa"`, `service_version="0.1.0"`. Every distinct label combination is its own time series. | 20 |
+| Label (prompt) | A movable pointer from an environment to a prompt version ("production uses version 1, staging uses version 2"), kept in `prompts/labels.yaml`. | 24 |
 | launchd | macOS's built-in service manager: starts programs at login and restarts them if they crash (agents live in `~/Library/LaunchAgents/`). | 7 |
 | Least privilege | Giving each identity only the access it needs and nothing more. | 10 |
 | Legal hold | An indefinite object lock with no date, applied during investigations, until someone explicitly removes it. | 14 |
@@ -205,6 +211,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Liveness / readiness | Two health questions: "is the process alive?" (restart it if not) and "can it serve traffic yet?". | 9 |
 | LLM observability | Recording what an AI system was asked, what it looked up and what it answered, to debug and improve it (Langfuse here). | 22 |
 | localhost / 127.0.0.1 | "This machine only": a port bound here is reachable only from your own Mac. | 3 |
+| Lock file (prompts) | `prompts/prompts.lock.json`: the SHA-256 of every released prompt version; entries may be added, never changed or removed. | 24 |
 | Lockfile | A file recording the exact version and hash of every package in the full dependency tree (`uv.lock`). | 2 |
 | Log aggregation | Collecting every container's log lines into one central, searchable store with retention (Loki here) instead of reading files on each machine. | 21 |
 | Log rotation | Keeping only the newest few log files of a limited size and deleting the oldest (here 3 × 10 MB). | 3 |
@@ -272,6 +279,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Persistence: RDB / AOF | How an in-memory store survives restarts. RDB: periodic snapshots to disk. AOF (append-only file): a log of every write, replayed at start-up; `appendfsync everysec` loses at most about 1 s. | 15 |
 | pg_dump | Postgres's logical backup tool: writes a database's structure and data to a file that `pg_restore` can load again. | 11 |
 | Pipeline (Collector) | One signal's path through the Collector: receivers → processors (in order) → exporters. | 19 |
+| Placeholder | A slot like `{{question}}` in a prompt template that is filled in for each request; every one must be declared in `variables`. | 24 |
 | Plaintext | Readable, unencrypted text. | 6 |
 | Point | One item stored in Qdrant: an ID, one or more vectors, and a payload. Here, one chunk. | 12 |
 | Policy as code | Access rules written in a real language, versioned in Git, reviewed by pull request and tested like code. | 18 |
@@ -286,7 +294,13 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Primary key / foreign key | A row's unique ID / a column pointing to another table's row (a chunk → its document). | 11 |
 | Principal | The verified caller as the code sees it after token validation: user id (`sub`), username, calling app (`azp`), groups and roles. | 17 |
 | Project and API keys (Langfuse) | A Langfuse project holds traces; its public key (`pk-lf-…`) identifies it and its secret key (`sk-lf-…`) authorises writes. | 22 |
+| Promotion / rollback | Moving a prompt label to a newer version / back to an older one: a one-number change in `labels.yaml`, reviewed as a pull request. | 24 |
+| Prompt | The text given to a model: instructions plus the material to work on. | 24 |
 | Prompt cache | Reusing the KV cache of a prompt start sent before (e.g. the same system prompt), which makes TTFT much faster. | 7 |
+| Prompt injection (direct, indirect) | Text that tries to make the model follow its instructions instead of yours. Direct: typed by the user. Indirect: hidden in a retrieved document or web page. | 24 |
+| Prompt registry | One place where all prompts live, with versions, owners, history and labels; here the `prompts/` folder plus `rag_common.prompts`. | 24 |
+| Prompt template | A prompt with placeholders that get filled in for each request. | 24 |
+| Prompts as code | Keeping prompts as files in git, so they get reviews, history and CI like code. | 24 |
 | PromQL | Prometheus's query language: select series by name and labels, then compute with functions like `rate()`, `increase()`, `sum by (…)` and `histogram_quantile`. | 20 |
 | Protocol mapper | A Keycloak rule that puts an extra fact into tokens, such as the `groups` claim or an extra audience. | 16 |
 | Provider prefix | The part of a LiteLLM `model` before the first `/` (e.g. `openai/`): which API protocol to speak to the backend. | 9 |
@@ -369,6 +383,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Signal | One kind of telemetry: traces, metrics or logs. | 19 |
 | Signed commit | A commit stamped with your private key so GitHub can show it as Verified (really from you). | 4 |
 | Silence | A deliberate, time-limited mute of matching alerts in Alertmanager, e.g. during planned maintenance; stored so it survives restarts. | 20 |
+| Single-pass rendering | Filling placeholders once: text that was inserted is never scanned again, so a user typing `{{context}}` can't pull in other values. | 24 |
 | SLI / SLO / SLA | Service level Indicator (what you measure, e.g. the share of searches that succeed) / Objective (your internal target, 99% over 28 days) / Agreement (the contractual promise to customers, set looser than the SLO). | 20 |
 | Snapshot | A point-in-time backup file of a collection. | 12 |
 | SOPS | "Secrets OPerationS": encrypts the values in YAML, JSON or `.env` files while leaving the names readable. | 6 |
@@ -427,6 +442,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Unified memory | Apple Silicon memory shared by the CPU and GPU; every GB given to the container VM is a GB the models lose. | 3 |
 | uv | Astral's all-in-one Python tool: interpreters, virtual environments, locking and tool installs. | 2 |
 | Valkey | The open-source (BSD), Redis-compatible in-memory store maintained under the Linux Foundation, forked from Redis in 2024 after Redis's licence change. | 15 |
+| Version (prompt) | One frozen edition of a prompt, a file `prompts/<name>/v<N>.yaml`; `rag-answer@2` always means the same text. | 24 |
 | Versioning / version ID | Keeping every overwrite of an object as a separate version, each with its own ID, so nothing is silently lost. | 14 |
 | Virtual environment | A private folder of packages (`.venv`) for one project, tied to one interpreter. | 2 |
 | Virtual key | A per-app or per-person key issued by the gateway, with its own budget, limits and allowed models; needs a database (Step 10). | 9 |
@@ -436,4 +452,5 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Workspace (uv) | Several Python packages in one repository sharing one `uv.lock` and one `.venv`. | 4 |
 | WORM (write once, read many) | Storage where data can be written once and then never changed or deleted until its retention ends; what object lock provides. | 14 |
 | `WWW-Authenticate` | The response header on a 401 telling the client a bearer token is required, or (with `error="invalid_token"`) that the one sent was not accepted. | 17 |
+| `yaml.safe_load` | Reads YAML as plain data only. The unsafe `yaml.load` can construct Python objects, so a hostile file could run code. | 24 |
 | Zanzibar | Google's paper and system for relationship-based authorisation at global scale; the model behind OpenFGA and SpiceDB. | 18 |

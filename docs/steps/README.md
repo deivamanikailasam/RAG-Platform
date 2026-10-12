@@ -35,3 +35,4 @@ Phases: **A** Workstation · **B** Model serving · **C** Data stores · **D** I
 | 21 | Loki + Tempo: from a spike to the exact trace and log line | E · Observability | [step-21-loki-tempo-traces-and-logs.md](step-21-loki-tempo-traces-and-logs.md) |
 | 22 | Langfuse: LLM traces with content, under control | E · Observability | [step-22-langfuse-llm-traces.md](step-22-langfuse-llm-traces.md) |
 | 23 | A tamper-evident audit log | F · Audit & governance | [step-23-tamper-evident-audit-log.md](step-23-tamper-evident-audit-log.md) |
+| 24 | A prompt registry | F · Audit & governance | [step-24-prompt-registry.md](step-24-prompt-registry.md) |
