@@ -3,6 +3,10 @@ quality_model := "mlx-community/Qwen3.8-27B-8bit"
 fast_model    := "lmstudio-community/Qwen3.6-35B-A3B-MLX-4bit"
 serve         := "HF_HUB_OFFLINE=1 uv run --project infra/model-serving mlx_lm.server --host 127.0.0.1 --allowed-origins http://localhost"
 
+# Embedding and reranking (Step 8): served by TEI from pinned local snapshot folders
+embed_model   := "Qwen/Qwen3-Embedding-0.6B"
+rerank_model  := "BAAI/bge-reranker-v2-m3"
+
 # List available recipes (runs when you type just "just")
 default:
     @just --list
@@ -109,3 +113,28 @@ models-logs:
 # Measure TTFT and tokens/s
 bench *args:
     uv run scripts/bench_models.py {{args}}
+
+# Download the embedding and reranker models (needs network + HF token)
+search-models-download:
+    uv run --project infra/model-serving hf download {{embed_model}}
+    uv run --project infra/model-serving hf download {{rerank_model}}
+
+# Run the embedding / reranker servers in the foreground
+serve-embed:
+    scripts/run-tei.sh "$(scripts/model-path.sh {{embed_model}})" 8083 9083 qwen3-embedding-0.6b
+
+serve-rerank:
+    scripts/run-tei.sh "$(scripts/model-path.sh {{rerank_model}})" 8084 9084 bge-reranker-v2-m3
+
+# Always-on embedding + reranker services
+search-models-up:
+    EMBED_DIR="$(scripts/model-path.sh {{embed_model}})" RERANK_DIR="$(scripts/model-path.sh {{rerank_model}})" scripts/install-tei-agents.sh
+
+search-models-down:
+    -launchctl bootout gui/$(id -u)/com.rag-platform.embedder
+    -launchctl bootout gui/$(id -u)/com.rag-platform.reranker
+
+# Health of every model server (LLMs + embedder + reranker)
+health: models-health
+    @curl -sf -o /dev/null http://127.0.0.1:8083/health && echo "  embedder:8083 ok" || echo "  embedder:8083 DOWN"
+    @curl -sf -o /dev/null http://127.0.0.1:8084/health && echo "  reranker:8084 ok" || echo "  reranker:8084 DOWN"

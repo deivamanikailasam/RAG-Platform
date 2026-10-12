@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.rag-platform.embedder</string>
+  <key>ProgramArguments</key><array>
+    <string>/bin/bash</string><string>/Users/you/dev/rag-platform/scripts/run-tei.sh</string>
+    <string>/Users/you/.cache/huggingface/hub/models--Qwen--Qwen3-Embedding-0.6B/snapshots/REVISION_SHA</string><string>8083</string><string>9083</string><string>qwen3-embedding-0.6b</string>
+  </array>
+  <key>EnvironmentVariables</key><dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/bin:/bin</string>
+    <key>SOPS_AGE_KEY_FILE</key><string>/Users/you/.config/sops/age/keys.txt</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>30</integer>
+  <key>StandardOutPath</key><string>/Users/you/Library/Logs/rag-platform/embedder.log</string>
+  <key>StandardErrorPath</key><string>/Users/you/Library/Logs/rag-platform/embedder.log</string>
+</dict></plist>

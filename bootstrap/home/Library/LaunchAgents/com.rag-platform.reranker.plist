@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.rag-platform.reranker</string>
+  <key>ProgramArguments</key><array>
+    <string>/bin/bash</string><string>/Users/you/dev/rag-platform/scripts/run-tei.sh</string>
+    <string>/Users/you/.cache/huggingface/hub/models--BAAI--bge-reranker-v2-m3/snapshots/REVISION_SHA</string><string>8084</string><string>9084</string><string>bge-reranker-v2-m3</string>
+  </array>
+  <key>EnvironmentVariables</key><dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/bin:/bin</string>
+    <key>SOPS_AGE_KEY_FILE</key><string>/Users/you/.config/sops/age/keys.txt</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>30</integer>
+  <key>StandardOutPath</key><string>/Users/you/Library/Logs/rag-platform/reranker.log</string>
+  <key>StandardErrorPath</key><string>/Users/you/Library/Logs/rag-platform/reranker.log</string>
+</dict></plist>

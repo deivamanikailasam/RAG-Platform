@@ -20,6 +20,8 @@ REDIS_PASSWORD=$(rand)
 KEYCLOAK_ADMIN_PASSWORD=$(rand)
 # --- Gateway (Step 9): LiteLLM master keys must start with sk- ---
 LITELLM_MASTER_KEY=sk-$(rand)
+# --- Embedding and reranker servers (Step 8): TEI API key ---
+TEI_API_KEY=$(openssl rand -hex 24)
 # --- Observability (Steps 20, 22) ---
 GRAFANA_ADMIN_PASSWORD=$(rand)
 LANGFUSE_SALT=$(rand)
