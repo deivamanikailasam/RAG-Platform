@@ -25,3 +25,4 @@ Phases: **A** Workstation · **B** Model serving · **C** Data stores · **D** I
 | 11 | Postgres + pgvector: the document and vector store | C · Data stores | [step-11-postgres-pgvector.md](step-11-postgres-pgvector.md) |
 | 12 | Qdrant: a dedicated vector database | C · Data stores | [step-12-qdrant-vector-database.md](step-12-qdrant-vector-database.md) |
 | 13 | OpenSearch: keyword, analyzers and hybrid search | C · Data stores | [step-13-opensearch-keyword-hybrid-search.md](step-13-opensearch-keyword-hybrid-search.md) |
+| 14 | S3 object storage for original files (SeaweedFS) | C · Data stores | [step-14-s3-object-storage-seaweedfs.md](step-14-s3-object-storage-seaweedfs.md) |
