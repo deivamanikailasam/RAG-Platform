@@ -1,0 +1,7 @@
+# Rules every card is checked against (`just cards lint`). Changing this file needs the
+# platform owner's review, like any policy.
+allowed_licences:                  # SPDX ids. Anything else needs legal review first, then a line here.
+  - apache-2.0
+  - mit
+  - bsd-3-clause
+licence_review_days: 365           # re-read each model's licence at least yearly: terms can change

@@ -335,3 +335,9 @@ prompts-check-main:
     git fetch -q origin main
     git show origin/main:prompts/prompts.lock.json > .git/main-prompts.lock.json 2>/dev/null || : > .git/main-prompts.lock.json
     uv run python scripts/prompts.py lint --against .git/main-prompts.lock.json
+
+# ---- Cards and lineage (Step 25) ----
+# just cards lint [--strict] | docs [--check] | impact <kind:id> | lineage <kind:id>
+[positional-arguments]
+cards *args:
+    uv run python scripts/cards.py "$@"

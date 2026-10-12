@@ -1,0 +1,38 @@
+kind: dataset
+id: company-documents
+title: Company documents (the source corpus)
+status: approved
+owner: knowledge-management        # the DATA owner: decides what goes in and who may read it
+role: source
+summary: >-
+  The original files the assistant answers from: policies, handbooks, procedures and reports,
+  each with its classification and access groups. Everything else is derived from this.
+locations:
+  - s3://rag-raw-docs (originals, versioned, Step 14)
+  - Postgres rag.documents (metadata, ACL groups, classification, object-version lineage, Step 11/14)
+provenance: >-
+  Exported from the company's document systems by the ingestion worker (Step 31); every row
+  records the exact object version it came from, so any answer can be traced to a file version.
+classification_max: restricted
+personal_data: true
+personal_data_notes: >-
+  Names, roles and contact details of staff appear in documents; some HR documents contain more.
+  No special-category data should be ingested without a separate assessment.
+legal_basis: >-
+  Legitimate interest of the employer in making internal documents findable (to be confirmed by
+  the data protection officer in a DPIA before production use).
+retention: Follows the source system; deleted or expired files are removed within 7 days (Step 36).
+deletion: >-
+  Deleting a document soft-deletes its row, removes its chunks from every index and expires its
+  object versions (Step 36 deletion flow); derived datasets inherit the deletion.
+access: ACL groups per document, enforced by the policy (Step 18) before anything is retrieved.
+terms:
+  id: internal
+  url: docs/security/access-policy.md
+known_limitations:
+  - Coverage depends on which systems are connected; absence of a document isn't proof it doesn't exist
+  - Classifications are only as good as the people who set them
+last_reviewed: 2026-10-12
+review_every_days: 90
+approvals:
+  - {by: you, date: 2026-10-12, note: "data owner sign-off pending in a real company"}

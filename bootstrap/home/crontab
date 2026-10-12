@@ -4,3 +4,6 @@
 # ---- Audit log (Step 23): anchor hourly, verify daily ----
 5 * * * *   cd ~/dev/rag-platform && just audit-anchor >> ~/Library/Logs/audit-anchor.log 2>&1
 30 4 * * *  cd ~/dev/rag-platform && just audit-verify >> ~/Library/Logs/audit-verify.log 2>&1
+
+# ---- Cards (Step 25): weekly strict check, Monday 08:00, until CI does it in Step 27 ----
+0 8 * * 1   cd ~/dev/rag-platform && just cards lint --strict >> ~/Library/Logs/cards-weekly.log 2>&1

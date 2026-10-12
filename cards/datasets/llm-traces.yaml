@@ -1,0 +1,28 @@
+kind: dataset
+id: llm-traces
+title: LLM traces in Langfuse
+status: approved
+owner: rag-platform
+role: operational
+summary: >-
+  Per-request records of what was asked and retrieved, for debugging and evaluation (Step 22).
+inputs:
+  - system:rag-api
+locations:
+  - Self-hosted Langfuse (ClickHouse, Postgres, the langfuse bucket), Step 22
+provenance: Written by rag-api's Langfuse client for every search.
+classification_max: internal
+personal_data: true
+personal_data_notes: >-
+  Questions (masked for e-mails, tokens and keys, but free text can still contain names) and the
+  pseudonymous user id (sub). Titles of confidential and restricted documents are withheld.
+legal_basis: Legitimate interest in operating and improving the service, limited to 30 days.
+retention: 30 days, enforced by the nightly retention job (Step 22).
+deletion: The retention job; individual traces can be deleted by trace id or user id via the API.
+access: Langfuse login, few named people, sign-up disabled.
+known_limitations:
+  - Masking is pattern-based; unusual personal data passes through
+last_reviewed: 2026-10-12
+review_every_days: 90
+approvals:
+  - {by: you, date: 2026-10-12}

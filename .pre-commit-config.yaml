@@ -78,6 +78,12 @@ repos:
         language: system
         files: ^prompts/
         pass_filenames: false
+      - id: cards
+        name: cards (rules, cross-checks, generated docs up to date)
+        entry: bash -c 'uv run python scripts/cards.py lint && uv run python scripts/cards.py docs --check'
+        language: system
+        files: ^(cards/|prompts/|docs/cards/|infra/model-serving/models\.yaml|infra/config/litellm/)
+        pass_filenames: false
       - id: prompts-check-main
         name: released prompts unchanged vs main (before push)
         entry: just prompts-check-main
