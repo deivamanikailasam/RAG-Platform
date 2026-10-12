@@ -9,6 +9,7 @@ umask 077                                    # new files readable by you only
 trap 'grep -q "^sops_mac=" "$out" 2>/dev/null || rm -f "$out"' EXIT
 
 rand() { openssl rand -base64 48 | tr -d '/+=\n' | cut -c1-32; }   # 32 random letters/digits
+ospw() { echo "$(openssl rand -base64 24 | tr -d '/+=\n')#9Qx"; }   # OpenSearch password policy: all 4 character classes
 
 cat > "$out" <<EOF
 # --- Data stores (Steps 11-15) ---
@@ -20,6 +21,10 @@ RAG_DB_READONLY_PASSWORD=$(rand)
 # --- Qdrant (Step 12): admin key (also signs JWTs) and read-only key ---
 QDRANT_API_KEY=$(openssl rand -hex 32)
 QDRANT_READ_ONLY_API_KEY=$(openssl rand -hex 32)
+# --- OpenSearch (Step 13): strong passwords (upper, lower, digit, symbol) or OpenSearch refuses them ---
+OPENSEARCH_ADMIN_PASSWORD=$(ospw)
+OPENSEARCH_SEARCH_PASSWORD=$(ospw)
+OPENSEARCH_INDEXER_PASSWORD=$(ospw)
 MINIO_ROOT_USER=rag-admin
 MINIO_ROOT_PASSWORD=$(rand)
 REDIS_PASSWORD=$(rand)

@@ -213,3 +213,10 @@ qdrant-health:
 # Create a Qdrant snapshot of the live collection (stored in the qdrant-snapshots volume)
 qdrant-snapshot:
     sops exec-env secrets/dev.enc.env 'curl -sf -X POST -H "api-key: $QDRANT_API_KEY" http://127.0.0.1:6333/collections/rag_chunks_qwen3e06b_v1/snapshots | jq -c .result'
+
+# OpenSearch: cluster health (admin) and index document counts
+os-health:
+    sops exec-env secrets/dev.enc.env 'curl -sk -u "admin:$OPENSEARCH_ADMIN_PASSWORD" https://127.0.0.1:9200/_cluster/health | jq -c "{status, number_of_nodes, active_shards}"'
+
+os-count:
+    sops exec-env secrets/dev.enc.env 'curl -sk -u "rag_search:$OPENSEARCH_SEARCH_PASSWORD" https://127.0.0.1:9200/rag-chunks/_count | jq .count'
