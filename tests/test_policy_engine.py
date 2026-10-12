@@ -6,7 +6,7 @@ the Keycloak realm; OPA 1.21.x runs in Compose pinned by tag + digest, non-root,
 token authentication, system.authz authorisation, tests ignored, decision logs on and the policies
 mounted read-only; rag-api gets the OPA URL and token (as a FILE) and starts after OPA; the token is
 generated and documented; ``just policy-check`` exists and ``just check`` calls it; Regal is told
-about data.json; the Brewfile installs opa and regal.
+about data.json; the Brewfile installs opa and regal; ADR-0018 is recorded.
 
 When the ``opa`` binary is on PATH the policy suite itself runs (``opa check --strict`` and
 ``opa test`` with the 90% coverage threshold); otherwise those tests are skipped.
@@ -34,6 +34,7 @@ DATA = POLICIES / "rag" / "authz" / "data.json"
 COMPOSE = REPO / "infra" / "compose" / "compose.yaml"
 REALM_FILE = REPO / "infra" / "config" / "keycloak" / "realm-rag.json"
 JUSTFILE = REPO / "justfile"
+ADR = REPO / "docs" / "adr" / "0018-use-opa-as-the-policy-decision-point.md"
 OPA = "http://127.0.0.1:8181"
 LEVELS = {"public", "internal", "confidential", "restricted"}
 
@@ -217,6 +218,15 @@ def test_brewfile_installs_opa_and_regal() -> None:
     brewfile = (REPO / "bootstrap" / "Brewfile").read_text()
     assert re.search(r'^brew "opa"', brewfile, re.M)
     assert re.search(r'^brew "regal"', brewfile, re.M)
+
+
+def test_adr() -> None:
+    adr = ADR.read_text()
+    assert adr.startswith("# ADR-0018: Use OPA as the policy decision point")
+    assert "- **Status:** Accepted" in adr
+    for fact in ("Deny by default", "system.authz", "503", "readable_ids", "OpenFGA"):
+        assert fact in adr
+    assert ADR.name in (ADR.parent / "README.md").read_text()
 
 
 # --- live OPA (opt-in) ------------------------------------------------------------------------

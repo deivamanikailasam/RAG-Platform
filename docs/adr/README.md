@@ -19,5 +19,6 @@
 | [0015](0015-use-valkey-for-cache-queues-and-locks.md) | Use Valkey for cache, queues and locks | Accepted |
 | [0016](0016-use-keycloak-for-identity.md) | Use Keycloak for identity | Accepted |
 | [0017](0017-validate-jwts-locally-in-every-service.md) | Validate JWTs locally in every service | Accepted |
+| [0018](0018-use-opa-as-the-policy-decision-point.md) | Use OPA as the policy decision point | Accepted |
 
 New ADR: `just adr "Short title"`, then fill it in and add a row here.
