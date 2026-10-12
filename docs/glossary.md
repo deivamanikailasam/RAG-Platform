@@ -61,6 +61,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Cache key | The value a cache looks answers up by. It must include everything that changes the answer (prompt with retrieved context, model, parameters, user's permission scope, tenant), or answers leak between users. | 15 |
 | Cache poisoning | A wrong, stale or someone-else's answer stored in a cache and then served to other requests, e.g. because the cache key left out the permission scope. | 15 |
 | Cap (deny overrides) | A limit that beats any grant: a contractor in `executives` still only reaches `internal`, because caps in `capped_groups` always win over group clearances. | 18 |
+| Card status | Where a component is in its life: `planned → candidate → approved → deprecated → retired`; only approved or candidate models may be served. | 25 |
 | Cardinality | How many distinct values a label has. User ids as metric labels create one time series per user: slow dashboards and big bills; keep labels to small fixed sets like `outcome` = ok or error. | 19 |
 | Cask | A Homebrew package that is a normal Mac app with a window. | 1 |
 | Chat template | The model-specific recipe that turns a list of messages into the exact text format the model was trained on. | 7 |
@@ -95,10 +96,12 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Counter (metric) | A number that only goes up, such as requests served; dashboards turn it into a rate. | 19 |
 | Cross-encoder | A model (the reranker) that reads the query and one document together and scores their relevance; precise but slow, so only used on a shortlist. | 8 |
 | Crypto-shredding | Making data unreadable by destroying a key or a lookup instead of deleting it; reconciles "never delete" with the right to erasure (e.g. deleting the Keycloak account behind an audit `sub`). | 23 |
+| DAG (directed acyclic graph) | Arrows with no loops. Lineage must be one, or "what was this built from?" has no answer. | 25 |
 | Dashboards as code | Generating dashboard definitions (Grafana JSON) from reviewed code in Git (`scripts/build_dashboards.py`) instead of clicking in the UI, with a check that fails when the committed JSON is out of date. | 20 |
 | Data filtering / partial evaluation (OPA) | OPA evaluating a policy with some facts still unknown and turning the rest into a filter, even a SQL `WHERE` clause, that a database can apply. | 18 |
 | Data key | The random key SOPS creates per file to lock every value; it is itself locked once per recipient. | 6 |
 | Data retention | How long data is kept before it is deleted; for Langfuse traces, 30 days, enforced by our own nightly job because automatic retention is an Enterprise feature when self-hosted. | 22 |
+| Dataset card / datasheet | A short document about a dataset: provenance, every location, personal data and legal basis, retention, deletion route, access, gaps. | 25 |
 | Dead-letter queue (DLQ) | Where jobs go after failing too many times (here: 3 deliveries), so they stop retrying forever and a human can inspect them. | 15 |
 | Decision log | OPA's record of every decision (input, result, path, time, `decision_id`), written as JSON; the audit evidence for "who was allowed what, and why". | 18 |
 | Decode | The second phase of generation: the model writes the answer one token at a time; its speed is limited by memory bandwidth. | 7 |
@@ -121,6 +124,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Distributed lock | A short-lived "I'm working on this" marker shared by all workers (`SET key token NX PX 30000`): only one holder, expires on its own, released only with the owner's token. | 15 |
 | Docker Compose | A file (`compose.yaml`) listing many containers and how they connect; `docker compose up` starts them all. | 3 |
 | Docker engine / CLI | The engine runs containers inside the VM; the `docker` command is how you talk to it. | 3 |
+| Downstream | Everything that depends on a component, directly or through others; what an impact analysis lists. | 25 |
 | Drift | When the dependency list (`pyproject.toml`) and the lockfile (`uv.lock`) no longer match; `uv sync --locked` catches it. | 2 |
 | Dual logging | Docker keeping a local copy of a container's recent output even when a remote logging driver (like `fluentd`) ships it elsewhere, so `docker compose logs` keeps working. | 21 |
 | EditorConfig | A small `.editorconfig` file telling every editor the same formatting basics (indentation, line endings). | 4 |
@@ -176,6 +180,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Image | The frozen blueprint a container is started from: a program plus all its dependencies. | 3 |
 | Image tag vs digest | A tag (`v1.104.0`) is a movable label; a digest (`@sha256:…`) is the exact, unchangeable fingerprint of one image. | 9 |
 | Immutability (prompt versions) | A released prompt version can never change; a change means a new version, so `name@version` always means the same text. | 24 |
+| Impact analysis | Following lineage downstream to find everything affected by a change, and who owns it (`just cards impact`). | 25 |
 | Info metric | A metric whose value is always 1 and whose labels carry facts, e.g. `rag_prompt_info{prompt, version, sha, label}`; a Prometheus convention for "what is running". | 24 |
 | Inhibition | An Alertmanager rule that mutes some alerts while another fires: here a critical alert mutes its warning twin with the same `alertname` and `service`. | 20 |
 | In-memory key-value store | A database that keeps data in RAM and retrieves it by a key (a name). Extremely fast, but limited by memory; Valkey and Redis are examples. | 15 |
@@ -203,6 +208,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Label (prompt) | A movable pointer from an environment to a prompt version ("production uses version 1, staging uses version 2"), kept in `prompts/labels.yaml`. | 24 |
 | launchd | macOS's built-in service manager: starts programs at login and restarts them if they crash (agents live in `~/Library/LaunchAgents/`). | 7 |
 | Least privilege | Giving each identity only the access it needs and nothing more. | 10 |
+| Legal basis (GDPR) | The reason that makes processing personal data lawful (contract, legal obligation, legitimate interest…); required on every dataset card with personal data. | 25 |
 | Legal hold | An indefinite object lock with no date, applied during investigations, until someone explicitly removes it. | 14 |
 | Lifecycle rule | An automatic action on objects by age, e.g. "delete temp files after 1 day" or "expire old versions after 90 days". | 14 |
 | Line filter (LogQL) | A LogQL step that keeps only lines containing (`|=`), not containing (`!=`) or matching (`|~`) some text, e.g. `|= "4bf92f35…"` to find one request's lines. | 21 |
@@ -232,11 +238,14 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Meaning space | The many-dimensional map an embedding model places texts on, where similar meanings sit close together. | 8 |
 | Memory bandwidth | How fast data moves between memory and the GPU; each decoded token reads the model's weights, so it is the speed limit for tokens per second. | 7 |
 | Merkle tree | A tree of hashes in which each parent hashes its children; allows small proofs that an entry is included in a large log. | 23 |
+| Mermaid | A text format for diagrams that GitHub and many wikis render automatically; `docs/cards/README.md` draws the lineage with it. | 25 |
 | Metric | A number measured over time (requests per second, latency, errors); answers "is something wrong?". | 19 |
 | MFA / TOTP | Multi-factor authentication: a second proof besides the password. TOTP is the six-digit, time-based code from an authenticator app. | 16 |
 | Migration | A versioned, reviewable script that changes the database structure, applied in order and recorded in the database. | 11 |
 | Mixture of Experts (MoE) | A model that stores many specialist sub-networks but uses only a few per token: memory like a big model, speed like a small one. | 7 |
+| ML-BOM | A machine-readable bill of materials listing models and datasets (CycloneDX ML-BOM, SPDX 3 AI/Dataset profiles). | 25 |
 | Model alias (model group) | The public role name clients use, such as `qwen-fast`; LiteLLM calls it `model_name`. | 9 |
+| Model card | A short document about one model: what it is, where it came from, intended use and out-of-scope use, limits, risks, evaluation, licence. | 25 |
 | Model inventory | A reviewed list of which exact models a platform serves: repo, revision, licence, port, role and who approved it (`infra/model-serving/models.yaml`). | 7 |
 | Model revision | The exact git commit (40-character SHA) of a model repository on Hugging Face; the same name isn't always the same model. | 7 |
 | Monorepo | One repository holding all services, libraries, infrastructure and docs. | 4 |
@@ -260,6 +269,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Open core | A free (here MIT-licensed) core product plus paid Enterprise features; Langfuse's model. | 22 |
 | OpenAI-compatible API | The same request and response format as OpenAI's API, so any tool that speaks "OpenAI" can call a local model. | 7 |
 | OpenFGA | A CNCF relationship-based (ReBAC) authorisation engine modelled on Google's Zanzibar: "shared with", folder inheritance, team membership. Planned for the permission-aware RAG project. | 18 |
+| OpenLineage | An open standard for lineage events emitted by pipelines ("job X read A, wrote B"); Marquez is its reference server. Lineage observed, not declared. | 25 |
 | OpenTelemetry | The CNCF open standard (APIs, SDKs, protocol, Collector) for producing and shipping traces, metrics and logs, supported by every major vendor. | 19 |
 | OrbStack | A lightweight macOS container runtime: Linux VM + Docker engine + Compose + single-node Kubernetes. | 3 |
 | OTLP | The OpenTelemetry protocol that carries all three signals: gRPC on port 4317, HTTP on 4318. | 19 |
@@ -303,6 +313,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Prompts as code | Keeping prompts as files in git, so they get reviews, history and CI like code. | 24 |
 | PromQL | Prometheus's query language: select series by name and labels, then compute with functions like `rate()`, `increase()`, `sum by (…)` and `histogram_quantile`. | 20 |
 | Protocol mapper | A Keycloak rule that puts an extra fact into tokens, such as the `groups` claim or an extra audience. | 16 |
+| Provenance | Where something came from, and how it was made. | 25 |
 | Provider prefix | The part of a LiteLLM `model` before the first `/` (e.g. `openai/`): which API protocol to speak to the backend. | 9 |
 | Provisioning (Grafana) | Grafana reading its data sources and dashboards from files at start-up, so they are code in Git rather than settings clicked into its database. | 20 |
 | Pseudonymous id | A stable identifier (like a token's `sub`) that points to a person without naming them; the name is looked up elsewhere, under its own access rules. | 23 |
@@ -341,6 +352,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Retrieve-then-rerank | The two-stage search pattern: a fast embedder finds ~50 candidates, then a slow, precise reranker picks the best few for the LLM. | 8 |
 | Retry | Trying the same model again after a temporary error, before any fallback. | 10 |
 | Reverse proxy | A server that sits in front of other servers, receives every request, applies rules and forwards it. | 9 |
+| Review interval | How often a card must be re-read and re-confirmed (e.g. every 90 or 180 days); overdue reviews warn and fail the weekly strict run. | 25 |
 | Revocation | Making an old secret stop working, e.g. deleting an API token. | 6 |
 | RFC 3161 timestamp | A signed statement from a timestamping authority that some hash existed at a given time. | 23 |
 | Role / privilege (database) | A database identity / what it's allowed to do (connect, read, write, create tables). | 11 |
@@ -383,6 +395,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Signal | One kind of telemetry: traces, metrics or logs. | 19 |
 | Signed commit | A commit stamped with your private key so GitHub can show it as Verified (really from you). | 4 |
 | Silence | A deliberate, time-limited mute of matching alerts in Alertmanager, e.g. during planned maintenance; stored so it survives restarts. | 20 |
+| Single source of truth | Each fact lives in exactly one file; other places check it rather than copy it. | 25 |
 | Single-pass rendering | Filling placeholders once: text that was inserted is never scanned again, so a user typing `{{context}}` can't pull in other values. | 24 |
 | SLI / SLO / SLA | Service level Indicator (what you measure, e.g. the share of searches that succeed) / Objective (your internal target, 99% over 28 days) / Agreement (the contractual promise to customers, set looser than the SLO). | 20 |
 | Snapshot | A point-in-time backup file of a collection. | 12 |
@@ -391,6 +404,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Span | One timed step in a request: name, start, duration, status and attributes. | 19 |
 | Span metrics | Request rate, errors and duration per service and span name (`traces_spanmetrics_*`), computed from traces by Tempo's metrics generator. | 21 |
 | Sparse vector | A vector that's mostly zeros, stored as (position, value) pairs; used for keyword-like retrieval (SPLADE, BM25-style). | 12 |
+| SPDX licence id | The standard short name for a licence (`apache-2.0`, `mit`), so tools can compare them. | 25 |
 | Speculative decoding | A small draft model guesses a few tokens ahead and the big model checks them in one pass, speeding up decoding (`--draft-model`). | 7 |
 | Squash merge | Merging a PR so all its small commits become one clean commit on `main`. | 4 |
 | src layout | Putting a package's code under `src/<name>/` so tests import the installed package, not the raw folder. | 4 |
@@ -406,6 +420,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Structured metadata (Loki) | Extra per-line key/value facts (such as OTLP attributes) that Loki stores and can search without turning them into labels, so they don't create new streams. | 21 |
 | Supersede | Replace an accepted ADR with a newer ADR that points back to it; the old one is never edited. | 4 |
 | Synonyms (search) | Rules treating different terms as equivalent ("wfh" = "work from home" = "remote work"), best applied at query time with `synonym_graph`. | 13 |
+| System card | A short document about an application built from models and data: purpose, users, human oversight, risk assessment. | 25 |
 | Table lock | A lock on a whole table; `LOCK TABLE … IN EXCLUSIVE MODE` lets only one writer append at a time (so the chain can't fork) while readers carry on. | 23 |
 | Tamper-evident vs tamper-proof | Evident: changes can't be hidden. Proof: changes are impossible. Nothing digital is tamper-proof against its own administrators; evident is the honest goal. | 23 |
 | Team (LiteLLM) | A group of virtual keys sharing a budget and a model list, e.g. a department or product. | 10 |
@@ -440,6 +455,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Type checker | A tool (e.g. `mypy`) that reads type hints and checks they are used consistently, catching wrong-kind-of-value bugs before running. | 5 |
 | Type hint | A label saying what kind of value a variable or function expects or returns, e.g. `def chunk(text: str) -> list[str]`. | 5 |
 | Unified memory | Apple Silicon memory shared by the CPU and GPU; every GB given to the container VM is a GB the models lose. | 3 |
+| Upstream | Everything a component was built from, directly or indirectly (`just cards lineage`). | 25 |
 | uv | Astral's all-in-one Python tool: interpreters, virtual environments, locking and tool installs. | 2 |
 | Valkey | The open-source (BSD), Redis-compatible in-memory store maintained under the Linux Foundation, forked from Redis in 2024 after Redis's licence change. | 15 |
 | Version (prompt) | One frozen edition of a prompt, a file `prompts/<name>/v<N>.yaml`; `rag-answer@2` always means the same text. | 24 |
