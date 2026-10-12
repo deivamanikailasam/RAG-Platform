@@ -246,6 +246,72 @@ services:
       resources:
         limits: { memory: 768m, cpus: "1" }     # a bit above maxmemory for overhead
 
+  keycloak-db:                                                # Keycloak's own private database (Step 16)
+    image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24   # same pinned image as litellm-db
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD_FILE: /run/secrets/keycloak_db_password
+    secrets: [keycloak_db_password]
+    volumes:
+      - keycloak-db-data:/var/lib/postgresql/data
+    # no "ports:": only Keycloak needs it
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits: { memory: 512m, cpus: "1" }
+
+  keycloak:                                                   # identity provider: realm "rag", users, groups, tokens (Step 16)
+    image: quay.io/keycloak/keycloak:26.8.0@sha256:27b3230fbabb8c9ff3c66c864cf09dcd8a41aca82e5100679d109ef0eeb05741   # pin by digest (Step 9 method)
+    # Keycloak reads passwords from environment variables, and the realm file's ${...} placeholders are
+    # filled from them too. A tiny wrapper reads the secret FILES and exports them inside the process only.
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        export KC_BOOTSTRAP_ADMIN_PASSWORD="$$(cat /run/secrets/keycloak_admin_password)"
+        export KC_DB_PASSWORD="$$(cat /run/secrets/keycloak_db_password)"
+        export KEYCLOAK_INGESTION_SECRET="$$(cat /run/secrets/keycloak_ingestion_secret)"
+        export KEYCLOAK_PROVISIONER_SECRET="$$(cat /run/secrets/keycloak_provisioner_secret)"
+        exec /opt/keycloak/bin/kc.sh start --import-realm
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak   # no password here (KC_DB_PASSWORD); gitleaks:allow
+      KC_DB_USERNAME: keycloak
+      KC_HOSTNAME: http://localhost:8180              # the one public address; becomes the token issuer
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"         # containers may call it as http://keycloak:8080
+      KC_HTTP_ENABLED: "true"                         # plain HTTP only because it's bound to 127.0.0.1
+      KC_HEALTH_ENABLED: "true"                       # /health/* on management port 9000
+      KC_METRICS_ENABLED: "true"                      # /metrics on port 9000, for Prometheus (Step 20)
+      KC_CACHE: local                                 # single node; clustering comes with Kubernetes
+      KC_LOG_CONSOLE_OUTPUT: json                     # structured logs, for Loki (Step 21)
+      KC_BOOTSTRAP_ADMIN_USERNAME: temp-admin         # used only on the very first start
+    secrets: [keycloak_admin_password, keycloak_db_password, keycloak_ingestion_secret,
+              keycloak_provisioner_secret]
+    volumes:
+      - ../config/keycloak/realm-rag.json:/opt/keycloak/data/import/realm-rag.json:ro
+    ports:
+      - "127.0.0.1:8180:8080"                         # 9000 (health/metrics) is NOT published
+    depends_on:
+      keycloak-db: { condition: service_healthy }
+    healthcheck:
+      # the image has no curl; bash talks HTTP to the readiness endpoint directly
+      test: ["CMD", "bash", "-c", "{ printf 'HEAD /health/ready HTTP/1.0\\r\\n\\r\\n' >&0; grep -q 'HTTP/1.0 200'; } 0<>/dev/tcp/localhost/9000"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits: { memory: 1536m, cpus: "2" }
+
 volumes:
   litellm-db-data:                                            # keys, teams, budgets and spend logs live here
   rag-db-data:                                                # documents, chunks and vectors (Step 11)
@@ -254,6 +320,7 @@ volumes:
   opensearch-data:                                            # OpenSearch indices (Step 13): rebuildable from rag-db
   object-store-data:                                          # original files and their versions (Step 14): NOT rebuildable, back it up
   valkey-data:                                                # Valkey RDB snapshots + AOF log (Step 15): cache is disposable, queued jobs are not
+  keycloak-db-data:                                           # Keycloak's users, sessions, events and realm settings (Step 16): back it up
 
 secrets:
   litellm_master_key:
@@ -296,3 +363,11 @@ secrets:
     environment: VALKEY_LITELLM_PASSWORD        # litellm: gateway response cache (all keys, no @dangerous)
   valkey_app_password:
     environment: VALKEY_APP_PASSWORD            # rag_app: rag:* keys only, no @dangerous / @admin
+  keycloak_admin_password:
+    environment: KEYCLOAK_ADMIN_PASSWORD        # temp-admin, first start only (Step 16): replace it with your own MFA admin
+  keycloak_db_password:
+    environment: KEYCLOAK_DB_PASSWORD           # keycloak-db
+  keycloak_ingestion_secret:
+    environment: KEYCLOAK_INGESTION_SECRET      # ingestion-worker client secret (client credentials)
+  keycloak_provisioner_secret:
+    environment: KEYCLOAK_PROVISIONER_SECRET    # rag-provisioner client secret: manages users only

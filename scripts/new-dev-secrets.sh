@@ -38,8 +38,11 @@ S3_READER_SECRET_KEY=$(gen_sk)
 VALKEY_ADMIN_PASSWORD=$(rand)
 VALKEY_LITELLM_PASSWORD=$(rand)
 VALKEY_APP_PASSWORD=$(rand)
-# --- Identity (Step 16) ---
+# --- Identity (Step 16): temporary bootstrap admin, Keycloak's database, two machine-client secrets ---
 KEYCLOAK_ADMIN_PASSWORD=$(rand)
+KEYCLOAK_DB_PASSWORD=$(rand)
+KEYCLOAK_PROVISIONER_SECRET=$(rand)
+KEYCLOAK_INGESTION_SECRET=$(rand)
 # --- Gateway (Step 9): LiteLLM master keys must start with sk- ---
 LITELLM_MASTER_KEY=sk-$(rand)
 # --- Gateway database and salt key (Step 10). The salt key encrypts what LiteLLM stores: NEVER rotate it casually ---
