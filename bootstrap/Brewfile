@@ -10,3 +10,7 @@ brew "tree"                 # inspect folder structures
 
 # ---- Python toolchain (Step 2) ----
 brew "uv"                   # Python versions, venvs, dependency locking, tool installs; replaces pip/pyenv/pipx/pip-tools
+
+# ---- Containers (Step 3) ----
+cask "orbstack"             # Linux VM + Docker engine + CLI + Compose + single-node Kubernetes (used in Step 29)
+brew "dive"                 # inspect image layers: find bloat and accidentally baked-in secrets

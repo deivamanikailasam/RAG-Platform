@@ -14,3 +14,4 @@ Phases: **A** Workstation · **B** Model serving · **C** Data stores · **D** I
 |---:|---|---|---|
 | 1 | Homebrew and the Brewfile | A · Workstation | [step-01-homebrew-brewfile.md](step-01-homebrew-brewfile.md) |
 | 2 | Python toolchain with uv | A · Workstation | [step-02-python-uv.md](step-02-python-uv.md) |
+| 3 | Container runtime: native models, containerised services | A · Workstation | [step-03-container-runtime.md](step-03-container-runtime.md) |
