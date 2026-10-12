@@ -15,5 +15,6 @@
 | [0011](0011-use-postgres-with-pgvector-as-the-primary-document-and-vector-store.md) | Use Postgres with pgvector as the primary document and vector store | Accepted |
 | [0012](0012-use-qdrant-as-a-derived-vector-index-alongside-postgres.md) | Use Qdrant as a derived vector index alongside Postgres | Accepted |
 | [0013](0013-use-opensearch-for-keyword-and-hybrid-search-as-a-derived-index.md) | Use OpenSearch for keyword and hybrid search as a derived index | Accepted |
+| [0014](0014-use-seaweedfs-as-the-s3-compatible-object-store-instead-of-minio.md) | Use SeaweedFS as the S3-compatible object store instead of MinIO | Accepted |
 
 New ADR: `just adr "Short title"`, then fill it in and add a row here.
