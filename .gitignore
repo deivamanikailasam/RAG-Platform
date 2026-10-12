@@ -1,0 +1,34 @@
+# --- Python ---
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# --- Secrets: never commit (Step 6 handles these properly) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- Data and models: far too big for git, and may be sensitive ---
+data/
+models/
+*.gguf
+*.safetensors
+*.bin
+*.parquet
+
+# --- OS / editor clutter ---
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.direnv/

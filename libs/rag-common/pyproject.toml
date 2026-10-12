@@ -1,0 +1,14 @@
+[project]
+name = "rag-common"
+version = "0.1.0"
+description = "Shared library imported by every RAG platform service (Step 4; grows in later steps)"
+readme = "README.md"
+authors = [
+    { name = "deivamanikailasam", email = "80557361+deivamanikailasam@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+dependencies = []
+
+[build-system]
+requires = ["uv_build>=0.11.32,<0.12.0"]
+build-backend = "uv_build"

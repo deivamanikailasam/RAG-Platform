@@ -1,0 +1,12 @@
+# Normalise all text files to LF line endings in the repository
+* text=auto eol=lf
+
+# Treat these as binary: never diff or change line endings
+*.png binary
+*.jpg binary
+*.pdf binary
+*.gguf binary
+*.safetensors binary
+
+# Collapse the lockfile in GitHub diffs (it's generated)
+uv.lock linguist-generated=true

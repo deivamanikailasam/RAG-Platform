@@ -1,0 +1,4 @@
+# Every change needs review from the owner. Teams would list different owners per folder, e.g.:
+#   /infra/           @platform-team
+#   /evals/           @ml-quality-team
+*       @deivamanikailasam
