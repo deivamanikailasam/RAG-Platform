@@ -1,0 +1,45 @@
+# LiteLLM gateway: role names (model_name) -> real backends on the Mac.
+# Clients only ever use the role names. Change a backend here, not in apps.
+
+model_list:
+  - model_name: qwen-quality                                  # careful answers, synthesis
+    litellm_params:
+      model: openai/mlx-community/Qwen3.8-27B-8bit            # "openai/" = OpenAI protocol; the rest is the EXACT id mlx loaded
+      api_base: http://host.docker.internal:8081/v1
+      api_key: "not-used"                                     # mlx-lm has no auth; LiteLLM requires a non-empty value
+      timeout: 600                                            # long answers on a 27B model can take minutes
+    model_info:
+      mode: chat
+
+  - model_name: qwen-fast                                     # rewriting, routing, quick replies (thinking off at the server)
+    litellm_params:
+      model: openai/lmstudio-community/Qwen3.6-35B-A3B-MLX-4bit   # use YOUR exact repo id (Step 7)
+      api_base: http://host.docker.internal:8082/v1
+      api_key: "not-used"
+      timeout: 120
+    model_info:
+      mode: chat
+
+  - model_name: embedder                                      # TEI OpenAI-compatible route; served name from Step 8
+    litellm_params:
+      model: openai/qwen3-embedding-0.6b
+      api_base: http://host.docker.internal:8083/v1
+      api_key: os.environ/TEI_API_KEY
+    model_info:
+      mode: embedding
+
+  - model_name: reranker                                      # TEI /rerank via LiteLLM's Hugging Face rerank provider
+    litellm_params:
+      model: huggingface/BAAI/bge-reranker-v2-m3
+      api_base: http://host.docker.internal:8084
+      api_key: os.environ/TEI_API_KEY
+    model_info:
+      mode: rerank
+
+litellm_settings:
+  drop_params: true             # silently drop OpenAI parameters a backend doesn't support, instead of erroring
+  num_retries: 1                # one retry on transient errors (fallbacks come in Step 10)
+  request_timeout: 600
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY

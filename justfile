@@ -7,6 +7,9 @@ serve         := "HF_HUB_OFFLINE=1 uv run --project infra/model-serving mlx_lm.s
 embed_model   := "Qwen/Qwen3-Embedding-0.6B"
 rerank_model  := "BAAI/bge-reranker-v2-m3"
 
+# Container stack (Step 9): one Compose file for every platform service
+compose       := "docker compose -f infra/compose/compose.yaml"
+
 # List available recipes (runs when you type just "just")
 default:
     @just --list
@@ -145,3 +148,27 @@ embed-demo:
 
 bench-embed:
     sops exec-env secrets/dev.enc.env "uv run scripts/bench_embeddings.py"
+
+# Start / stop the container stack (secrets decrypted in memory)
+up:
+    sops exec-env secrets/dev.enc.env '{{compose}} up -d'
+    {{compose}} ps
+
+down:
+    {{compose}} down
+
+ps:
+    {{compose}} ps
+
+# Follow logs of one service:   just logs litellm
+logs service="litellm":
+    {{compose}} logs -f --tail 100 {{service}}
+
+# Gateway checks
+gateway-health:
+    @curl -sf http://127.0.0.1:4000/health/liveliness > /dev/null && echo "  gateway :4000 alive" || echo "  gateway :4000 DOWN"
+    @curl -sf http://127.0.0.1:4000/health/readiness | jq -c . || true
+
+# End-to-end smoke test through the gateway (chat, streaming, embeddings, rerank, security checks)
+gateway-smoke:
+    sops exec-env secrets/dev.enc.env "uv run --with openai scripts/gateway_smoke.py"
