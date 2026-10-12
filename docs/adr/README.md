@@ -12,5 +12,6 @@
 | [0008](0008-serve-embeddings-and-reranking-with-tei-natively-behind-an-api-key.md) | Serve embeddings and reranking with TEI natively, behind an API key | Accepted |
 | [0009](0009-route-all-model-access-through-a-litellm-gateway.md) | Route all model access through a LiteLLM gateway | Accepted |
 | [0010](0010-govern-model-access-with-virtual-keys-budgets-shadow-prices-and-fallbacks.md) | Govern model access with virtual keys, budgets, shadow prices and fallbacks | Accepted |
+| [0011](0011-use-postgres-with-pgvector-as-the-primary-document-and-vector-store.md) | Use Postgres with pgvector as the primary document and vector store | Accepted |
 
 New ADR: `just adr "Short title"`, then fill it in and add a row here.
