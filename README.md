@@ -5,7 +5,8 @@ Local-first, enterprise-grade RAG platform (Project 0 of the RAG curriculum).
 ## Quick start
     just bootstrap     # install system tools from bootstrap/Brewfile
     just sync          # install Python packages for every workspace member
-    just check         # verify tools and lockfile are in sync
+    just install-hooks # install the git hooks (pre-commit, commit-msg, pre-push) once per clone
+    just check         # every gate CI runs: tools, lockfile, all hooks and tests
 
 ## Layout
 - `libs/` shared Python packages · `services/` deployable apps · `infra/` compose, k8s, config

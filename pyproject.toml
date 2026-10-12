@@ -6,10 +6,58 @@ requires-python = ">=3.12,<3.13"   # pinned to 3.12, see ADR-0003
 dependencies = []
 
 [dependency-groups]
-dev = []                           # shared dev tools (ruff, pytest…) arrive in Step 5
+dev = [
+    "mypy>=2.4.0",
+    "pre-commit>=4.6.2",
+    "pytest>=9.1.1",
+    "ruff>=0.17.0",
+]                                  # shared dev tools (Step 5), locked in uv.lock
 
 [tool.uv]
 package = false                    # the root is a container for members, not a package itself
 
 [tool.uv.workspace]
 members = ["libs/*"]               # add "services/*" when the first service exists (Step 9)
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle: basic style errors and warnings
+    "F",        # pyflakes: unused imports/variables, undefined names
+    "I",        # isort: import ordering
+    "B",        # flake8-bugbear: likely bugs (mutable defaults, etc.)
+    "UP",       # pyupgrade: use modern Python syntax
+    "SIM",      # flake8-simplify: simpler equivalent code
+    "N",        # pep8-naming: naming conventions
+    "S",        # flake8-bandit: security issues (eval, hardcoded passwords, etc.)
+    "C4",       # flake8-comprehensions: cleaner list/dict comprehensions
+    "PT",       # flake8-pytest-style: consistent tests
+    "T20",      # flake8-print: no stray print() in library code (use logging)
+    "RUF",      # ruff's own rules
+]
+ignore = ["E501"]                   # line length is the formatter's job
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S101"]            # assert is normal in tests
+"scripts/**"  = ["T20"]             # scripts may print
+
+[tool.ruff.lint.isort]
+known-first-party = ["rag_common"]
+
+[tool.ruff.format]
+quote-style = "double"
+docstring-code-format = true
+
+[tool.mypy]
+python_version = "3.12"
+strict = true                       # the full set of strictness checks
+warn_unreachable = true
+pretty = true
+files = ["libs/rag-common/src"]     # add each new library/service as it's created
+
+[tool.pytest.ini_options]
+testpaths = ["libs", "tests"]
+addopts = "-ra --strict-markers --import-mode=importlib"

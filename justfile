@@ -14,10 +14,36 @@ sync:
 lock:
     uv lock
 
-# Fail if tools or the lockfile are out of date (CI will run this too)
+# Install the git hooks (pre-commit, commit-msg, pre-push); run once after cloning
+install-hooks:
+    uv run pre-commit install
+
+# Format all code
+fmt:
+    uv run ruff format .
+
+# Lint (and auto-fix what's safe)
+lint:
+    uv run ruff check --fix .
+
+# Strict type check
+typecheck:
+    uv run mypy
+
+# Run the tests
+test:
+    uv run pytest
+
+# Run every pre-commit hook on every file
+hooks:
+    uv run pre-commit run --all-files
+
+# Everything CI will run (Step 27 calls exactly this)
 check:
     brew bundle check --file=bootstrap/Brewfile
     uv sync --locked --all-packages
+    uv run pre-commit run --all-files
+    uv run pytest
 
 # Create the next numbered ADR from the template:   just adr "Use Qdrant for vectors"
 adr title:
