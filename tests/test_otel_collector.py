@@ -65,7 +65,10 @@ def test_processor_order_protects_memory_first_and_batches_last() -> None:
     assert pipelines["metrics"]["processors"] == ["memory_limiter", "resource", "batch"]
     for signal in ("traces", "metrics", "logs"):
         assert pipelines[signal]["receivers"] == ["otlp"]
-        assert pipelines[signal]["exporters"] == ["debug"]  # real backends arrive in Steps 20-21
+    assert pipelines["traces"]["exporters"] == ["debug"]  # Tempo + Loki arrive in Step 21
+    assert pipelines["logs"]["exporters"] == ["debug"]
+    # Step 20: metrics are pushed into Prometheus's own OTLP endpoint
+    assert pipelines["metrics"]["exporters"] == ["otlp_http/prometheus"]
 
 
 def test_memory_limiter_and_batch_settings() -> None:

@@ -1,0 +1,18 @@
+# Grafana reads this at start-up: data sources are code, not clicks.
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    uid: prometheus                           # dashboards refer to this fixed id
+    type: prometheus
+    access: proxy                             # Grafana's server queries Prometheus; the browser never does
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData: { timeInterval: 15s }           # matches the scrape interval
+  - name: Alertmanager
+    uid: alertmanager
+    type: alertmanager
+    access: proxy
+    url: http://alertmanager:9093
+    editable: false
+    jsonData: { implementation: prometheus }

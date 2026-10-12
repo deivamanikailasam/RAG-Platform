@@ -178,7 +178,10 @@ def test_opa_runs_unprivileged_with_read_only_policies() -> None:
     assert s["read_only"] is True
     assert s["cap_drop"] == ["ALL"]
     assert s["security_opt"] == ["no-new-privileges:true"]
-    assert s["environment"] == {"OPA_API_TOKEN": "${OPA_API_TOKEN}"}
+    assert s["environment"] == {
+        "OPA_API_TOKEN": "${OPA_API_TOKEN}",
+        "OPA_METRICS_TOKEN": "${OPA_METRICS_TOKEN}",  # Step 20: Prometheus reads /metrics
+    }
     assert s["deploy"]["resources"]["limits"] == {"memory": "256m", "cpus": "0.5"}
     assert "healthcheck" not in s  # the static image has no shell or curl
 

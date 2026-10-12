@@ -54,6 +54,8 @@ LITELLM_SALT_KEY=$(openssl rand -hex 32)
 TEI_API_KEY=$(openssl rand -hex 24)
 # --- Observability (Steps 20, 22) ---
 GRAFANA_ADMIN_PASSWORD=$(rand)
+OPA_METRICS_TOKEN=$(rand)
+RAG_DB_METRICS_PASSWORD=$(rand)
 LANGFUSE_SALT=$(rand)
 LANGFUSE_NEXTAUTH_SECRET=$(rand)
 LANGFUSE_ENCRYPTION_KEY=$(openssl rand -hex 32)

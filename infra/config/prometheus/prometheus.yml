@@ -1,0 +1,50 @@
+# Prometheus: stores the platform's metrics, evaluates alert rules, hands firing alerts to Alertmanager.
+global:
+  scrape_interval: 15s                        # how often to pull from each target
+  evaluation_interval: 15s                    # how often to evaluate rules
+  external_labels:
+    environment: dev                          # added to every alert, so receivers know where it came from
+
+# Metrics PUSHED by the OpenTelemetry Collector (our own services) arrive on /api/v1/otlp.
+otlp:
+  promote_resource_attributes:                # copy these resource facts onto every series as labels
+    - service.version
+    - deployment.environment.name
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+# Metrics PULLED ("scraped") from components that expose /metrics themselves.
+scrape_configs:
+  - job_name: prometheus
+    static_configs: [{ targets: ["localhost:9090"] }]
+
+  - job_name: alertmanager
+    static_configs: [{ targets: ["alertmanager:9093"] }]
+
+  - job_name: otel-collector                  # the Collector's own health
+    static_configs: [{ targets: ["otel-collector:8888"] }]
+
+  - job_name: keycloak                        # sign-ins, failures, JVM, DB pool (management port)
+    static_configs: [{ targets: ["keycloak:9000"] }]
+
+  - job_name: opa                             # decision latency, bundle status
+    authorization:
+      credentials_file: /run/secrets/opa_metrics_token   # system.authz only lets this token read /metrics
+    static_configs: [{ targets: ["opa:8181"] }]
+
+  - job_name: qdrant
+    authorization:
+      credentials_file: /run/secrets/qdrant_read_only_api_key
+    static_configs: [{ targets: ["qdrant:6333"] }]
+
+  - job_name: postgres-rag                    # via postgres_exporter, logged in as the read-only rag_metrics role
+    static_configs: [{ targets: ["postgres-exporter:9187"] }]
+
+  - job_name: tei                             # embedder + reranker run natively on macOS (Step 8)
+    static_configs: [{ targets: ["host.docker.internal:9083", "host.docker.internal:9084"] }]

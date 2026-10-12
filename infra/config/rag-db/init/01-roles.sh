@@ -6,7 +6,8 @@ set -euo pipefail
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
     -v migrator_pw="$(cat /run/secrets/rag_db_migrator_password)" \
     -v app_pw="$(cat /run/secrets/rag_db_app_password)" \
-    -v ro_pw="$(cat /run/secrets/rag_db_readonly_password)" <<'SQL'
+    -v ro_pw="$(cat /run/secrets/rag_db_readonly_password)" \
+    -v metrics_pw="$(cat /run/secrets/rag_db_metrics_password)" <<'SQL'
 -- Extensions (need superuser)
 CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
@@ -15,10 +16,12 @@ CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 CREATE ROLE rag_migrator LOGIN PASSWORD :'migrator_pw';   -- owns the schema, runs migrations
 CREATE ROLE rag_app      LOGIN PASSWORD :'app_pw';        -- services: read/write rows only
 CREATE ROLE rag_readonly LOGIN PASSWORD :'ro_pw';         -- evaluation/analytics: read only
+-- Monitoring (Step 20): postgres_exporter logs in as this. pg_monitor = statistics only, no table data
+CREATE ROLE rag_metrics LOGIN PASSWORD :'metrics_pw' CONNECTION LIMIT 3 IN ROLE pg_monitor;
 
 -- Lock the database down, then grant exactly what's needed
 REVOKE ALL ON DATABASE rag FROM PUBLIC;
-GRANT CONNECT ON DATABASE rag TO rag_migrator, rag_app, rag_readonly;
+GRANT CONNECT ON DATABASE rag TO rag_migrator, rag_app, rag_readonly, rag_metrics;
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 
 CREATE SCHEMA rag AUTHORIZATION rag_migrator;

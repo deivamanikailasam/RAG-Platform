@@ -1,0 +1,24 @@
+# Alertmanager: groups, de-duplicates, silences and routes alerts to people.
+route:
+  receiver: platform-team                     # default destination
+  group_by: [alertname, service]              # one notification per problem, not one per series
+  group_wait: 30s                             # wait briefly to batch related alerts
+  group_interval: 5m
+  repeat_interval: 4h                         # remind, but don't spam
+  routes:
+    - matchers: ['severity="critical"']
+      receiver: platform-team-urgent
+      repeat_interval: 1h
+
+inhibit_rules:                                # while a critical alert fires, mute its warning twin
+  - source_matchers: ['severity="critical"']
+    target_matchers: ['severity="warning"']
+    equal: [alertname, service]
+
+receivers:
+  # Locally, alerts are visible in the Alertmanager UI and in Grafana. In a company you'd add e.g.:
+  #   slack_configs: [{ api_url_file: /run/secrets/slack_webhook_url, channel: "#rag-alerts" }]
+  #   email_configs: [{ to: platform-team@example.com, ... }]
+  #   pagerduty_configs: [{ routing_key_file: /run/secrets/pagerduty_key }]     (urgent only)
+  - name: platform-team
+  - name: platform-team-urgent

@@ -45,13 +45,22 @@ processors:
     send_batch_size: 1024
 
 exporters:
-  debug:                                         # print to the Collector's own log; real backends come next:
-    verbosity: basic                             #   Prometheus (Step 20), Tempo + Loki (Step 21)
+  debug:                                         # traces and logs still print here until Tempo + Loki (Step 21)
+    verbosity: basic
+  otlp_http/prometheus:                          # metrics: pushed to Prometheus's own OTLP endpoint (Step 20)
+    endpoint: http://prometheus:9090/api/v1/otlp
+    tls: { insecure: true }                      # inside the Compose network only
 
 service:
   extensions: [health_check]
   telemetry:
     logs: { level: info, encoding: json }
+    metrics:                                     # the Collector's OWN health (accepted, refused, queue size…)
+      level: normal
+      readers:
+        - pull:
+            exporter:
+              prometheus: { host: 0.0.0.0, port: 8888 }   # scraped by Prometheus
   pipelines:
     traces:
       receivers: [otlp]
@@ -60,7 +69,7 @@ service:
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, resource, batch]
-      exporters: [debug]
+      exporters: [otlp_http/prometheus]
     logs:
       receivers: [otlp]
       processors: [memory_limiter, attributes/scrub, redaction, resource, batch]

@@ -1,0 +1,107 @@
+# Unit tests for alert rules: fake time series in, expected alerts out.     Run: just alerts-test
+rule_files:
+  - ../rules/slo-rag-search.yml
+  - ../rules/security.yml
+  - ../rules/platform.yml
+evaluation_interval: 1m
+
+tests:
+  # 1. Healthy: 1% errors (inside the budget) -> no SLO alert.
+  - interval: 1m
+    input_series:
+      - series: 'rag_search_requests_total{outcome="ok"}'
+        values: "0+99x120"
+      - series: 'rag_search_requests_total{outcome="error"}'
+        values: "0+1x120"
+    alert_rule_test:
+      - { eval_time: 2h, alertname: RagSearchErrorBudgetFastBurn, exp_alerts: [] }
+      - { eval_time: 2h, alertname: RagSearchErrorBudgetSlowBurn, exp_alerts: [] }
+
+  # 2. Outage: 30% of searches fail for an hour -> fast burn pages.
+  - interval: 1m
+    input_series:
+      - series: 'rag_search_requests_total{outcome="ok"}'
+        values: "0+70x90"
+      - series: 'rag_search_requests_total{outcome="error"}'
+        values: "0+30x90"
+    alert_rule_test:
+      - eval_time: 75m
+        alertname: RagSearchErrorBudgetFastBurn
+        exp_alerts:
+          - exp_labels: { severity: critical, service: rag-api }
+            exp_annotations:
+              summary: "Search is failing fast: 30% of searches in the last 5 min"
+              runbook: docs/runbooks/rag-search-errors.md
+
+  # 3. A brief 4-minute blip -> the 1-hour window keeps the page quiet.
+  - interval: 1m
+    input_series:
+      - series: 'rag_search_requests_total{outcome="ok"}'
+        values: "0+100x60 6000+70x4 6280+100x30"
+      - series: 'rag_search_requests_total{outcome="error"}'
+        values: "0+0x60 0+30x4 120+0x30"
+    alert_rule_test:
+      - { eval_time: 66m, alertname: RagSearchErrorBudgetFastBurn, exp_alerts: [] }
+
+  # 4. Slow: every search takes ~3 s for 15 minutes -> latency alert.
+  - interval: 1m
+    input_series:
+      - series: 'rag_search_duration_seconds_bucket{le="1"}'
+        values: "0+0x20"
+      - series: 'rag_search_duration_seconds_bucket{le="2.5"}'
+        values: "0+0x20"
+      - series: 'rag_search_duration_seconds_bucket{le="5"}'
+        values: "0+10x20"
+      - series: 'rag_search_duration_seconds_bucket{le="+Inf"}'
+        values: "0+10x20"
+    alert_rule_test:
+      - eval_time: 18m
+        alertname: RagSearchSlow
+        exp_alerts:
+          - exp_labels: { severity: warning, service: rag-api }
+            exp_annotations:
+              summary: "p95 search latency is 4.875s (objective: under 2s)"
+              runbook: docs/runbooks/rag-search-latency.md
+
+  # 5. One document dropped by the post-check -> security alert, immediately.
+  - interval: 1m
+    input_series:
+      - series: 'rag_search_dropped_documents_total'
+        values: "0 0 0 1 1 1"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: RagPolicyQueryMismatch
+        exp_alerts:
+          - exp_labels: { severity: critical, service: rag-api }
+            exp_annotations:
+              summary: "Search returned 1 document(s) the policy then refused"
+              runbook: docs/runbooks/rag-policy-mismatch.md
+
+  # 6. A target stops answering -> TargetDown after 2 minutes, not before.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="opa", instance="opa:8181"}'
+        values: "1 1 0 0 0 0"
+    alert_rule_test:
+      - { eval_time: 3m, alertname: TargetDown, exp_alerts: [] }
+      - eval_time: 5m
+        alertname: TargetDown
+        exp_alerts:
+          - exp_labels: { severity: warning, job: opa, instance: "opa:8181" }
+            exp_annotations:
+              summary: "opa (opa:8181) has not answered for 2 minutes"
+              runbook: docs/runbooks/target-down.md
+
+  # 7. The Collector refuses spans for 6 minutes -> telemetry-loss alert (its counters have no _total).
+  - interval: 1m
+    input_series:
+      - series: 'otelcol_receiver_refused_spans{receiver="otlp"}'
+        values: "0+50x10"
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: OtelCollectorLosingData
+        exp_alerts:
+          - exp_labels: { severity: warning, service: otel-collector }
+            exp_annotations:
+              summary: "The OpenTelemetry Collector is dropping or failing to send telemetry"
+              runbook: docs/runbooks/otel-collector-losing-data.md

@@ -69,7 +69,8 @@ services:
       POSTGRES_DB: rag
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD_FILE: /run/secrets/rag_db_superuser_password
-    secrets: [rag_db_superuser_password, rag_db_migrator_password, rag_db_app_password, rag_db_readonly_password]
+    secrets: [rag_db_superuser_password, rag_db_migrator_password, rag_db_app_password, rag_db_readonly_password,
+              rag_db_metrics_password]                  # Step 20: the rag_metrics (pg_monitor) role
     volumes:
       - rag-db-data:/var/lib/postgresql/data
       - ../config/rag-db/init:/docker-entrypoint-initdb.d:ro  # one-time bootstrap: roles, extensions, schema
@@ -292,6 +293,7 @@ services:
       KC_HTTP_ENABLED: "true"                         # plain HTTP only because it's bound to 127.0.0.1
       KC_HEALTH_ENABLED: "true"                       # /health/* on management port 9000
       KC_METRICS_ENABLED: "true"                      # /metrics on port 9000, for Prometheus (Step 20)
+      KC_EVENT_METRICS_USER_ENABLED: "true"           # keycloak_user_events_total{event, error, realm} (Step 20)
       KC_CACHE: local                                 # single node; clustering comes with Kubernetes
       KC_LOG_CONSOLE_OUTPUT: json                     # structured logs, for Loki (Step 21)
       KC_TRACING_ENABLED: "true"                      # sign-ins and token requests as spans (Step 19)
@@ -337,12 +339,14 @@ services:
       - --set=distributed_tracing.service_name=opa
     environment:
       OPA_API_TOKEN: ${OPA_API_TOKEN}         # read by system.authz via opa.runtime()
+      OPA_METRICS_TOKEN: ${OPA_METRICS_TOKEN} # Step 20: Prometheus may read /metrics
     volumes:
       - ../../policies:/policies:ro           # policies come from Git, read-only
     ports:
       - "127.0.0.1:8181:8181"
     # No healthcheck: the -static image holds only the opa binary (no shell, no curl). rag-api
-    # protects itself instead (503 when OPA doesn't answer); Prometheus watches /health from Step 20.
+    # protects itself instead (503 when OPA doesn't answer); Prometheus scrapes /metrics (Step 20) and
+    # TargetDown fires when it stops answering.
     user: "65532:65532"                       # OPA warns when run as root; it doesn't need it
     read_only: true
     cap_drop: [ALL]
@@ -413,6 +417,88 @@ services:
       resources:
         limits: { memory: 512m, cpus: "1" }
 
+  prometheus:                                                 # metrics store + rule evaluation (Step 20)
+    image: prom/prometheus:v3.13.4@sha256:87861b8cf91579109319ebc300f3f1060e6da9c05d6ae8ad15a20c879e84e32e   # 3.13 is the long-term-support line
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --storage.tsdb.retention.size=5GB                     # whichever limit is hit first
+      - --web.enable-otlp-receiver                            # accept pushes from the Collector
+    volumes:
+      - ../config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../config/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus-data:/prometheus
+    secrets: [opa_metrics_token, qdrant_read_only_api_key]
+    ports: ["127.0.0.1:9090:9090"]
+    extra_hosts: ["host.docker.internal:host-gateway"]        # reach TEI running natively on the Mac
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/ready"]
+      interval: 15s
+      timeout: 3s
+      retries: 10
+    # The guide sets read_only: true here. Compose refuses it together with secrets that come from
+    # environment variables (same as rag-api, Step 17), so it is left out. The image already runs as
+    # the unprivileged "nobody" user, which cannot change the program or its config files.
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    deploy: { resources: { limits: { memory: 1g, cpus: "1" } } }
+
+  alertmanager:                                               # groups, de-duplicates, silences, routes alerts (Step 20)
+    image: prom/alertmanager:v0.34.1@sha256:e9733bafb1bdef9b00e25a21f8f99dc26a22224bf16641ad754d1649f4c3357a
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+      - --cluster.listen-address=                             # single instance: no clustering port
+    volumes:
+      - ../config/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager                       # silences survive restarts
+    ports: ["127.0.0.1:9093:9093"]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    deploy: { resources: { limits: { memory: 128m, cpus: "0.25" } } }
+
+  grafana:                                                    # dashboards as code (Step 20): the only UI people log into
+    image: grafana/grafana:13.2.3@sha256:b28bae15e219c998fb0e0424ed724930cc61b1f61fb404d47c862f9a23f9e572
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password   # "__FILE": read from a file
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_SERVER_ROOT_URL: http://localhost:3000
+    volumes:
+      - ../config/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../config/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    secrets: [grafana_admin_password]
+    ports: ["127.0.0.1:3000:3000"]
+    depends_on:
+      prometheus: { condition: service_healthy }
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    deploy: { resources: { limits: { memory: 512m, cpus: "1" } } }
+
+  postgres-exporter:                                          # turns rag-db statistics into /metrics (Step 20)
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1@sha256:ac5ec343104fae0e2d84a27bb8d69b38430a11910c5382cad85d478d2bab713e
+    environment:
+      DATA_SOURCE_URI: rag-db:5432/rag?sslmode=disable        # inside the Compose network only
+      DATA_SOURCE_USER: rag_metrics
+      DATA_SOURCE_PASS_FILE: /run/secrets/rag_db_metrics_password
+    secrets: [rag_db_metrics_password]
+    depends_on:
+      rag-db: { condition: service_healthy }
+    # read_only left out for the same Compose reason as prometheus; the image runs as "nobody".
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    deploy: { resources: { limits: { memory: 128m, cpus: "0.25" } } }
+
 volumes:
   litellm-db-data:                                            # keys, teams, budgets and spend logs live here
   rag-db-data:                                                # documents, chunks and vectors (Step 11)
@@ -422,6 +508,9 @@ volumes:
   object-store-data:                                          # original files and their versions (Step 14): NOT rebuildable, back it up
   valkey-data:                                                # Valkey RDB snapshots + AOF log (Step 15): cache is disposable, queued jobs are not
   keycloak-db-data:                                           # Keycloak's users, sessions, events and realm settings (Step 16): back it up
+  prometheus-data:                                            # metrics, 15 days / 5 GB (Step 20): disposable
+  alertmanager-data:                                          # silences and notification state (Step 20)
+  grafana-data:                                               # Grafana's own database (users, preferences); dashboards come from Git
 
 secrets:
   litellm_master_key:
@@ -478,3 +567,9 @@ secrets:
     environment: RAG_DB_APP_PASSWORD            # rag-api (Step 17): the Step 11 rag_app role
   rag_api_opa_token:
     environment: OPA_API_TOKEN                  # rag-api (Step 18): asks OPA for decisions; OPA reads the same value
+  opa_metrics_token:
+    environment: OPA_METRICS_TOKEN              # Prometheus (Step 20): may read OPA's /metrics and nothing else
+  grafana_admin_password:
+    environment: GRAFANA_ADMIN_PASSWORD         # Grafana "admin" (Step 20)
+  rag_db_metrics_password:
+    environment: RAG_DB_METRICS_PASSWORD        # rag_metrics (Step 20): pg_monitor statistics, no table data

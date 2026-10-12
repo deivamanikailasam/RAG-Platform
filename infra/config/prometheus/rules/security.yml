@@ -1,0 +1,18 @@
+groups:
+  - name: security
+    rules:
+      # The post-check dropped a document the query returned: the SQL filter and the policy disagree.
+      # Nothing leaked (the post-check worked), but something is wrong. Always investigate.
+      - alert: RagPolicyQueryMismatch
+        expr: increase(rag_search_dropped_documents_total[15m]) > 0
+        labels: { severity: critical, service: rag-api }
+        annotations:
+          summary: "Search returned {{ $value | humanize }} document(s) the policy then refused"
+          runbook: docs/runbooks/rag-policy-mismatch.md
+      # Many failed sign-ins: password guessing, or a broken client. Lockout (Step 16) limits damage.
+      - alert: KeycloakLoginFailuresHigh
+        expr: sum by (realm) (increase(keycloak_user_events_total{event="login", error!=""}[10m])) > 20
+        labels: { severity: warning, service: keycloak }
+        annotations:
+          summary: "{{ $value | humanize }} failed sign-ins in realm {{ $labels.realm }} in 10 min"
+          runbook: docs/runbooks/keycloak-login-failures.md

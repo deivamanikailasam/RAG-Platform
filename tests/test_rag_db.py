@@ -105,7 +105,8 @@ def test_rag_db_is_tuned_for_vectors_and_observable() -> None:
 
 
 def test_four_role_passwords_come_from_secret_files() -> None:
-    assert _rag_db()["secrets"] == list(ROLE_SECRETS)
+    # Step 20 adds the monitoring role's password (rag_metrics, see tests/test_monitoring.py)
+    assert _rag_db()["secrets"] == [*ROLE_SECRETS, "rag_db_metrics_password"]
     secrets = _compose()["secrets"]
     for name, env in ROLE_SECRETS.items():
         assert secrets[name] == {"environment": env}

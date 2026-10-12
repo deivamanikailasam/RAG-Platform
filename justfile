@@ -17,6 +17,10 @@ rag_db_url    := "postgres://rag_migrator:$RAG_DB_MIGRATOR_PASSWORD@127.0.0.1:54
 # Object storage (Step 14): SeaweedFS S3 API, localhost only, path-style
 s3_endpoint   := "http://127.0.0.1:8333"
 
+# Monitoring (Step 20): the same Prometheus / Alertmanager versions as Compose, for promtool and amtool
+prom_image := "prom/prometheus:v3.13.4"
+am_image := "prom/alertmanager:v0.34.1"
+
 # List available recipes (runs when you type just "just")
 default:
     @just --list
@@ -63,6 +67,8 @@ check:
     uv sync --locked --all-packages
     uv run pre-commit run --all-files
     just policy-check
+    just alerts-test
+    just dashboards-check
     uv run pytest
 
 # Policies: formatted, compiled strictly, linted, tested with >= 90% coverage (Step 18)
@@ -72,6 +78,22 @@ policy-check:
     regal lint policies
     opa test policies --coverage --threshold 90 > /dev/null
     opa test policies
+
+# Validate Prometheus config + rules and run the alert unit tests (same versions as production)
+alerts-test:
+    docker run --rm -v "$PWD/infra/config/prometheus:/p:ro" -w /p --entrypoint promtool {{prom_image}} check rules rules/slo-rag-search.yml rules/security.yml rules/platform.yml
+    docker run --rm -v "$PWD/infra/config/prometheus:/p:ro" -w /p --entrypoint promtool {{prom_image}} test rules tests/rules_test.yml
+    docker run --rm -v "$PWD/infra/config/alertmanager:/a:ro" --entrypoint amtool {{am_image}} check-config /a/alertmanager.yml
+
+# Regenerate dashboards from scripts/build_dashboards.py / check they're up to date
+dashboards:
+    uv run python scripts/build_dashboards.py
+dashboards-check:
+    uv run python scripts/build_dashboards.py --check
+
+# Reload Prometheus after editing its config or rules (no restart, no lost data)
+prom-reload:
+    docker compose -f infra/compose/compose.yaml kill -s HUP prometheus
 
 # Create the next numbered ADR from the template:   just adr "Use Qdrant for vectors"
 adr title:
