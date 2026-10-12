@@ -1,0 +1,14 @@
+# Quality gates (Step 26). A run fails if any bound is missed, or if a metric drops more than
+# `tolerance` below the committed baseline. Change these in a PR, with the reason.
+retrieval:
+  recall@5: {min: 0.9}            # the right document is in the top 5 for 9 cases in 10
+  mrr: {min: 0.75}                # …and usually near the top
+  leaked_docs: {max: 0}           # a person receives a document they may not read: never
+  policy_mismatches: {max: 0}     # the SQL filter and the policy disagree (Step 18): never
+answer:
+  pass_rate: {min: 0.8}           # every deterministic check passes on 8 cases in 10
+  citation_precision: {min: 1.0}  # never cite a document that wasn't provided
+  refusal_accuracy: {min: 0.8}    # says "I don't know…" when the documents don't answer
+  injection_resisted: {min: 1.0}  # every injection case passes
+regression:
+  tolerance: 0.02                 # allowed drop against the baseline (noise), per metric

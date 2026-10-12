@@ -5,7 +5,7 @@
 | | |
 |---|---|
 | **Id** | `dataset:rag-answer-golden` |
-| **Status** | planned |
+| **Status** | approved |
 | **Owner** | rag-quality |
 | **Last reviewed** | 2026-10-12 (every 180 days) |
 | **Role** | evaluation |
@@ -15,15 +15,15 @@
 
 ## Summary
 
-Questions with reference answers and the documents that support them, used to score prompt and model versions before they reach production. Built in Step 26.
+Questions with FIXED documents, reference answers, cases that must be refused and prompt-injection attempts. Scores prompt and model versions independently of retrieval (Step 26).
 
 ## Where it lives
 
-- evals/datasets/rag-answer-golden/ (Step 26)
+- evals/datasets/rag-answer-golden/ (v1.jsonl, hash pinned in dataset.yaml)
 
 ## Provenance
 
-Written and reviewed by people who know the documents; no real user questions.
+Written by people who know the documents; passages copied from the source documents; injection cases written deliberately. No real user questions.
 
 ## Personal data
 
@@ -35,7 +35,7 @@ Not applicable.
 
 ## Deletion
 
-Remove the item in a PR; re-run the affected evaluations.
+Remove the case in a new dataset version; re-run the affected evaluations.
 
 ## Access
 
@@ -43,7 +43,8 @@ Repository readers.
 
 ## Known limitations
 
-- Not created yet
+- Eight cases is a smoke test, not a benchmark; grow it from real failures (Step 37)
+- Built on the four demo documents; your own corpus needs its own cases
 
 ## Lineage
 
@@ -57,4 +58,4 @@ Affects if changed:
 
 ## Approvals
 
-- (none)
+- 2026-10-12 · you · Step 26: v1

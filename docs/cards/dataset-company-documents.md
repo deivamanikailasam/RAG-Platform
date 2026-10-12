@@ -57,6 +57,7 @@ Affects if changed:
 
 - dataset:company-chunks (input)
 - dataset:rag-answer-golden (input)
+- dataset:retrieval-golden (input)
   - system:rag-api (input)
     - dataset:audit-log (input)
     - dataset:llm-traces (input)

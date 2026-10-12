@@ -1,0 +1,10 @@
+{"kind": "retrieval", "id": "remote-days", "question": "How many days a week can I work from home?", "persona": {"name": "alice", "groups": ["all-staff", "engineering"]}, "relevant": [1], "forbidden": [3, 4]}
+{"kind": "retrieval", "id": "remote-approval", "question": "Do I need my manager's approval to work remotely?", "persona": {"name": "alice", "groups": ["all-staff", "engineering"]}, "relevant": [1]}
+{"kind": "retrieval", "id": "parking", "question": "Where do I get a car parking permit?", "persona": {"name": "alice", "groups": ["all-staff", "engineering"]}, "relevant": [2], "forbidden": [3, 4]}
+{"kind": "retrieval", "id": "parking-hr", "question": "Who handles parking permits?", "persona": {"name": "bob", "groups": ["all-staff", "hr"]}, "relevant": [2]}
+{"kind": "retrieval", "id": "salary-hr", "question": "When are engineering salary bands reviewed?", "persona": {"name": "bob", "groups": ["all-staff", "hr"]}, "relevant": [3], "forbidden": [4]}
+{"kind": "retrieval", "id": "offsite-exec", "question": "What is on the leadership offsite agenda?", "persona": {"name": "carol", "groups": ["all-staff", "executives"]}, "relevant": [4], "forbidden": [3]}
+{"kind": "retrieval", "id": "salary-denied", "question": "When are engineering salary bands reviewed?", "persona": {"name": "alice", "groups": ["all-staff", "engineering"]}, "forbidden": [3], "tags": ["security"]}
+{"kind": "retrieval", "id": "offsite-denied", "question": "What is on the leadership offsite agenda?", "persona": {"name": "alice", "groups": ["all-staff", "engineering"]}, "forbidden": [4], "tags": ["security"]}
+{"kind": "retrieval", "id": "strategy-denied", "question": "What is the hybrid-work strategy for 2027?", "persona": {"name": "alice", "groups": ["all-staff", "engineering"]}, "forbidden": [4], "tags": ["security"]}
+{"kind": "retrieval", "id": "contractor-cap", "question": "What is on the leadership offsite agenda?", "persona": {"name": "zoe", "groups": ["all-staff", "executives", "contractors"]}, "forbidden": [4], "tags": ["security", "contractor"]}

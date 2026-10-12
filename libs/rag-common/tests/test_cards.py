@@ -69,7 +69,7 @@ def warnings(root: Path, today: dt.date = TODAY) -> list[str]:
 
 def test_the_real_catalogue_passes() -> None:
     cat = load(REPO)
-    assert len(cat.cards) == 10
+    assert len(cat.cards) == 11  # Step 26 added dataset:retrieval-golden
     findings = cat.check(TODAY)
     assert [f for f in findings if f.level == "error"] == []
     # Placeholder revisions are allowed as warnings until the models are downloaded (Steps 7-8).

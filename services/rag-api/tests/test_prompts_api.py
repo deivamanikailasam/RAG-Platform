@@ -16,7 +16,11 @@ PROMPTS = Path(__file__).resolve().parents[3] / "prompts"
 def test_prompt_info_metric_shows_what_production_runs() -> None:
     obs = prompt_info(Registry.load(PROMPTS), "production")
     series = {(o.attributes or {})["prompt"]: dict(o.attributes or {}) for o in obs}
-    assert {n: s["version"] for n, s in series.items()} == {"query-instruction": 1, "rag-answer": 1}
+    assert {n: s["version"] for n, s in series.items()} == {
+        "eval-judge": 1,  # Step 26: the evaluation judge is a registered prompt too
+        "query-instruction": 1,
+        "rag-answer": 1,
+    }
     assert all(o.value == 1 for o in obs)  # an "info" metric: the facts are in the labels
     assert len(str(series["rag-answer"]["sha"])) == 12
 
@@ -24,6 +28,7 @@ def test_prompt_info_metric_shows_what_production_runs() -> None:
 def test_staging_runs_the_candidate() -> None:
     obs = prompt_info(Registry.load(PROMPTS), "staging")
     assert {(o.attributes or {})["prompt"]: (o.attributes or {})["version"] for o in obs} == {
+        "eval-judge": 1,
         "query-instruction": 1,
         "rag-answer": 2,
     }

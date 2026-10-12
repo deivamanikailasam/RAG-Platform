@@ -58,6 +58,7 @@ Built from:
 
 Affects if changed:
 
+- prompt:eval-judge (fallback)
 - prompt:rag-answer (fallback)
 
 ## Approvals

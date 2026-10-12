@@ -61,6 +61,7 @@ Built from:
 
 Affects if changed:
 
+- prompt:eval-judge (runs on)
 - prompt:rag-answer (runs on)
 
 ## Approvals

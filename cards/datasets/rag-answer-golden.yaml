@@ -1,23 +1,28 @@
 kind: dataset
 id: rag-answer-golden
 title: Golden questions and answers for rag-answer
-status: planned
+status: approved
 owner: rag-quality
 role: evaluation
 summary: >-
-  Questions with reference answers and the documents that support them, used to score prompt and
-  model versions before they reach production. Built in Step 26.
+  Questions with FIXED documents, reference answers, cases that must be refused and prompt-injection
+  attempts. Scores prompt and model versions independently of retrieval (Step 26).
 inputs:
   - dataset:company-documents
 locations:
-  - evals/datasets/rag-answer-golden/ (Step 26)
-provenance: Written and reviewed by people who know the documents; no real user questions.
+  - evals/datasets/rag-answer-golden/ (v1.jsonl, hash pinned in dataset.yaml)
+provenance: >-
+  Written by people who know the documents; passages copied from the source documents;
+  injection cases written deliberately. No real user questions.
 classification_max: internal
 personal_data: false
 retention: Versioned in git for as long as the prompts it evaluates exist.
-deletion: Remove the item in a PR; re-run the affected evaluations.
+deletion: Remove the case in a new dataset version; re-run the affected evaluations.
 access: Repository readers.
 known_limitations:
-  - Not created yet
+  - Eight cases is a smoke test, not a benchmark; grow it from real failures (Step 37)
+  - Built on the four demo documents; your own corpus needs its own cases
 last_reviewed: 2026-10-12
 review_every_days: 180
+approvals:
+  - {by: you, date: 2026-10-12, note: "Step 26: v1"}

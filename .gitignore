@@ -37,3 +37,6 @@ models/
 
 # --- Database backups (Step 11): they contain all your data, never commit them ---
 backups/
+
+# --- Evaluation runs (Step 26): runs are local; baselines and datasets are committed ---
+evals/runs/

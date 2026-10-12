@@ -6,6 +6,7 @@ requires-python = "==3.12.*"
 members = [
     "rag-api",
     "rag-common",
+    "rag-evals",
     "rag-platform",
 ]
 
@@ -1387,6 +1388,29 @@ requires-dist = [
 ]
 
 [[package]]
+name = "rag-evals"
+version = "0.1.0"
+source = { editable = "libs/rag-evals" }
+dependencies = [
+    { name = "openai" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+    { name = "rag-api" },
+    { name = "rag-common" },
+    { name = "ruamel-yaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "openai", specifier = ">=2.0" },
+    { name = "pydantic", specifier = ">=2.10" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "rag-api", editable = "services/rag-api" },
+    { name = "rag-common", editable = "libs/rag-common" },
+    { name = "ruamel-yaml", specifier = ">=0.18" },
+]
+
+[[package]]
 name = "rag-platform"
 version = "0.1.0"
 source = { virtual = "." }
@@ -1396,6 +1420,7 @@ dev = [
     { name = "boto3" },
     { name = "boto3-stubs", extra = ["s3"] },
     { name = "httpx" },
+    { name = "httpx2" },
     { name = "moto", extra = ["s3"] },
     { name = "mypy" },
     { name = "openai" },
@@ -1419,6 +1444,7 @@ dev = [
     { name = "boto3", specifier = ">=1.43.0" },
     { name = "boto3-stubs", extras = ["s3"], specifier = ">=1.43.0" },
     { name = "httpx", specifier = ">=0.28.1" },
+    { name = "httpx2", specifier = ">=2.13" },
     { name = "moto", extras = ["s3"], specifier = ">=5.1" },
     { name = "mypy", specifier = ">=2.4.0" },
     { name = "openai", specifier = ">=3.29.0" },
@@ -1471,6 +1497,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/9f/47/f216a33221db8eff328987661cf18371afee89c62a62b434b963d6b509c9/responses-0.26.3.tar.gz", hash = "sha256:b0c11ca8131b8b227b8d5108e6ed39772222bd5aab030ed430e8f99057c4c409", size = 86335, upload-time = "2026-08-26T19:17:24.373Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/6d/86/ca7958de70cb0752350575e98229368a3a2f746a2942034b3364e17312bb/responses-0.26.3-py3-none-any.whl", hash = "sha256:74474f799334ac4f37d93b6437ecc3bb1bb5c77a8d31780a338643be2dce0af8", size = 36289, upload-time = "2026-08-26T19:17:23.176Z" },
+]
+
+[[package]]
+name = "ruamel-yaml"
+version = "0.19.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c7/3b/ebda527b56beb90cb7652cb1c7e4f91f48649fbcd8d2eb2fb6e77cd3329b/ruamel_yaml-0.19.1.tar.gz", hash = "sha256:53eb66cd27849eff968ebf8f0bf61f46cdac2da1d1f3576dd4ccee9b25c31993", size = 142709, upload-time = "2026-01-02T16:50:31.84Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b8/0c/51f6841f1d84f404f92463fc2b1ba0da357ca1e3db6b7fbda26956c3b82a/ruamel_yaml-0.19.1-py3-none-any.whl", hash = "sha256:27592957fedf6e0b62f281e96effd28043345e0e66001f97683aa9a40c667c93", size = 118102, upload-time = "2026-01-02T16:50:29.201Z" },
 ]
 
 [[package]]

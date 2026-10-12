@@ -1,0 +1,8 @@
+name: retrieval-golden
+card: dataset:retrieval-golden
+owner: rag-quality
+description: Questions asked as synthetic personas, with the documents they should and must never receive.
+versions:
+  1:
+    file: v1.jsonl
+    sha256: 1743a85ca69e3b3fbde774c2fdfcaaa19e10fddc1c05f98d6a57077cb84d6595

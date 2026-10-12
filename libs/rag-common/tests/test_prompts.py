@@ -55,7 +55,7 @@ def make(tmp_path: Path, files: dict[str, str], lock: bool = True) -> Path:
 def test_the_real_registry_is_valid() -> None:
     """The prompts that ship with the platform pass every rule (CI runs the same check)."""
     reg = Registry.load(REPO_PROMPTS)
-    assert reg.names() == ["query-instruction", "rag-answer"]
+    assert reg.names() == ["eval-judge", "query-instruction", "rag-answer"]  # eval-judge: Step 26
     assert reg.labels_of("rag-answer") == {"production": 1, "staging": 2}
 
 
@@ -188,6 +188,6 @@ def test_lock_on_main_may_only_grow() -> None:
 
 def test_real_lock_file_is_complete() -> None:
     lock = read_lock(REPO_PROMPTS)
-    assert lock.keys() == {"query-instruction", "rag-answer"}
+    assert lock.keys() == {"eval-judge", "query-instruction", "rag-answer"}
     assert set(lock["rag-answer"]) == {"1", "2"}
     assert json.loads((REPO_PROMPTS / "prompts.lock.json").read_text()) == lock
