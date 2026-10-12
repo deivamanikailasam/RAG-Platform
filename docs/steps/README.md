@@ -31,3 +31,4 @@ Phases: **A** Workstation · **B** Model serving · **C** Data stores · **D** I
 | 17 | JWT auth on the APIs | D · Identity & policy | [step-17-jwt-auth-on-the-apis.md](step-17-jwt-auth-on-the-apis.md) |
 | 18 | Policy engine: OPA (with OpenFGA in view) | D · Identity & policy | [step-18-policy-engine-opa.md](step-18-policy-engine-opa.md) |
 | 19 | OpenTelemetry Collector: one pipe for traces, metrics and logs | E · Observability | [step-19-opentelemetry-collector.md](step-19-opentelemetry-collector.md) |
+| 20 | Prometheus + Grafana: dashboards, SLOs and alerts | E · Observability | [step-20-prometheus-grafana-slos-alerts.md](step-20-prometheus-grafana-slos-alerts.md) |
