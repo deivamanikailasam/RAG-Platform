@@ -24,3 +24,6 @@ brew "text-embeddings-inference"  # Hugging Face TEI: fast embedding/reranking s
 
 # ---- Database migrations (Step 11) ----
 brew "dbmate"               # simple, language-agnostic SQL migrations (up/down), single binary
+
+# ---- Object storage tools (Step 14) ----
+brew "awscli"               # AWS CLI v2: speaks S3 to any compatible store via --endpoint-url

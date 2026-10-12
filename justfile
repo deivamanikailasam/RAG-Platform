@@ -14,6 +14,9 @@ compose       := "docker compose -f infra/compose/compose.yaml"
 # search_path lists "public" too, because the pgvector types (halfvec, vector) live there.
 rag_db_url    := "postgres://rag_migrator:$RAG_DB_MIGRATOR_PASSWORD@127.0.0.1:5432/rag?sslmode=disable&search_path=rag,public"
 
+# Object storage (Step 14): SeaweedFS S3 API, localhost only, path-style
+s3_endpoint   := "http://127.0.0.1:8333"
+
 # List available recipes (runs when you type just "just")
 default:
     @just --list
@@ -220,3 +223,12 @@ os-health:
 
 os-count:
     sops exec-env secrets/dev.enc.env 'curl -sk -u "rag_search:$OPENSEARCH_SEARCH_PASSWORD" https://127.0.0.1:9200/rag-chunks/_count | jq .count'
+
+# AWS CLI against the local object store as ADMIN:   just s3 s3 ls   /   just s3 s3api list-buckets
+# Keys are decrypted from SOPS into this one command only (never ~/.aws/credentials). Each argument is
+# re-quoted, so JMESPath queries such as --query 'Versions[].{key:Key}' survive the inner shell.
+[positional-arguments]
+s3 *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    sops exec-env secrets/dev.enc.env "AWS_ACCESS_KEY_ID=\"\$S3_ADMIN_ACCESS_KEY\" AWS_SECRET_ACCESS_KEY=\"\$S3_ADMIN_SECRET_KEY\" AWS_REGION=us-east-1 aws --endpoint-url {{s3_endpoint}} $(printf '%q ' "$@")"

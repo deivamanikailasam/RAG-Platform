@@ -165,12 +165,55 @@ services:
       resources:
         limits: { memory: 4g, cpus: "4" }
 
+  object-store:                                               # S3-compatible object storage for ORIGINAL files: the raw zone (Step 14)
+    image: chrislusf/seaweedfs:4.45@sha256:fc9f76fa993ad69966ffeb2f65d0318fcae39c6f8e20cf68ef7b3a5cb97769e5   # SeaweedFS 4.x, pin by digest (Step 9 method)
+    # SeaweedFS reads its users ("identities") from a JSON file. The container builds that file at
+    # start-up from the secret FILES, into a RAM-only folder, then starts the server. Nothing on disk.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        umask 077
+        cat > /run/seaweed/s3.json <<EOF
+        {"identities": [
+          {"name": "admin",
+           "credentials": [{"accessKey": "$$(cat /run/secrets/s3_admin_access_key)", "secretKey": "$$(cat /run/secrets/s3_admin_secret_key)"}],
+           "actions": ["Admin", "Read", "Write", "List", "Tagging"]},
+          {"name": "rag-ingest",
+           "credentials": [{"accessKey": "$$(cat /run/secrets/s3_ingest_access_key)", "secretKey": "$$(cat /run/secrets/s3_ingest_secret_key)"}],
+           "actions": ["Read:rag-raw-docs", "Write:rag-raw-docs", "List:rag-raw-docs", "Tagging:rag-raw-docs",
+                       "Read:rag-tmp", "Write:rag-tmp", "List:rag-tmp"]},
+          {"name": "rag-reader",
+           "credentials": [{"accessKey": "$$(cat /run/secrets/s3_reader_access_key)", "secretKey": "$$(cat /run/secrets/s3_reader_secret_key)"}],
+           "actions": ["Read:rag-raw-docs", "List:rag-raw-docs"]}
+        ]}
+        EOF
+        exec weed mini -dir=/data -s3.config=/run/seaweed/s3.json -master.telemetry=false
+    secrets: [s3_admin_access_key, s3_admin_secret_key, s3_ingest_access_key, s3_ingest_secret_key,
+              s3_reader_access_key, s3_reader_secret_key]
+    tmpfs:
+      - /run/seaweed:size=1m,mode=0700          # identities file lives in RAM only
+    volumes:
+      - object-store-data:/data
+    ports:
+      - "127.0.0.1:8333:8333"                   # S3 API only. Master/filer/admin UIs stay internal
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 8333 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits: { memory: 1g, cpus: "2" }
+
 volumes:
   litellm-db-data:                                            # keys, teams, budgets and spend logs live here
   rag-db-data:                                                # documents, chunks and vectors (Step 11)
   qdrant-data:                                                # collections, points and HNSW graphs (Step 12): rebuildable from rag-db
   qdrant-snapshots:                                           # Qdrant snapshot files (Step 12)
   opensearch-data:                                            # OpenSearch indices (Step 13): rebuildable from rag-db
+  object-store-data:                                          # original files and their versions (Step 14): NOT rebuildable, back it up
 
 secrets:
   litellm_master_key:
@@ -195,3 +238,15 @@ secrets:
     environment: QDRANT_READ_ONLY_API_KEY       # read-only, for quick checks
   opensearch_admin_password:
     environment: OPENSEARCH_ADMIN_PASSWORD      # OpenSearch "admin" (Step 13): only for setup and cluster checks
+  s3_admin_access_key:
+    environment: S3_ADMIN_ACCESS_KEY            # object store "admin" (Step 14): bucket setup and admin tasks only
+  s3_admin_secret_key:
+    environment: S3_ADMIN_SECRET_KEY
+  s3_ingest_access_key:
+    environment: S3_INGEST_ACCESS_KEY           # rag-ingest: read/write rag-raw-docs and rag-tmp
+  s3_ingest_secret_key:
+    environment: S3_INGEST_SECRET_KEY
+  s3_reader_access_key:
+    environment: S3_READER_ACCESS_KEY           # rag-reader: read rag-raw-docs only
+  s3_reader_secret_key:
+    environment: S3_READER_SECRET_KEY

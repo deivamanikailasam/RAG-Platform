@@ -10,6 +10,8 @@ trap 'grep -q "^sops_mac=" "$out" 2>/dev/null || rm -f "$out"' EXIT
 
 rand() { openssl rand -base64 48 | tr -d '/+=\n' | cut -c1-32; }   # 32 random letters/digits
 ospw() { echo "$(openssl rand -base64 24 | tr -d '/+=\n')#9Qx"; }   # OpenSearch password policy: all 4 character classes
+gen_ak() { LC_ALL=C tr -dc 'A-Z0-9' </dev/urandom | head -c 20; }   # S3 access-key style: 20 upper-case letters/digits
+gen_sk() { openssl rand -base64 48 | tr -d '/+=\n' | cut -c1-40; }  # S3 secret-key style: 40 letters/digits
 
 cat > "$out" <<EOF
 # --- Data stores (Steps 11-15) ---
@@ -25,8 +27,13 @@ QDRANT_READ_ONLY_API_KEY=$(openssl rand -hex 32)
 OPENSEARCH_ADMIN_PASSWORD=$(ospw)
 OPENSEARCH_SEARCH_PASSWORD=$(ospw)
 OPENSEARCH_INDEXER_PASSWORD=$(ospw)
-MINIO_ROOT_USER=rag-admin
-MINIO_ROOT_PASSWORD=$(rand)
+# --- Object storage (Step 14): one access/secret key pair per SeaweedFS identity ---
+S3_ADMIN_ACCESS_KEY=$(gen_ak)
+S3_ADMIN_SECRET_KEY=$(gen_sk)
+S3_INGEST_ACCESS_KEY=$(gen_ak)
+S3_INGEST_SECRET_KEY=$(gen_sk)
+S3_READER_ACCESS_KEY=$(gen_ak)
+S3_READER_SECRET_KEY=$(gen_sk)
 REDIS_PASSWORD=$(rand)
 # --- Identity (Step 16) ---
 KEYCLOAK_ADMIN_PASSWORD=$(rand)
