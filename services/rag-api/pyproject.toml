@@ -16,7 +16,7 @@ dependencies = [
     "opentelemetry-instrumentation-httpx>=0.66b1",
     "opentelemetry-instrumentation-psycopg>=0.66b1",
     "langfuse>=4.17",         # LLM traces with content, masked, on its own tracer provider (Step 22)
-    "psycopg-pool>=3.2",      # audit log writer: a small pool, tested before each loan (Step 23)
+    "psycopg-pool>=3.3",      # audit log writer: a small pool, tested before each loan (Step 23); 3.3: kwargs may be a function (Step 28)
 ]
 
 [tool.uv.sources]

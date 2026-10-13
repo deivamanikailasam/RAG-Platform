@@ -102,11 +102,13 @@ def test_settings_read_env_and_secret_files(
     assert s.oidc_audience == "rag-api"
     assert s.allowed_clients == ["rag-web", "rag-cli", "ingestion-worker"]
     assert s.gateway_key.get_secret_value() == "sk-virtual-key"
+    assert s.db_password is not None
     assert s.db_password.get_secret_value() == "app-password"
     assert s.opa_url == "http://opa:8181"  # Step 18 default: the Compose service name
     assert s.opa_token.get_secret_value() == "opa-token"
     # Step 23: the audit database, written as audit_writer
     assert (s.audit_db_host, s.audit_db_port) == ("rag-db", 5432)
+    assert s.audit_db_password is not None
     assert s.audit_db_password.get_secret_value() == "audit-writer"
     assert "sk-virtual-key" not in repr(s)  # secrets never print
 
@@ -167,8 +169,9 @@ def test_search_tags_the_gateway_call_with_the_user_and_applies_the_policy_filte
             row = (1, "Remote work policy", "internal", ["all-staff"], 0.71)
             return SimpleNamespace(fetchall=lambda: [row])
 
-    def fake_connect(dsn: str) -> FakeConn:
-        seen["dsn"] = dsn
+    def fake_connect(**kw: Any) -> FakeConn:
+        # Step 28: credentials are asked for per connection, not baked into a DSN
+        seen["connect"] = kw
         return FakeConn()
 
     monkeypatch.setattr("rag_api.search.psycopg.connect", fake_connect)
@@ -196,7 +199,9 @@ def test_search_tags_the_gateway_call_with_the_user_and_applies_the_policy_filte
     assert "d.classification = ANY(%(classifications)s)" in seen["sql"]
     assert "d.classification = 'public' OR" in seen["sql"]
     assert "d.deleted_at IS NULL" in seen["sql"]
-    assert "user=rag_app" in seen["dsn"]  # least-privilege role from Step 11, never the superuser
+    # least-privilege role from Step 11, never the superuser
+    assert seen["connect"]["user"] == "rag_app"
+    assert seen["connect"]["password"] == "pw"  # noqa: S105 - the throwaway value from _settings()
 
 
 # ------------------------------------------------------------------ the OPA client

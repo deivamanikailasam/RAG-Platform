@@ -11,6 +11,7 @@ import pytest
 from psycopg import errors
 
 from rag_api.audit import AuditEvent, AuditUnavailable, PgAuditLog
+from rag_common.secrets import StaticCredentials
 
 from .conftest import REWRITE_FROM_2, append, tamper
 
@@ -146,7 +147,7 @@ def test_migration_cannot_be_rolled_back(audit_db: AuditDb) -> None:
 def test_pg_audit_log_writes_through_append(chain: AuditDb) -> None:
     info = psycopg.conninfo.conninfo_to_dict(chain.admin_dsn)
     log = PgAuditLog(host=str(info.get("host", "127.0.0.1")), port=int(str(info.get("port", 5432))),
-                     password="test-writer")  # noqa: S106 - the throwaway test role  # fmt: skip
+                     credentials=StaticCredentials("audit_writer", "test-writer"))  # the throwaway test role  # fmt: skip
     try:
         event = AuditEvent("8f1c0000-alice", "rag-cli", "search", "allowed", "documents",
                            {"returned_ids": [1, 7]}, "0af7651916cd43dd8448eb211c80319c")  # fmt: skip
@@ -165,7 +166,7 @@ def test_pg_audit_log_survives_a_database_restart(chain: AuditDb) -> None:
     """Killed connections (a restart, a failover) must not turn into failed requests."""
     info = psycopg.conninfo.conninfo_to_dict(chain.admin_dsn)
     log = PgAuditLog(host=str(info.get("host", "127.0.0.1")), port=int(str(info.get("port", 5432))),
-                     password="test-writer")  # noqa: S106  # fmt: skip
+                     credentials=StaticCredentials("audit_writer", "test-writer"))  # fmt: skip
     event = AuditEvent("u", "c", "search", "allowed", "documents")
     try:
         assert log.record(event) == 1
@@ -178,7 +179,8 @@ def test_pg_audit_log_survives_a_database_restart(chain: AuditDb) -> None:
 
 
 def test_pg_audit_log_fails_fast_when_the_database_is_down() -> None:
-    log = PgAuditLog(host="127.0.0.1", port=1, password="x", timeout=0.5)  # noqa: S106 - nothing listens
+    log = PgAuditLog(host="127.0.0.1", port=1, credentials=StaticCredentials("u", "x"),
+                     timeout=0.5)  # nothing listens  # fmt: skip
     started = time.monotonic()
     try:
         with pytest.raises(AuditUnavailable):

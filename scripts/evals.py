@@ -53,11 +53,18 @@ def cmd_run(a: argparse.Namespace) -> int:
         from rag_evals.targets import PolicySearchTarget
 
         dataset = load_dataset(EVALS / "datasets", a.dataset or "retrieval-golden", a.version)
+        # The read-only login: a short-lived one from OpenBao (`just vault-creds rag-readonly`, then
+        # RAG_DB_READONLY_CREDENTIALS_FILE=.bao/rag-readonly.json, Step 28) or the static password.
+        login: dict[str, Any] = (
+            {"db_credentials_file": Path(creds_file)}
+            if (creds_file := os.environ.get("RAG_DB_READONLY_CREDENTIALS_FILE"))
+            else {"db_password": SecretStr(os.environ["RAG_DB_READONLY_PASSWORD"])}
+        )
         s = Settings(  # only what search needs; the evaluator reads with the read-only role
             oidc_issuer="unused", oidc_jwks_url="unused", audit_db_password=SecretStr("unused"),
             gateway_url=os.environ.get("LLM_GATEWAY_URL", "http://127.0.0.1:4000") + "/v1",
             gateway_key=SecretStr(os.environ["EVAL_GATEWAY_KEY"]), db_host="127.0.0.1",
-            db_user="rag_readonly", db_password=SecretStr(os.environ["RAG_DB_READONLY_PASSWORD"]),
+            db_user="rag_readonly", **login,
             opa_token=SecretStr(os.environ["OPA_API_TOKEN"]), prompts_dir=ROOT / "prompts",
             prompt_label=a.label or "production",
         )  # fmt: skip

@@ -1356,7 +1356,7 @@ requires-dist = [
     { name = "opentelemetry-instrumentation-psycopg", specifier = ">=0.66b1" },
     { name = "pgvector", specifier = ">=0.4" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
-    { name = "psycopg-pool", specifier = ">=3.2" },
+    { name = "psycopg-pool", specifier = ">=3.3" },
     { name = "pydantic-settings", specifier = ">=2.10" },
     { name = "rag-common", editable = "libs/rag-common" },
     { name = "uvicorn", specifier = ">=0.50" },

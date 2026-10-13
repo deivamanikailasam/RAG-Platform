@@ -22,6 +22,8 @@ from psycopg.conninfo import make_conninfo
 from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
 
+from rag_common.secrets import Credentials
+
 tracer = trace.get_tracer("rag_api.audit")
 
 Outcome = Literal["allowed", "denied", "error"]
@@ -59,20 +61,29 @@ class PgAuditLog:
     """Writes through audit.append() over a small connection pool."""
 
     def __init__(
-        self, *, host: str, password: str, dbname: str = "audit", port: int = 5432,
-        user: str = "audit_writer", timeout: float = 2.0,
+        self, *, host: str, credentials: Credentials, dbname: str = "audit", port: int = 5432,
+        timeout: float = 2.0, max_lifetime: float = 1800.0,
     ) -> None:  # fmt: skip
         conninfo = make_conninfo(
-            host=host, port=port, dbname=dbname, user=user, password=password,
-            connect_timeout=3, application_name="rag-api",
-        )  # fmt: skip
+            host=host, port=port, dbname=dbname, connect_timeout=3, application_name="rag-api"
+        )
+
+        def connect_kwargs() -> dict[str, Any]:
+            # Called by the pool for EACH new connection, so a new username/password from
+            # OpenBao Agent is used as soon as it appears; old connections keep working until
+            # they are recycled (max_lifetime) or OpenBao ends them when their lease is revoked.
+            user, password = credentials()
+            return {"autocommit": True, "user": user, "password": password}
+
         # A few warm connections; autocommit so every event is committed the moment it's appended.
         # timeout = the longest a request waits for a working connection before failing closed.
         # check = test each connection before lending it out (one tiny round trip). Without it, after
         # a database restart the pool lends out dead connections and requests fail needlessly.
+        # max_lifetime = recycle connections every 30 minutes, well inside a 1-hour login (Step 28).
         self._pool: ConnectionPool[psycopg.Connection[Any]] = ConnectionPool(
             conninfo, min_size=1, max_size=4, timeout=timeout, open=True,
-            kwargs={"autocommit": True}, check=ConnectionPool.check_connection, name="audit",
+            kwargs=connect_kwargs, check=ConnectionPool.check_connection, name="audit",
+            max_lifetime=max_lifetime,
         )  # fmt: skip
 
     def record(self, event: AuditEvent) -> int:

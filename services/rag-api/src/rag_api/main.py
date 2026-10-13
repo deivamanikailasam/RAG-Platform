@@ -170,7 +170,7 @@ def get_llm() -> LlmTracer:
 def get_audit() -> AuditLog:
     s = get_settings()
     return PgAuditLog(
-        host=s.audit_db_host, port=s.audit_db_port, password=s.audit_db_password.get_secret_value()
+        host=s.audit_db_host, port=s.audit_db_port, credentials=s.audit_db_credentials()
     )
 
 

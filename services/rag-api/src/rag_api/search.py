@@ -65,11 +65,9 @@ class PgSearch:
         # The query instruction is a registered prompt (Step 24), part of the embedding contract.
         self._prompts, self._label = prompts, s.prompt_label
         self._gw = OpenAI(base_url=s.gateway_url, api_key=s.gateway_key.get_secret_value())
-        # The role is configurable, so the evaluation harness can read with rag_readonly (Step 26)
-        self._dsn = (
-            f"host={s.db_host} dbname=rag user={s.db_user} "
-            f"password={s.db_password.get_secret_value()}"
-        )
+        # The role is configurable, so the evaluation harness can read with rag_readonly (Step 26).
+        # Read for EVERY connection: with OpenBao the username and password change over time (Step 28)
+        self._host, self._credentials = s.db_host, s.db_credentials()
 
     def search(
         self,
@@ -95,7 +93,9 @@ class PgSearch:
             ).text
             emb = self._gw.embeddings.create(model="embedder", input=[text or ""], user=user)
             span.set_attribute("gen_ai.usage.input_tokens", emb.usage.prompt_tokens)
-        with psycopg.connect(self._dsn) as conn:
+        user_name, password = self._credentials()
+        with psycopg.connect(host=self._host, dbname="rag", user=user_name, password=password,
+                             application_name="rag-api") as conn:  # fmt: skip
             register_vector(conn)
             rows = conn.execute(
                 SQL,
