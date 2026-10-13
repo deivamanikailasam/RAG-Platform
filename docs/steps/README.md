@@ -41,3 +41,4 @@ Phases: **A** Workstation · **B** Model serving · **C** Data stores · **D** I
 | 27 | A CI pipeline and a secured supply chain | G · Quality & delivery | [step-27-ci-pipeline-and-supply-chain.md](step-27-ci-pipeline-and-supply-chain.md) |
 | 28 | Vault: secrets issued on demand, short-lived and audited | G · Quality & delivery | [step-28-vault-dynamic-secrets.md](step-28-vault-dynamic-secrets.md) |
 | 29 | Kubernetes and GitOps with Argo CD | G · Quality & delivery | [step-29-kubernetes-gitops-argo-cd.md](step-29-kubernetes-gitops-argo-cd.md) |
+| 30 | The RAG core: contracts and switchable components | H · RAG core | [step-30-rag-core-contracts-and-components.md](step-30-rag-core-contracts-and-components.md) |

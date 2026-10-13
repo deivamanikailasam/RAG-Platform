@@ -98,9 +98,13 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Command Line Tools | Apple's free kit of basic developer programs: compiler, `make`, `git`, system headers. | 1 |
 | Commit | A save point in git history, with a message explaining what changed and why. | 4 |
 | Compiler | A program that turns human-written source code into a program the computer can run. | 1 |
+| Component (rag-core) | One implementation of a contract, registered under a kind and a name, e.g. the `memory` vector store or the `gateway` LLM. | 30 |
 | Compose project | The group of containers, networks and volumes one Compose file starts, sharing a name (`name: rag-platform`) that prefixes every container (`rag-platform-litellm-1`). | 9 |
 | ConfigMap | A Kubernetes object holding non-secret configuration, e.g. the OpenBao Agent's config file. | 29 |
+| Configuration as code | Keeping settings (which component fills each slot) in a reviewed, versioned file such as `rag.yaml`, checked by CI like code. | 30 |
+| Conformance test | The same test suite run against every implementation of a contract (rag-core's conformance kit), so any one can replace another; its access checks fail with "LEAK". | 30 |
 | Consumer group | A set of workers sharing one stream; each message goes to exactly one worker in the group, and the group remembers what was delivered and acknowledged. | 15 |
+| Container (rag-core) | The object that reads a profile, builds each named component once, and hands components the others they need (dependency injection). Not a Docker container. | 30 |
 | Container orchestration | Running containers across machines automatically: placing, restarting, scaling and updating them; what Kubernetes does. | 29 |
 | Container | A running copy of an image: a self-contained "apartment" with a program and everything it needs. | 3 |
 | Container runtime | The software that downloads images and runs containers (OrbStack, Docker Desktop, Colima, Podman). | 3 |
@@ -108,6 +112,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Content hash | A fingerprint (here SHA-256) computed from every byte of a file; any edit, even one character or a line ending, changes it. | 24 |
 | Context propagation | Passing the trace id from one service to the next (in the `traceparent` HTTP header) so their spans join one trace. | 19 |
 | Context window | The maximum number of tokens (prompt + answer) a model can handle at once. | 7 |
+| Contract | The agreed list of methods a kind of component must have ("a vector store can upsert, delete, search with access rules, and count"); in rag-core, a Protocol. | 30 |
 | Control plane | The parts of Kubernetes that decide (API server, etcd, scheduler, controllers), as opposed to the nodes that run the containers. | 29 |
 | Controller / reconciliation | A loop that compares desired state with actual state and fixes the difference, forever; Kubernetes is made of them, and Argo CD is one too. | 29 |
 | Conventional Commits | A commit-message format `type(scope)!: description` (e.g. `feat(gateway): …`) readable by people and tools. | 4 |
@@ -138,6 +143,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Dependabot | GitHub's bot that opens pull requests to update pinned versions (action SHAs, `uv.lock`, base images); CI tests each one before merging. | 27 |
 | Dependency | A package your project needs in order to work. | 2 |
 | Dependency group | A named set of extra dependencies in `pyproject.toml` (PEP 735), e.g. `dev` for test tools not needed in production. | 2 |
+| Dependency injection | Giving a component the things it needs (an LLM, an embedder) from outside instead of it fetching them itself, so tests can hand it fakes. | 30 |
 | Dependency injection (FastAPI) | FastAPI runs helper functions ("get the caller", "require this role") before an endpoint and passes their results in; tests swap them for fakes with `dependency_overrides`. | 17 |
 | Deployment (LiteLLM) | One real backend behind a model alias; an alias can have several, for load-balancing or failover. | 9 |
 | Deployment / ReplicaSet (Kubernetes) | "Keep N copies of this pod template running and change versions gradually"; the Deployment manages ReplicaSets, which manage Pods. | 29 |
@@ -162,6 +168,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Embedding contract | Everything that defines how vectors were made (model + revision, dimensions, query instruction, normalisation, pooling, chunk limit); change any part and the index must be rebuilt. | 8 |
 | Encryption | Scrambling data so only someone with the right key can unscramble it. | 6 |
 | Endpoint | A specific URL path on a server, e.g. `/v1/chat/completions` or `/health`. | 7 |
+| Entry point | A standard Python packaging hook: a package declares "my components live in this module" under `rag_core.components`, and rag-core loads them. | 30 |
 | Envelope encryption | Values are locked with a random data key, and the data key is locked separately for each recipient, so adding a person never means re-encrypting every value by hand. | 6 |
 | Environment variable | A named value handed to a program when it starts (`DB_PASSWORD=…`); fine for settings, easy to leak for secrets. | 6 |
 | Error budget | The amount of failure an SLO allows: with 99% of searches succeeding over 28 days, 1% may fail. Budget left: ship features; budget burning: prioritise reliability. | 20 |
@@ -328,6 +335,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | OpenTelemetry | The CNCF open standard (APIs, SDKs, protocol, Collector) for producing and shipping traces, metrics and logs, supported by every major vendor. | 19 |
 | OrbStack | A lightweight macOS container runtime: Linux VM + Docker engine + Compose + single-node Kubernetes. | 3 |
 | OTLP | The OpenTelemetry protocol that carries all three signals: gRPC on port 4317, HTTP on 4318. | 19 |
+| Override (configuration) | Changing one setting for one deployment without editing the file, e.g. `RAG__RERANKER__TOP_N=5`; double underscores mean nesting, values are YAML. | 30 |
 | Package manager | A program that installs, updates and removes other software and tracks what's installed. | 1 |
 | PAP (Policy Administration Point) | Where the rules are written and changed; here Git and pull requests on `policies/`. | 18 |
 | Parent / child span | Spans nest: a request's server span is the parent of the steps inside it, which can have children of their own; this nesting draws the waterfall. | 19 |
@@ -348,6 +356,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Pipeline (Collector) | One signal's path through the Collector: receivers → processors (in order) → exporters. | 19 |
 | Placeholder | A slot like `{{question}}` in a prompt template that is filled in for each request; every one must be declared in `variables`. | 24 |
 | Plaintext | Readable, unencrypted text. | 6 |
+| Plugin | A component that lives in another package and is discovered at run time, so adding it needs no change to rag-core. | 30 |
 | Pod Security Standards | Kubernetes' built-in profiles (privileged, baseline, restricted), enforced per namespace by a label. | 29 |
 | Pod | One or more containers that run together and share network and volumes; the unit Kubernetes schedules. | 29 |
 | PodDisruptionBudget | "Never voluntarily take away more than this many pods", e.g. during node maintenance. | 29 |
@@ -366,6 +375,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Primary key / foreign key | A row's unique ID / a column pointing to another table's row (a chunk → its document). | 11 |
 | Principal | The verified caller as the code sees it after token validation: user id (`sub`), username, calling app (`azp`), groups and roles. | 17 |
 | Probe (startup, readiness, liveness) | Checks the kubelet runs on a container: has it started, should it get traffic, should it be restarted. | 29 |
+| Profile (rag.yaml) | A named set of component choices (`offline`, `local`, …); `extends` copies another profile and changes some parts. | 30 |
 | Project and API keys (Langfuse) | A Langfuse project holds traces; its public key (`pk-lf-…`) identifies it and its secret key (`sk-lf-…`) authorises writes. | 22 |
 | Projected service account token | A short-lived token the kubelet writes into a pod for one audience only (here `openbao`, 10 minutes) and refreshes automatically. | 29 |
 | Promotion (deployment) | Moving a tested, signed build to an environment; here a one-line digest change by pull request (`just promote`). | 29 |
@@ -378,6 +388,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Prompt template | A prompt with placeholders that get filled in for each request. | 24 |
 | Prompts as code | Keeping prompts as files in git, so they get reviews, history and CI like code. | 24 |
 | PromQL | Prometheus's query language: select series by name and labels, then compute with functions like `rate()`, `increase()`, `sum by (…)` and `histogram_quantile`. | 20 |
+| Protocol (structural typing) | A Python type that describes a shape (methods and attributes); any class with that shape fits, no base class needed. `runtime_checkable` lets `isinstance` check it too. | 30 |
 | Protocol mapper | A Keycloak rule that puts an extra fact into tokens, such as the `groups` claim or an extra audience. | 16 |
 | Provenance | Where something came from, and how it was made. | 25 |
 | Provenance (evaluation run) | The record of exactly what an evaluation measured: dataset version and SHA-256, target, prompt and model, judge, git commit and time. | 26 |
@@ -405,9 +416,11 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Receiver / processor / exporter | The Collector's building blocks: a receiver takes data in (OTLP), a processor changes it (limit, scrub, redact, label, batch), an exporter sends it out (debug, Prometheus, Tempo…). | 19 |
 | Recipient | Someone (or a machine) whose public key can open a SOPS file: you, CI, a teammate. | 6 |
 | Redaction | Masking a value that looks like a secret (`****`) so the record survives but the secret doesn't; the Collector's safety net for JWTs, keys and emails. | 19 |
+| Reference implementation | The simple, obviously correct version of a component (exact cosine search, textbook BM25) that faster real implementations are compared against. | 30 |
 | Refresh token | A longer-lived token an app swaps for new access tokens without signing in again; here it is one-time use and dies at logout. | 16 |
 | Refusal accuracy | How often the system says "I don't know…" when the documents really don't contain the answer. | 26 |
 | Regal | The linter and editor language server for Rego: catches bugs and style problems in policies; part of `just policy-check`. | 18 |
+| Registry (components) | The phone book of components: kind + name → how to build it, its parameters, a summary and its test status (`rag components`). | 30 |
 | Rego | OPA's policy language: you write rules that become true or produce values, and OPA evaluates them against `input` and `data`. | 18 |
 | Regression | A change that makes a metric worse. | 26 |
 | Relational database / table / row / column | Data stored in tables; each row is a record (one chunk), each column a field (its text, its vector). | 11 |
@@ -484,6 +497,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Single source of truth | Each fact lives in exactly one file; other places check it rather than copy it. | 25 |
 | Single-pass rendering | Filling placeholders once: text that was inserted is never scanned again, so a user typing `{{context}}` can't pull in other values. | 24 |
 | SLI / SLO / SLA | Service level Indicator (what you measure, e.g. the share of searches that succeed) / Objective (your internal target, 99% over 28 days) / Agreement (the contractual promise to customers, set looser than the SLO). | 20 |
+| Slot | A role in a RAG pipeline (`vector_store`, `reranker`, `guards`, …) that one component, or a list for plural slots, fills; its kind says which components may. | 30 |
 | SLSA | Supply-chain Levels for Software Artifacts ("salsa"): a framework of levels for how trustworthy a build and its provenance are. | 27 |
 | Smoke test vs benchmark | A handful of cases that catch obvious breakage, vs hundreds that measure quality reliably. Eight cases is a smoke test: one case moves the score by 12.5 points. | 26 |
 | Snapshot | A point-in-time backup file of a collection. | 12 |
@@ -501,6 +515,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | SSH key | A private key that stays on your Mac and a public `.pub` key you give GitHub, to prove it's you without a password. | 4 |
 | SSO session | Your sign-in at Keycloak itself. While it lasts (30 idle minutes, 10 hours at most here), other apps sign you in without asking again. | 16 |
 | Staged files | The files you have `git add`-ed: exactly what the next commit will contain, and what hooks check. | 5 |
+| Status: live / mocked / reference | How a rag-core component is tested here: against the real service, against its exact HTTP requests, or not at all (needs heavy extras). | 30 |
 | Stemming | Reducing words to a common root ("Fridays" → "fridai") so variations of a word match. | 13 |
 | Stream (Loki) | All log lines that share exactly the same set of labels; each unique label combination is a separate stream, so labels must have few values. | 21 |
 | Stream (Valkey/Redis) | An append-only log of messages, each with an increasing ID (`XADD`); with consumer groups it works as a crash-safe job queue. | 15 |
