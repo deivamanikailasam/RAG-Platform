@@ -121,7 +121,8 @@ class Chunk:
 class Query:
     text: str
     principal: Principal
-    filters: Mapping[str, Any] = field(default_factory=dict)  # metadata equality filters
+    # a metadata filter (rag_core.filters, extension 01): {"department": "hr", "updated": {"gte": …}}
+    filters: Mapping[str, Any] = field(default_factory=dict)
     history: tuple[Turn, ...] = ()  # earlier turns of a conversation (Step 33)
     k: int = 5
 

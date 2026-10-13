@@ -169,3 +169,149 @@ def check_access_update(make: Callable[[], Any], embedder: Any = None) -> None:
     assert "doc://leave" not in find(ALICE, "annual leave parental leave"), (
         "LEAK: revocation not applied"
     )
+
+
+# ---- extension 01: metadata filters and similarity metrics ----------------------------------------
+
+VIEWER = Principal("eve", groups=("all",), classifications=("public", "internal"))
+HR_VIEWER = Principal(
+    "hana", groups=("all", "hr"), classifications=("public", "internal", "confidential")
+)
+
+
+def filter_chunks() -> list[Chunk]:
+    """Six one-chunk documents with the metadata the filter checks need. Every text holds the
+    words "staff policy note", so an unfiltered search finds all that the person may see."""
+    every = Access("internal", ("all",))
+    rows: list[tuple[str, Access, dict[str, Any]]] = [
+        ("f1", every, {"department": "hr", "doc_type": "policy", "tags": ["leave", "parental"],
+                       "updated": "2024-03-01", "version": 3, "language": "en", "archived": False}),
+        ("f2", every, {"department": "hr", "doc_type": "guide", "tags": ["leave"],
+                       "updated": "2025-06-15T09:30:00Z", "version": 1, "language": "fr"}),
+        ("f3", every, {"department": "it", "doc_type": "policy", "tags": ["vpn", "security"],
+                       "updated": "2026-01-10", "version": 2, "language": "en"}),
+        ("f4", every, {"department": "finance", "doc_type": "form", "tags": [],
+                       "updated": "2023-12-31", "version": 2.5, "language": "en", "archived": True}),
+        ("f5", every, {"department": "it", "doc_type": "guide", "version": 7, "language": "de"}),
+        # only HR, with clearance: a filter that matches it must still never show it to others
+        ("f6", Access("confidential", ("hr",)), {"department": "hr", "doc_type": "policy",
+                                                 "updated": "2025-01-01", "language": "en"}),
+    ]  # fmt: skip
+    out = []
+    for name, access, meta in rows:
+        uri, text = (
+            f"doc://{name}",
+            f"Staff policy note {name}: {meta['department']} {meta['doc_type']}.",
+        )
+        out.append(
+            Chunk(
+                Chunk.make_id(uri, 0, text), uri, 0, text, len(text.split()), access, metadata=meta
+            )
+        )
+    return out
+
+
+# filter -> the documents VIEWER must get (f6 is never among them: VIEWER may not see it)
+FILTER_CASES: list[tuple[dict[str, Any], set[str]]] = [
+    ({"department": "hr"}, {"f1", "f2"}),
+    ({"department": ["hr", "finance"]}, {"f1", "f2", "f4"}),
+    ({"department": {"in": ["hr", "finance"]}}, {"f1", "f2", "f4"}),
+    ({"department": {"ne": "hr"}}, {"f3", "f4", "f5"}),
+    ({"department": {"nin": ["hr", "it"]}}, {"f4"}),
+    ({"tags": "leave"}, {"f1", "f2"}),
+    ({"tags": {"in": ["vpn", "parental"]}}, {"f1", "f3"}),
+    ({"tags": {"ne": "leave"}}, {"f3", "f4", "f5"}),
+    ({"tags": {"exists": True}}, {"f1", "f2", "f3"}),
+    ({"tags": {"exists": False}}, {"f4", "f5"}),
+    ({"updated": {"gte": "2025-01-01"}}, {"f2", "f3"}),
+    ({"updated": {"gt": "2025-06-15"}}, {"f2", "f3"}),
+    ({"updated": {"lt": "2024-01-01"}}, {"f4"}),
+    ({"updated": {"range": {"gte": "2024-01-01", "lt": "2026-01-01"}}}, {"f1", "f2"}),
+    ({"version": {"gte": 2.5}}, {"f1", "f4", "f5"}),
+    ({"version": {"lt": 2}}, {"f2"}),
+    ({"version": 2}, {"f3"}),
+    ({"archived": True}, {"f4"}),
+    ({"archived": {"ne": True}}, {"f1", "f2", "f3", "f5"}),
+    ({"or": [{"department": "finance"}, {"language": "de"}]}, {"f4", "f5"}),
+    ({"not": {"doc_type": "policy"}}, {"f2", "f4", "f5"}),
+    ({"and": [{"department": "it"}, {"not": {"tags": "vpn"}}]}, {"f5"}),
+    ({"document": "doc://f3"}, {"f3"}),
+    ({"document": {"in": ["doc://f1", "doc://f5"]}}, {"f1", "f5"}),
+    ({"department": "hr", "doc_type": "policy"}, {"f1"}),
+    ({"department": "nobody"}, set()),
+]
+
+
+def check_metadata_filters(make: Callable[[], Any], embedder: Any = None) -> None:
+    """Every filter operator gives exactly the expected documents, on top of (never instead of)
+    the permission filter. Vector stores when an embedder is given, keyword indexes otherwise."""
+    store, chunks = make(), filter_chunks()
+    if embedder is not None:
+        store.upsert(chunks, embedder.embed_documents([c.indexed_text for c in chunks]))
+        q = embedder.embed_query("staff policy note")
+
+        def find(who: Principal, flt: dict[str, Any] | None) -> set[str]:
+            return {
+                h.chunk.document_uri.removeprefix("doc://") for h in store.search(q, who, 20, flt)
+            }
+    else:
+        store.index(chunks)
+
+        def find(who: Principal, flt: dict[str, Any] | None) -> set[str]:
+            return {
+                h.chunk.document_uri.removeprefix("doc://")
+                for h in store.search("staff policy note", who, 20, flt)
+            }
+
+    assert find(VIEWER, None) == {"f1", "f2", "f3", "f4", "f5"}, (
+        "unfiltered search must find every visible document"
+    )
+    wrong = {}
+    for flt, want in FILTER_CASES:
+        got = find(VIEWER, flt)
+        if got != want:
+            wrong[str(flt)] = (sorted(got), sorted(want))
+    assert not wrong, "filters gave the wrong documents (got, want): " + "; ".join(
+        f"{k}: {v}" for k, v in wrong.items()
+    )
+    # the filter narrows; the permission filter still applies
+    assert find(HR_VIEWER, {"department": "hr", "doc_type": "policy"}) == {"f1", "f6"}
+    assert find(OTHER_TENANT, {"department": "hr"}) == set(), "LEAK: a filter crossed tenants"
+
+
+def check_metrics(make: Callable[[Any], Any], dims: int = 4) -> None:
+    """A vector store gives, for each metric it supports, the same ranking as exact arithmetic,
+    with scores where higher = more similar. `make(metric)` returns an EMPTY store for it, or None
+    when the store doesn't support that metric. Vectors are padded with zeros to `dims` (which
+    changes no metric)."""
+    from rag_core.similarity import similarity
+
+    # vectors chosen so that the metrics DISAGREE: cosine likes direction, dot likes length too
+    rows = {
+        "a": [1.0, 0.0, 0.0, 0.0],
+        "b": [3.0, 3.0, 0.0, 0.0],
+        "c": [0.5, 0.1, 0.0, 0.0],
+        "d": [0.0, 0.0, 2.0, 0.0],
+    }
+    q = [1.0, 0.2, 0.0, 0.0]
+    every = Access("internal", ("all",))
+    chunks = [
+        Chunk(Chunk.make_id(f"doc://{n}", 0, n), f"doc://{n}", 0, f"vector {n}", 2, every)
+        for n in rows
+    ]
+    pad = [0.0] * (dims - len(q))
+    for metric in ("cosine", "dot", "l2", "l1"):
+        store = make(metric)
+        if store is None:  # not supported by this store
+            continue
+        store.upsert(chunks, [v + pad for v in rows.values()])
+        hits = store.search(q + pad, VIEWER, 4)
+        got = [h.chunk.document_uri.removeprefix("doc://") for h in hits]
+        exact = {n: similarity(metric, q, v) for n, v in rows.items()}
+        want = sorted(exact, key=lambda n: -exact[n])
+        assert got == want, f"{metric}: ranking {got}, exact arithmetic says {want}"
+        for h in hits:
+            n = h.chunk.document_uri.removeprefix("doc://")
+            assert math.isclose(h.score, exact[n], rel_tol=2e-2, abs_tol=2e-3), (
+                f"{metric}: score of {n} is {h.score}, expected {exact[n]} (higher = more similar)"
+            )

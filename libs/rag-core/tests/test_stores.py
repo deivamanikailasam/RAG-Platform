@@ -2,7 +2,8 @@
 search on a real Postgres, Qdrant on a real Qdrant, OpenSearch by its exact requests.
 
 RAG_TEST_PGVECTOR_DSN=postgres://postgres@127.0.0.1:55433/postgres                     (any Postgres with pgvector)
-qdrant on PATH (just tools qdrant)
+qdrant on PATH (just tools qdrant), or RAG_TEST_QDRANT_URL=http://127.0.0.1:6333 (api key test-admin-key)
+RAG_TEST_OPENSEARCH_URL=http://127.0.0.1:9200   (a throwaway OpenSearch, security plugin off)
 Tests skip when those aren't available.
 """
 
@@ -17,6 +18,7 @@ import subprocess
 import time
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any, cast
 
 import httpx
 import pytest
@@ -131,6 +133,9 @@ def _port() -> int:
 
 @pytest.fixture(scope="module")
 def qdrant_url(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
+    if running := os.environ.get("RAG_TEST_QDRANT_URL"):  # e.g. a throwaway container
+        yield running
+        return
     binary = shutil.which("qdrant")
     if binary is None:
         pytest.skip("qdrant not installed (just tools qdrant)")
@@ -220,6 +225,17 @@ class FakeOpenSearch:
             return httpx.Response(200, json={"hits": {"hits": [{"_score": 3.5, "_source": src}]}})
         if request.url.path.endswith("_delete_by_query"):
             return httpx.Response(200, json={"deleted": 2})
+        if request.url.path.endswith("/_mapping"):  # Step 13's index: cosine, DIMS dimensions
+            field = {
+                "type": "knn_vector",
+                "dimension": DIMS,
+                "method": {"space_type": "cosinesimil"},
+            }
+            return httpx.Response(
+                200, json={"rag-chunks-v1": {"mappings": {"properties": {"embedding": field}}}}
+            )
+        if request.method == "HEAD":
+            return httpx.Response(200)
         return httpx.Response(200, json={"errors": False, "items": []})
 
 
@@ -306,3 +322,207 @@ def test_hybrid_search_on_postgres_end_to_end(pg_dsn: str) -> None:
     hits = SearchPipeline(Container(config, "pg")).search(Query("My VPN shows E-4021", staff)).hits
     assert hits[0].chunk.document_uri.endswith("vpn-troubleshooting.md")
     assert isinstance(hits[0].chunk.metadata["document_id"], int)
+
+
+# ---- extension 01: metadata filters and similarity metrics on every store ----------------------
+
+from rag_core.components.basics import MemoryKeywordIndex, MemoryVectorStore  # noqa: E402
+from rag_core.components.opensearch import OpenSearchKnnParams  # noqa: E402
+from rag_core.components.pgstore import PgVectorParams  # noqa: E402
+from rag_core.similarity import ContractError  # noqa: E402
+from rag_core.testing.conformance import (  # noqa: E402
+    VIEWER,
+    check_metadata_filters,
+    check_metrics,
+    filter_chunks,
+)
+
+
+def test_memory_stores_filter_and_measure_like_the_reference() -> None:
+    check_metadata_filters(MemoryVectorStore, HashingEmbedder(DIMS))
+    check_metadata_filters(MemoryKeywordIndex)
+    check_metrics(MemoryVectorStore)
+
+
+def pgvec(dsn: str, collection: str, **kw: object) -> PgVectorStore:
+    base = pg_params(dsn, collection)
+    return PgVectorStore(PgVectorParams.model_validate(base.model_dump() | kw))
+
+
+def test_postgres_stores_filter_in_sql(pg_dsn: str) -> None:
+    n = iter(range(100))
+    check_metadata_filters(lambda: pgvec(pg_dsn, f"flt_{next(n)}"), HashingEmbedder(DIMS))
+    check_metadata_filters(lambda: PgFullTextIndex(pg_params(pg_dsn, f"fltk_{next(n)}")))
+
+
+def test_pgvector_every_metric_with_its_own_index(pg_dsn: str) -> None:
+    """cosine, inner product, L2 and L1 (pgvector >= 0.7), each with its operator-class index
+    created on first use, rank exactly like the arithmetic; the planner really uses the index."""
+    n = iter(range(100))
+    check_metrics(
+        lambda m: pgvec(pg_dsn, f"metric_{m}_{next(n)}", metric=m, create_index=True), DIMS
+    )
+    import psycopg
+
+    with psycopg.connect(pg_dsn) as conn:
+        names = {
+            r[0]
+            for r in conn.execute("SELECT indexname FROM pg_indexes WHERE tablename = 'chunks'")
+        }
+    assert {"chunks_embedding_hnsw_ip_m16_ef64", "chunks_embedding_hnsw_l2_m16_ef64",
+            "chunks_embedding_hnsw_l1_m16_ef64"} <= names  # fmt: skip
+
+
+def test_pgvector_index_types_and_binary_quantization(pg_dsn: str) -> None:
+    n = iter(range(100))
+    settings: list[dict[str, object]] = [{"index_type": "flat"}, {"index_type": "ivfflat", "lists": 1, "probes": 1},
+                                         {"quantization": "binary", "oversample": 4.0}]  # fmt: skip
+    for kw in settings:
+
+        def make(metric: str, kw: dict[str, object] = kw) -> PgVectorStore | None:
+            if kw.get("index_type") == "ivfflat" and metric == "l1":
+                return None  # pgvector's ivfflat has no l1 operator class
+            return pgvec(
+                pg_dsn, f"kind_{next(n)}", **(kw | {"metric": metric, "create_index": True})
+            )
+
+        check_metrics(make, DIMS)
+
+
+def test_pgvector_refuses_a_collection_built_for_another_metric(pg_dsn: str) -> None:
+    chunks = filter_chunks()
+    vectors = HashingEmbedder(DIMS).embed_documents([c.text for c in chunks])
+    pgvec(pg_dsn, "contract", metric="dot").upsert(chunks, vectors)  # the collection is now "dot"
+    with pytest.raises(ContractError, match="metric: index has 'dot', profile asks for 'cosine'"):
+        pgvec(pg_dsn, "contract").search(vectors[0], VIEWER, 3)
+    with pytest.raises(ContractError):
+        pgvec(pg_dsn, "contract", metric="l2").upsert(chunks, vectors)
+    assert pgvec(pg_dsn, "contract", metric="dot").search(vectors[0], VIEWER, 1)
+
+
+def test_pgvector_prints_the_index_a_migration_needs() -> None:
+    assert PgVectorStore(PgVectorParams(dsn_env="NOPE_UNSET", metric="l2", hnsw_m=24, ef_construction=128)).index_ddl() == (
+        "CREATE INDEX CONCURRENTLY IF NOT EXISTS chunks_embedding_hnsw_l2_m24_ef128 ON rag.chunks "
+        "USING hnsw (embedding halfvec_l2_ops) WITH (m = 24, ef_construction = 128)")  # fmt: skip
+    assert "nothing to add" in str(PgVectorStore(PgVectorParams(dsn_env="NOPE_UNSET")).index_ddl())
+
+
+def qstore(url: str, collection: str, fresh: bool = True, **kw: object) -> QdrantStore:
+    os.environ["RAG_TEST_QDRANT_KEY"] = "test-admin-key"
+    if fresh:  # a long-lived test server may hold this collection from an earlier run
+        httpx.delete(
+            f"{url}/collections/{collection}",
+            headers={"api-key": "test-admin-key"},
+            trust_env=False,
+        )
+    return QdrantStore(QdrantParams.model_validate({"url": url, "collection": collection, "api_key_env": "RAG_TEST_QDRANT_KEY",
+                                                    "dimensions": DIMS, "create_if_missing": True} | kw))  # fmt: skip
+
+
+def test_qdrant_filters_as_payload_conditions(qdrant_url: str) -> None:
+    n = iter(range(100))
+    check_metadata_filters(lambda: qstore(qdrant_url, f"flt_{next(n)}"), HashingEmbedder(DIMS))
+    # the same with payload indexes on the filtered fields (what production should have)
+    indexes = {
+        "department": "keyword",
+        "updated": "datetime",
+        "version": "float",
+        "tags": "keyword",
+    }
+    check_metadata_filters(lambda: qstore(qdrant_url, f"flti_{next(n)}", metadata_indexes=indexes),
+                           HashingEmbedder(DIMS))  # fmt: skip
+
+
+def test_qdrant_every_metric_index_type_and_quantization(qdrant_url: str) -> None:
+    n = iter(range(100))
+    settings: list[dict[str, object]] = [{}, {"index_type": "flat"}, {"quantization": "scalar"}, {"quantization": "binary"},
+                                         {"hnsw_m": 32, "ef_construction": 200, "ef_search": 256}]  # fmt: skip
+    for kw in settings:
+
+        def make(metric: str, kw: dict[str, object] = kw) -> QdrantStore:
+            return qstore(
+                qdrant_url, f"metric_{next(n)}", metric=metric, **cast(dict[str, Any], kw)
+            )
+
+        check_metrics(make, DIMS)
+
+
+def test_qdrant_refuses_a_collection_built_for_another_metric(qdrant_url: str) -> None:
+    qstore(qdrant_url, "contract_dot", metric="dot").count()  # created as Dot
+    with pytest.raises(ContractError, match="distance: index has 'Dot', profile asks for 'Cosine'"):
+        qstore(qdrant_url, "contract_dot", fresh=False).count()
+    with pytest.raises(ContractError, match="size"):
+        qstore(qdrant_url, "contract_dot", fresh=False, metric="dot", dimensions=32).count()
+    # the Step 12 name of the knob still works
+    assert QdrantParams.model_validate({"hnsw_ef": 64}).ef_search == 64
+
+
+# ---- OpenSearch, live --------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def os_url() -> str:
+    url = os.environ.get("RAG_TEST_OPENSEARCH_URL")
+    if not url:
+        pytest.skip("RAG_TEST_OPENSEARCH_URL not set (a throwaway OpenSearch, security plugin off)")
+    return url
+
+
+def os_knn(url: str, index: str, fresh: bool = True, **kw: object) -> OpenSearchVectorStore:
+    if fresh:  # a long-lived test server may hold this index from an earlier run
+        httpx.delete(f"{url}/{index}", trust_env=False)
+    return OpenSearchVectorStore(OpenSearchKnnParams.model_validate(
+        {"url": url, "index": index, "verify": False, "dimensions": DIMS, "create_if_missing": True} | kw))  # fmt: skip
+
+
+def test_opensearch_filters_in_the_bool_query(os_url: str) -> None:
+    n = iter(range(100))
+    check_metadata_filters(lambda: os_knn(os_url, f"flt-{next(n)}"), HashingEmbedder(DIMS))
+
+    def keyword() -> OpenSearchKeywordIndex:
+        index = f"fltk-{next(n)}"
+        os_knn(os_url, index).count()  # creates the index with the mapping (metadata as keywords)
+        return OpenSearchKeywordIndex(
+            OpenSearchParams(url=os_url, index=index, verify=False, dimensions=DIMS)
+        )
+
+    check_metadata_filters(keyword)
+
+
+def test_opensearch_conforms_live(os_url: str) -> None:
+    n = iter(range(100))
+    check_vector_store(lambda: os_knn(os_url, f"conf-{next(n)}"), HashingEmbedder(DIMS))
+
+    def keyword() -> OpenSearchKeywordIndex:
+        index = f"confk-{next(n)}"
+        os_knn(os_url, index).count()
+        return OpenSearchKeywordIndex(
+            OpenSearchParams(url=os_url, index=index, verify=False, dimensions=DIMS)
+        )
+
+    check_keyword_index(keyword)
+
+
+def test_opensearch_every_metric(os_url: str) -> None:
+    """lucene: cosine, inner product, L2 (approximate); L1 only by exact scoring (index_type flat)."""
+    n = iter(range(100))
+    check_metrics(
+        lambda m: os_knn(os_url, f"metric-{next(n)}", metric=m) if m != "l1" else None, DIMS
+    )
+    check_metrics(lambda m: os_knn(os_url, f"exact-{next(n)}", metric=m, index_type="flat"), DIMS)
+    check_metrics(
+        lambda m: (
+            os_knn(os_url, f"faiss-{next(n)}", metric=m, engine="faiss") if m != "l1" else None
+        ),
+        DIMS,
+    )
+
+
+def test_opensearch_refuses_an_index_built_for_another_metric(os_url: str) -> None:
+    os_knn(os_url, "contract-l2", metric="l2").count()
+    with pytest.raises(
+        ContractError, match="space_type: index has 'l2', profile asks for 'cosinesimil'"
+    ):
+        os_knn(os_url, "contract-l2", fresh=False).count()
+    with pytest.raises(ValueError, match="l1 only with engine nmslib"):
+        OpenSearchKnnParams(metric="l1")

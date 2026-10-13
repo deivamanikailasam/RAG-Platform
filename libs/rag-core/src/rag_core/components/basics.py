@@ -15,7 +15,7 @@ import os
 import re
 import threading
 from collections import Counter, defaultdict
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -23,7 +23,9 @@ from typing import Any
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
+from rag_core import filters as _filters
 from rag_core.registry import Container, register
+from rag_core.similarity import Metric, similarity
 from rag_core.types import Access, Chunk, Principal, ScoredChunk
 
 WORD = re.compile(r"[\w]+(?:['\u2019][\w]+)?", re.UNICODE)  # keeps "don't" whole
@@ -33,16 +35,10 @@ def words(text: str) -> list[str]:
     return [w.lower() for w in WORD.findall(text)]
 
 
-def matches_filters(chunk: Chunk, filters: dict[str, object] | None) -> bool:
-    """Metadata equality filters; a list value means "any of"."""
-    for key, want in (filters or {}).items():
-        have = chunk.metadata.get(key)
-        if isinstance(want, list | tuple | set):
-            if have not in want:
-                return False
-        elif have != want:
-            return False
-    return True
+def matches_filters(chunk: Chunk, filters: Mapping[str, object] | None) -> bool:
+    """Does the chunk satisfy a metadata filter (rag_core.filters)? The Step 32 forms still work:
+    {key: value} is "equal", {key: [a, b]} is "any of"."""
+    return _filters.matcher(filters)(chunk)
 
 
 # ---------------------------------------------------------------- token counters
@@ -307,10 +303,16 @@ def cosine(a: Sequence[float], b: Sequence[float]) -> float:
 # ---------------------------------------------------------------- in-memory stores
 
 
-class MemoryVectorStore:
-    """Exact (brute-force) cosine search. Fine to ~50k chunks; the reference for every real store."""
+class MemoryVectorParams(_Strict):
+    metric: Metric = "cosine"  # cosine | dot | l2 | l1 (extension 01): exact, so every metric works
 
-    def __init__(self) -> None:
+
+class MemoryVectorStore:
+    """Exact (brute-force) search with any metric. Fine to ~50k chunks; the reference every real
+    store is compared to (the same scores, the same filters, the same permissions)."""
+
+    def __init__(self, metric: Metric = "cosine") -> None:
+        self.metric: Metric = metric
         self._rows: dict[str, tuple[Chunk, list[float]]] = {}
         self._lock = threading.Lock()
 
@@ -329,10 +331,11 @@ class MemoryVectorStore:
         return len(ids)
 
     def search(self, vector: Sequence[float], principal: Principal, k: int,
-               filters: dict[str, object] | None = None) -> list[ScoredChunk]:  # fmt: skip
+               filters: Mapping[str, object] | None = None) -> list[ScoredChunk]:  # fmt: skip
+        wanted = _filters.matcher(filters)  # validated once, before any row is looked at
         hits = [ScoredChunk(ch, s, {"dense": s}) for ch, v in list(self._rows.values())
-                if ch.access.allows(principal) and matches_filters(ch, filters)
-                for s in [cosine(vector, v)]]  # fmt: skip
+                if ch.access.allows(principal) and wanted(ch)
+                for s in [similarity(self.metric, vector, v)]]  # fmt: skip
         return sorted(hits, key=lambda h: -h.score)[:k]
 
     def update_access(self, document_uri: str, access: Access) -> int:
@@ -352,11 +355,10 @@ class MemoryVectorStore:
         return row[0] if row else None
 
 
-@register(
-    "vector_store", "memory", summary="exact cosine search in memory (dev, tests, small corpora)"
-)
-def _memvec(p: BaseModel, c: Container) -> MemoryVectorStore:
-    return MemoryVectorStore()
+@register("vector_store", "memory", params=MemoryVectorParams,
+          summary="exact search in memory, any metric (cosine/dot/l2/l1); dev, tests, small corpora")  # fmt: skip
+def _memvec(p: MemoryVectorParams, c: Container) -> MemoryVectorStore:
+    return MemoryVectorStore(p.metric)
 
 
 class BM25Params(_Strict):
@@ -409,10 +411,9 @@ class MemoryKeywordIndex:
         return self._rank(text, k, lambda ch: True)
 
     def search(self, text: str, principal: Principal, k: int,
-               filters: dict[str, object] | None = None) -> list[ScoredChunk]:  # fmt: skip
-        return self._rank(
-            text, k, lambda ch: ch.access.allows(principal) and matches_filters(ch, filters)
-        )
+               filters: Mapping[str, object] | None = None) -> list[ScoredChunk]:  # fmt: skip
+        wanted = _filters.matcher(filters)
+        return self._rank(text, k, lambda ch: ch.access.allows(principal) and wanted(ch))
 
     def _rank(self, text: str, k: int, visible: Callable[[Chunk], bool]) -> list[ScoredChunk]:
         n = len(self._docs) or 1

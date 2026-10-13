@@ -15,12 +15,14 @@ rag worker  [--profile p] [--forever]                     take jobs from the que
 
 Search (Step 32):
 rag search "question" --group hr [--classification internal] [-k 5] [--json] [--ingest FILE…]
+           [--filter 'department=hr' --filter 'updated>=2025-01-01' | --filter '{"or": [...]}']
                                                           search as someone, with every score
+rag index ddl [--profile p]                               the CREATE INDEX for the vector store's metric
 rag eval-search dataset.yaml [--variant …] [--no-ingest] [--fail-under recall=0.9] [--json]
                                                           compare search variants on labelled questions
 
 Answers (Step 33):
-rag ask "question" ["follow-up" …] --group hr [--corpus dataset.yaml] [--stream] [--no-memory] [--json]
+rag ask "question" ["follow-up" …] --group hr [--corpus dataset.yaml] [--stream] [--no-memory] [--json] [--filter …]
                                                           cited answers, as someone, as a conversation
 
 Guardrails (Step 34):
@@ -70,6 +72,51 @@ import yaml
 from rag_core import config as cfg
 from rag_core.registry import ComponentError, Container, describe
 
+FILTER_HELP = ("a metadata filter: key=value, key!=value, key=a,b (any of), key>=2025-01-01 (also >, <, <=), "
+               "key? (has a value), or a JSON/YAML expression; repeat to AND them")  # fmt: skip
+_CONDITION = __import__("re").compile(r"^([A-Za-z_][A-Za-z0-9_\-]*)\s*(!=|>=|<=|=|>|<|\?)\s*(.*)$")
+
+
+def parse_filters(items: list[str]) -> dict[str, Any]:
+    """`--filter` values as one filter expression (rag_core.filters): ANDed, validated."""
+    from rag_core import filters
+
+    parts: list[dict[str, Any]] = []
+    for raw in items:
+        raw = raw.strip()
+        if raw.startswith("{"):
+            data = yaml.safe_load(raw)
+            if not isinstance(data, dict):
+                raise filters.FilterError(f"--filter {raw!r}: expected a mapping")
+            parts.append(data)
+            continue
+        m = _CONDITION.match(raw)
+        if not m:
+            raise filters.FilterError(
+                f"--filter {raw!r}: expected key=value, key>=value, … or a JSON expression"
+            )
+        key, op, text = m.groups()
+        if op == "?":
+            parts.append({key: {"exists": True}})
+            continue
+        values = [yaml.safe_load(v.strip()) if v.strip() else "" for v in text.split(",")]
+        values = [
+            v.isoformat() if hasattr(v, "isoformat") else v for v in values
+        ]  # YAML reads dates
+        if op in ("=", "!=") and len(values) > 1:
+            parts.append({key: {"in" if op == "=" else "nin": values}})
+        else:
+            parts.append(
+                {
+                    key: {
+                        {"=": "eq", "!=": "ne", ">": "gt", ">=": "gte", "<": "lt", "<=": "lte"}[
+                            op
+                        ]: values[0]
+                    }
+                }
+            )
+    return filters.combine(*parts)
+
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="rag")
@@ -108,7 +155,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--ingest", nargs="*", default=[], help="ingest these files first (in-memory profiles)"
     )
+    p.add_argument("--filter", action="append", default=[], help=FILTER_HELP)
     p.add_argument("--json", action="store_true")
+    p = sub.add_parser("index", help="vector index statements for a profile (extension 01)")
+    p.add_argument("action", choices=["ddl"])
+    p.add_argument("--file", default=os.environ.get("RAG_CONFIG", "rag.yaml"))
+    p.add_argument("--profile")
     p = sub.add_parser("ask", help="answer questions with citations, as a given person (Step 33)")
     p.add_argument("questions", nargs="+", help="later questions can be follow-ups of earlier ones")
     p.add_argument("--file", default=os.environ.get("RAG_CONFIG", "rag.yaml"))
@@ -121,6 +173,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument("--stream", action="store_true", help="print the answer as it is generated")
     p.add_argument("--no-memory", action="store_true", help="every question on its own")
+    p.add_argument("--filter", action="append", default=[], help=FILTER_HELP)
     p.add_argument("--json", action="store_true")
     p = sub.add_parser("eval-search", help="compare search variants on a labelled dataset")
     p.add_argument("dataset")
@@ -202,6 +255,8 @@ def main(argv: list[str] | None = None) -> int:
             return _eval_guards(a, container)
         if a.cmd == "search":
             return _search(a, container)
+        if a.cmd == "index":
+            return _index(container)
         if a.cmd == "ask":
             return _ask(a, container)
         if a.cmd in ("ingest", "delete", "enqueue", "worker"):
@@ -232,6 +287,11 @@ def main(argv: list[str] | None = None) -> int:
     except ComponentError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
+    except ValueError as e:  # a bad --filter (FilterError), with what is wrong and where
+        if type(e).__name__ != "FilterError":
+            raise
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 2
 
 
 def _readiness(container: Container) -> int:
@@ -458,7 +518,7 @@ def _search(a: argparse.Namespace, c: Container) -> int:
             pipe.ingest(load_source(f"file://{Path(path).resolve()}",
                                     Access("internal", tuple(a.group), a.tenant)))  # fmt: skip
     who = Principal("cli", tuple(a.group), classes, a.tenant)
-    result = SearchPipeline(c).search(Query(a.question, who, k=a.k))
+    result = SearchPipeline(c).search(Query(a.question, who, parse_filters(a.filter), k=a.k))
     if a.json:
         hits: list[dict[str, Any]] = [
             {"id": h.chunk.id, "document": h.chunk.document_uri, "score": h.score, "scores": dict(h.scores),
@@ -466,6 +526,10 @@ def _search(a: argparse.Namespace, c: Container) -> int:
         print(json.dumps({"trace": result.trace, "hits": hits}, indent=2, default=str))
         return 0
     print(f"searched: {result.texts}")
+    if result.trace.get("filters") or a.filter:
+        print(f"filters:  {result.trace.get('filters') or parse_filters(a.filter)}")
+    if result.trace.get("retriever"):
+        print(f"routing:  {result.trace['retriever']}")
     print(f"pipeline: {result.trace['components']}")
     print(f"counts:   {result.trace['counts']}   ms: {result.trace['ms']}")
     for i, h in enumerate(result.hits, 1):
@@ -474,6 +538,23 @@ def _search(a: argparse.Namespace, c: Container) -> int:
         section = h.chunk.metadata.get("section", "")
         print(f"{i}. {h.score:.4f}   {where}{' > ' + section if section else ''}   [{parts}]")
         print(f"     {h.chunk.text[:110].replace(chr(10), ' ')}")
+    return 0
+
+
+def _index(c: Container) -> int:
+    """Extension 01: the CREATE INDEX a profile's vector store needs (for a project migration)."""
+    store = c.get("vector_store")
+    ddl = store.index_ddl() if hasattr(store, "index_ddl") else None
+    if hasattr(store, "collection_config"):  # Qdrant: the collection body
+        print(json.dumps(store.collection_config(), indent=2))
+    elif hasattr(store, "mapping"):  # OpenSearch: the index body
+        print(json.dumps(store.mapping(), indent=2))
+    elif ddl:
+        print(ddl + ";")
+    else:
+        print(
+            f"-- {type(store).__name__}: no index to create (exact search, or created by the store)"
+        )
     return 0
 
 
@@ -488,13 +569,14 @@ def _ask(a: argparse.Namespace, c: Container) -> int:
     classes: tuple[Classification, ...] = tuple(a.classification) or ("public", "internal")
     who = Principal("cli", tuple(a.group), classes, a.tenant)
     pipeline = AnswerPipeline(c)
+    wanted = parse_filters(a.filter)
     session = None if a.no_memory else "cli"  # one conversation: later questions can be follow-ups
     for question in a.questions:
         if a.stream and not a.json:
             print(f"Q: {question}\nA: ", end="", flush=True)
             done: Answer | None = None
             streamed = ""
-            for event in pipeline.stream(question, who, session_id=session):
+            for event in pipeline.stream(question, who, session_id=session, filters=wanted):
                 if event.kind == "delta":
                     streamed += event.data
                     print(event.data, end="", flush=True)
@@ -509,7 +591,7 @@ def _ask(a: argparse.Namespace, c: Container) -> int:
                 print(f"   checked: {done.text}")
             _print_details(done, ms="-")
             continue
-        answer = pipeline.answer(question, who, session_id=session)
+        answer = pipeline.answer(question, who, session_id=session, filters=wanted)
         if a.json:
             print(json.dumps({"question": question, **answer_dict(answer),
                               "cache": answer.trace.get("cache"), "model": answer.trace.get("model"),

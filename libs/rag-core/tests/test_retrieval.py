@@ -4,7 +4,7 @@ evaluation command (Step 32)."""
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import date
 from pathlib import Path
 from typing import Any, ClassVar
@@ -158,7 +158,7 @@ class SpyIndex(MemoryKeywordIndex):
         self.searched: list[str] = []
 
     def search(
-        self, text: str, principal: Principal, k: int, filters: dict[str, object] | None = None
+        self, text: str, principal: Principal, k: int, filters: Mapping[str, object] | None = None
     ) -> list[ScoredChunk]:
         self.searched.append(text)
         return super().search(text, principal, k, filters)
@@ -425,7 +425,7 @@ class LeakyStore(MemoryVectorStore):
         vector: Sequence[float],
         principal: Principal,
         k: int,
-        filters: dict[str, object] | None = None,
+        filters: Mapping[str, object] | None = None,
     ) -> list[ScoredChunk]:
         return super().search(
             vector, Principal("root", ("hr", "eng"), ("public", "internal", "confidential")), k

@@ -41,6 +41,15 @@ class SizeParams(_Strict):
         return self
 
 
+def _filterable(value: Any) -> bool:
+    """Source metadata copied to every chunk: scalars, and lists of scalars such as tags (extension
+    01: what metadata filters can test). Nested objects stay on the document."""
+    scalar = str | int | float | bool
+    if isinstance(value, list | tuple):
+        return all(isinstance(v, scalar) for v in value)
+    return isinstance(value, scalar)
+
+
 class _Base:
     def __init__(self, counter: Any) -> None:
         self.counter = counter
@@ -53,7 +62,7 @@ class _Base:
                 id=Chunk.make_id(doc.uri, i, text), document_uri=doc.uri, index=i, text=text,
                 token_count=self.counter.count(text), access=doc.access,
                 metadata={"title": doc.title, "doc_sha256": doc.sha256, "language": doc.language,
-                            **{k: v for k, v in doc.metadata.items() if isinstance(v, str | int | float | bool)}, **meta},
+                            **{k: v for k, v in doc.metadata.items() if _filterable(v)}, **meta},
             ))  # fmt: skip
         return out
 

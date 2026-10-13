@@ -9,13 +9,15 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from rag_core import filters as _filters
 from rag_core.components.queues import ManifestEntry
 from rag_core.registry import Container, register
+from rag_core.similarity import VectorIndexParams, check_contract
 from rag_core.types import Access, Chunk, Principal, ScoredChunk
 
 
@@ -71,6 +73,17 @@ class PgConnection:
             self.pool = ConnectionPool(make_conninfo(host=p.host, port=p.port, dbname=p.dbname), kwargs=kwargs,
                                 min_size=0, max_size=p.pool_size, open=True, check=ConnectionPool.check_connection)  # fmt: skip
         self._collection_id: int | None = None
+        self._version: tuple[int, int] | None = None
+
+    def pgvector_version(self, conn: Any) -> tuple[int, int]:
+        """(major, minor) of the vector extension: iterative scans need 0.8, l1 and halfvec 0.7."""
+        if self._version is None:
+            row = conn.execute(
+                "SELECT extversion FROM pg_extension WHERE extname = 'vector'"
+            ).fetchone()
+            major, minor = (int(x) for x in str(row[0] if row else "0.0").split(".")[:2])
+            self._version = (major, minor)
+        return self._version
 
     def collection_id(self, conn: Any) -> int:
         if self._collection_id is None:
@@ -101,8 +114,10 @@ def _tenant(conn: Any, tenant: str) -> None:
 
 
 def _shared(p: PgParams) -> PgConnection:
-    """Vector store and keyword index on the same database share one pool."""
-    key = p.model_dump_json()
+    """Vector store and keyword index on the same database share one pool (keyed by the
+    connection settings only: the vector store's index settings don't need a pool of their own)."""
+    base = PgParams.model_validate(p.model_dump(include=set(PgParams.model_fields)))
+    key = base.model_dump_json()
     if key not in _conns:
         _conns[key] = PgConnection(p)
     return _conns[key]
@@ -113,18 +128,10 @@ AND d.classification = ANY(%(classifications)s)
 AND (d.classification = 'public' OR d.acl_groups && %(groups)s)"""
 
 
-def _filters_sql(filters: dict[str, object] | None, params: dict[str, Any]) -> str:
-    """Metadata filters as parameters (never string-built values): key = value or key in (…)."""
-    parts = []
-    for i, (key, want) in enumerate((filters or {}).items()):
-        params[f"fk{i}"] = key
-        if isinstance(want, list | tuple | set):
-            params[f"fv{i}"] = [str(w) for w in want]
-            parts.append(f"c.metadata ->> %(fk{i})s = ANY(%(fv{i})s)")
-        else:
-            params[f"fv{i}"] = json.dumps({key: want})
-            parts.append(f"c.metadata @> %(fv{i})s::jsonb")
-    return "".join(f" AND {p}" for p in parts)
+def _filters_sql(filters: Mapping[str, object] | None, params: dict[str, Any]) -> str:
+    """The metadata filter (extension 01) as ' AND (…)', every value a bound parameter. It is
+    appended to ACCESS_SQL: it can only narrow what the permission filter already allows."""
+    return _filters.to_sql(filters, params)
 
 
 def _access_params(principal: Principal, collection: int) -> dict[str, Any]:
@@ -211,12 +218,120 @@ def _update_access(db: PgConnection, document_uri: str, access: Access) -> int:
     return int(row[0]) if row else 0
 
 
+# pgvector's operator per metric, and how its result becomes a "higher = better" score
+PG_OPS: dict[str, tuple[str, str, str]] = {
+    # metric: (distance operator, operator class suffix, score from the distance d)
+    "cosine": ("<=>", "cosine_ops", "1 - ({d})"),
+    "dot": ("<#>", "ip_ops", "-({d})"),  # <#> is the NEGATIVE inner product (smaller = closer)
+    "l2": ("<->", "l2_ops", "1 / (1 + ({d}))"),
+    "l1": ("<+>", "l1_ops", "1 / (1 + ({d}))"),  # pgvector >= 0.7
+}
+OUTER = """s.chunk_key, s.source_uri, s.chunk_index, s.content, s.embed_text, s.token_count, s.parent_key,
+s.metadata, s.classification, s.acl_groups, s.tenant, s.id"""
+
+
+class PgVectorParams(PgParams, VectorIndexParams):
+    """The Postgres connection (PgParams) plus the vector index settings (extension 01)."""
+
+    model_config = ConfigDict(extra="forbid")
+    ef_search: int = Field(80, ge=10, le=1000)  # hnsw.ef_search per query
+    lists: int = Field(
+        100, ge=1
+    )  # ivfflat: clusters (rows / 1000 up to 1M rows is the usual start)
+    probes: int = Field(10, ge=1)  # ivfflat: clusters searched per query (recall/speed knob)
+    # pgvector >= 0.8: keep scanning the index until k rows pass the filters (strict or
+    # metadata filters otherwise return fewer than k); relaxed = slightly out of order, re-sorted
+    iterative_scan: Literal["off", "relaxed_order", "strict_order"] = "relaxed_order"
+    # binary: search 1-bit codes first (hamming distance, ~32x smaller index), then re-score the
+    # best `oversample` x k candidates with the full vectors. halfvec (the default vector_type)
+    # is already 16-bit scalar quantization.
+    quantization: Literal["none", "binary"] = "none"
+    oversample: float = Field(4.0, ge=1.0, le=50.0)
+    # create the metric's index on first use (dev, tests: needs the table owner's rights). In
+    # production a migration creates it: `rag index ddl --profile <p>` prints the statement
+    create_index: bool = False
+
+    @model_validator(mode="after")
+    def _supported(self) -> PgVectorParams:
+        if self.index_type == "ivfflat" and self.metric == "l1":
+            raise ValueError(
+                "pgvector's ivfflat has no l1 operator class: use index_type hnsw or flat"
+            )
+        if self.index_type == "ivfflat" and self.quantization != "none":
+            raise ValueError("binary quantization is supported with index_type hnsw or flat")
+        return self
+
+
+def pg_index_ddl(p: PgVectorParams, concurrently: bool = True) -> str | None:
+    """The CREATE INDEX statement for these settings; None for flat (no index: exact scan)."""
+    if p.index_type == "flat":
+        return None
+    _, ops, _ = PG_OPS[p.metric]
+    how = "CONCURRENTLY IF NOT EXISTS" if concurrently else "IF NOT EXISTS"
+    if p.quantization == "binary":
+        name = f"chunks_embedding_bq_hnsw_m{p.hnsw_m}_ef{p.ef_construction}"
+        return (f"CREATE INDEX {how} {name} ON rag.chunks USING hnsw "
+                f"((binary_quantize(embedding)::bit({p.dimensions})) bit_hamming_ops) "
+                f"WITH (m = {p.hnsw_m}, ef_construction = {p.ef_construction})")  # fmt: skip
+    opclass = f"{p.vector_type}_{ops}"
+    if p.index_type == "ivfflat":
+        return (f"CREATE INDEX {how} chunks_embedding_ivf_{ops.removesuffix('_ops')}_l{p.lists} "
+                f"ON rag.chunks USING ivfflat (embedding {opclass}) WITH (lists = {p.lists})")  # fmt: skip
+    return (f"CREATE INDEX {how} chunks_embedding_hnsw_{ops.removesuffix('_ops')}_m{p.hnsw_m}_ef{p.ef_construction} "
+            f"ON rag.chunks USING hnsw (embedding {opclass}) WITH (m = {p.hnsw_m}, ef_construction = {p.ef_construction})")  # fmt: skip
+
+
 class PgVectorStore:
-    """pgvector HNSW search joined with the documents' access columns, in one SQL statement:
-    a chunk the person may not see is never even returned by the database."""
+    """pgvector search joined with the documents' access columns, in one SQL statement: a chunk
+    the person may not see is never even returned by the database. The metric, index type and
+    quantization are settings (extension 01); the collection records which metric it was built
+    for, and a search with another one is refused (the embedding contract)."""
 
     def __init__(self, p: PgParams) -> None:
-        self.p, self.db = p, _shared(p)
+        self.p = (
+            p if isinstance(p, PgVectorParams) else PgVectorParams.model_validate(p.model_dump())
+        )
+        self.db = _shared(self.p)
+        self._checked = False
+
+    def _vec(self, v: Sequence[float]) -> str:
+        return "[" + ",".join(f"{x:.7g}" for x in v) + "]"
+
+    def contract(self) -> dict[str, Any]:
+        return {"metric": self.p.metric, "dimensions": self.p.dimensions}
+
+    def _check(self, conn: Any, claim: bool = False) -> None:
+        """The collection's recorded contract must match the profile. An EMPTY collection takes
+        the profile's when written to (the first vector store to write decides); a used one never
+        changes. Searches only compare (the API's database role can't change collections)."""
+        if self._checked:
+            return
+        cid = self.db.collection_id(conn)
+        row = conn.execute(
+            "SELECT distance_metric, dimensions FROM rag.collections WHERE id = %s", (cid,)
+        ).fetchone()
+        options = {"index_type": self.p.index_type, "m": self.p.hnsw_m, "ef_construction": self.p.ef_construction,
+                   "quantization": self.p.quantization, "vector_type": self.p.vector_type}  # fmt: skip
+        used = conn.execute("""SELECT EXISTS (SELECT 1 FROM rag.chunks c JOIN rag.documents d ON d.id = c.document_id
+                               WHERE d.collection_id = %s AND c.embedding IS NOT NULL)""", (cid,)).fetchone()  # fmt: skip
+        if row is not None and not (used and used[0]):
+            if not claim:
+                return  # empty: nothing to compare yet (checked again on the next search)
+            conn.execute("UPDATE rag.collections SET distance_metric = %s, dimensions = %s, index_options = %s::jsonb "
+                         "WHERE id = %s", (self.p.metric, self.p.dimensions, json.dumps(options), cid))  # fmt: skip
+        elif row is not None:
+            check_contract(f"pgvector collection {self.p.collection!r}", self.contract(),
+                           {"metric": row[0], "dimensions": int(row[1])})  # fmt: skip
+        if self.p.create_index and (ddl := pg_index_ddl(self.p, concurrently=False)):
+            conn.execute(ddl)
+        self._checked = True
+
+    def index_ddl(self) -> str | None:
+        p = self.p
+        if (p.metric, p.index_type, p.hnsw_m, p.ef_construction, p.quantization, p.vector_type) == (
+            "cosine", "hnsw", 16, 64, "none", "halfvec"):  # fmt: skip
+            return "-- nothing to add: Step 11's migration created chunks_embedding_hnsw (halfvec_cosine_ops, m 16, ef_construction 64)"
+        return pg_index_ddl(p)
 
     def upsert(self, chunks: Sequence[Chunk], vectors: Sequence[Sequence[float]]) -> None:
         if len(chunks) != len(vectors):
@@ -227,6 +342,7 @@ class PgVectorStore:
             )
         with self.db.pool.connection() as conn, conn.transaction():
             _tenant(conn, "*")  # ingestion writes for every tenant
+            self._check(conn, claim=True)
             _write_rows(
                 conn,
                 self.db.collection_id(conn),
@@ -244,22 +360,54 @@ class PgVectorStore:
     def update_access(self, document_uri: str, access: Access) -> int:
         return _update_access(self.db, document_uri, access)
 
-    def search(self, vector: Sequence[float], principal: Principal, k: int,
-                filters: dict[str, object] | None = None) -> list[ScoredChunk]:  # fmt: skip
-        vt, ops = self.p.vector_type, "<=>"
-        with self.db.pool.connection() as conn, conn.transaction():
+    def _settings(self, conn: Any) -> None:
+        """Per-query knobs, local to this transaction (a pooled connection never keeps them)."""
+        version = self.db.pgvector_version(conn)
+        if self.p.metric == "l1" and version < (0, 7):
+            raise RuntimeError("the l1 metric needs pgvector >= 0.7")
+        if self.p.index_type == "ivfflat":
+            conn.execute(f"SET LOCAL ivfflat.probes = {int(self.p.probes)}")
+            if version >= (0, 8) and self.p.iterative_scan != "off":
+                conn.execute("SET LOCAL ivfflat.iterative_scan = relaxed_order")
+        else:
             conn.execute(f"SET LOCAL hnsw.ef_search = {int(self.p.ef_search)}")
+            if version >= (0, 8) and self.p.iterative_scan != "off":
+                conn.execute(f"SET LOCAL hnsw.iterative_scan = {self.p.iterative_scan}")
+
+    def search(self, vector: Sequence[float], principal: Principal, k: int,
+                filters: Mapping[str, object] | None = None) -> list[ScoredChunk]:  # fmt: skip
+        vt, dims = self.p.vector_type, int(self.p.dimensions)
+        op, _, score = PG_OPS[self.p.metric]
+        with self.db.pool.connection() as conn, conn.transaction():
+            _tenant(conn, "*")  # the contract is about the whole collection, every tenant
+            self._check(conn)
+            self._settings(conn)
             _tenant(conn, principal.tenant)  # the database itself shows only this tenant's rows
             params = _access_params(principal, self.db.collection_id(conn))
-            params |= {"q": "[" + ",".join(f"{x:.7g}" for x in vector) + "]", "k": k}
-            sql = f"""SELECT {SELECT_CHUNK}, 1 - (c.embedding {ops} %(q)s::{vt}) AS score
-                        FROM rag.chunks c JOIN rag.documents d ON d.id = c.document_id
-                        WHERE c.embedding IS NOT NULL AND {ACCESS_SQL}{_filters_sql(filters, params)}
-                        ORDER BY c.embedding {ops} %(q)s::{vt} LIMIT %(k)s"""
+            params |= {"q": self._vec(vector), "k": k}
+            where = f"c.embedding IS NOT NULL AND {ACCESS_SQL}{_filters_sql(filters, params)}"
+            dist = f"c.embedding {op} %(q)s::{vt}"
+            if self.p.quantization == "binary":
+                # 1. nearest 1-bit codes (hamming), oversampled; 2. re-scored with the full vectors
+                params["k_candidates"] = max(k, int(k * self.p.oversample))
+                sql = f"""SELECT {OUTER}, {score.format(d=f"s.emb {op} %(q)s::{vt}")} AS score FROM (
+                            SELECT {SELECT_CHUNK}, c.embedding AS emb
+                            FROM rag.chunks c JOIN rag.documents d ON d.id = c.document_id WHERE {where}
+                            ORDER BY binary_quantize(c.embedding)::bit({dims}) <~> binary_quantize(%(q)s::{vt})
+                            LIMIT %(k_candidates)s) s
+                          ORDER BY s.emb {op} %(q)s::{vt} LIMIT %(k)s"""
+            else:
+                # flat: "+ 0" makes the ORDER BY unusable for an index, so the scan is exact
+                order = f"({dist}) + 0" if self.p.index_type == "flat" else dist
+                sql = f"""SELECT {SELECT_CHUNK}, {score.format(d=dist)} AS score
+                            FROM rag.chunks c JOIN rag.documents d ON d.id = c.document_id
+                            WHERE {where} ORDER BY {order} LIMIT %(k)s"""
             rows = conn.execute(sql, params).fetchall()
-        return [
+        hits = [
             ScoredChunk(_row_to_chunk(r[:-1]), float(r[-1]), {"dense": float(r[-1])}) for r in rows
         ]
+        # relaxed iterative scans may return rows slightly out of order: best first, always
+        return sorted(hits, key=lambda h: -h.score)
 
     def count(self) -> int:
         with self.db.pool.connection() as conn, conn.transaction():
@@ -270,9 +418,9 @@ class PgVectorStore:
         return int(row[0]) if row else 0
 
 
-@register("vector_store", "pgvector", params=PgParams, requires=("postgres",),
-            summary="Postgres + pgvector HNSW on Step 11's tables; permissions joined in SQL")  # fmt: skip
-def _pgvector(p: PgParams, c: Container) -> PgVectorStore:
+@register("vector_store", "pgvector", params=PgVectorParams, requires=("postgres",),
+            summary="Postgres + pgvector on Step 11's tables; metric cosine/dot/l2/l1, hnsw/ivfflat/flat, binary quantization; permissions joined in SQL")  # fmt: skip
+def _pgvector(p: PgVectorParams, c: Container) -> PgVectorStore:
     return PgVectorStore(p)
 
 
@@ -304,7 +452,7 @@ class PgFullTextIndex:
         return _update_access(self.db, document_uri, access)
 
     def search(self, text: str, principal: Principal, k: int,
-                filters: dict[str, object] | None = None) -> list[ScoredChunk]:  # fmt: skip
+                filters: Mapping[str, object] | None = None) -> list[ScoredChunk]:  # fmt: skip
         with self.db.pool.connection() as conn, conn.transaction():
             _tenant(conn, principal.tenant)  # the database itself shows only this tenant's rows
             params = _access_params(principal, self.db.collection_id(conn)) | {
