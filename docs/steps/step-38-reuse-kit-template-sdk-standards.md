@@ -650,6 +650,11 @@ these in your first weeks:
 
 ## Notes for this repository
 
+- **System card brought up to date.** `cards/systems/rag-api.yaml` (Step 25) still described a search-only
+  service. It now records what rag-api does after Steps 32-38 (cited answers or "I don't know", guards, the
+  architecture slot), its additional inputs (`model:reranker`, `model:qwen-fast`, `model:qwen-quality`,
+  `prompt:rag-answer`) and real known limitations (guard gaps, citations aren't correctness, cost of the
+  heavier architectures); `docs/cards/` was regenerated with `just cards docs`.
 - **Profile count.** This repository's `rag.yaml` has five profiles (Step 36 added `local-v2`), so `rag doctor`
   shows 22 results rather than the guide's 21. Everything passes.
 - **Test totals.** The guide says 548 tests in total after this step; this repository's suite is larger because

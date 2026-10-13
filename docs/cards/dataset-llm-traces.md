@@ -52,7 +52,11 @@ Built from:
 - dataset:company-chunks
 - dataset:company-documents
 - model:embedder
+- model:qwen-fast
+- model:qwen-quality
+- model:reranker
 - prompt:query-instruction
+- prompt:rag-answer
 - system:rag-api
 
 Affects if changed:

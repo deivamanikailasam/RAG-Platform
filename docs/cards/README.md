@@ -14,7 +14,7 @@
 | [model:qwen-fast](model-qwen-fast.md) | Qwen3.6-35B-A3B, 4-bit MLX (qwen-fast) | approved | rag-platform | 2026-10-12 |
 | [model:qwen-quality](model-qwen-quality.md) | Qwen3.8-27B, 8-bit MLX (qwen-quality) | approved | rag-platform | 2026-10-12 |
 | [model:reranker](model-reranker.md) | bge-reranker-v2-m3 (reranker) | approved | rag-platform | 2026-10-12 |
-| [system:rag-api](system-rag-api.md) | rag-api (the company knowledge search service) | approved | rag-platform | 2026-10-12 |
+| [system:rag-api](system-rag-api.md) | rag-api (the company knowledge search and answer service) | approved | rag-platform | 2026-10-13 |
 
 ## Lineage
 
@@ -43,9 +43,13 @@ flowchart LR
     model_embedder --> system_rag_api
     model_qwen_fast -.->|fallback| prompt_eval_judge
     model_qwen_fast -.->|fallback| prompt_rag_answer
+    model_qwen_fast --> system_rag_api
     model_qwen_quality --> prompt_eval_judge
     model_qwen_quality --> prompt_rag_answer
+    model_qwen_quality --> system_rag_api
+    model_reranker --> system_rag_api
     prompt_query_instruction --> system_rag_api
+    prompt_rag_answer --> system_rag_api
     system_rag_api --> dataset_audit_log
     system_rag_api --> dataset_llm_traces
 ```

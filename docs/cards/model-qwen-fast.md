@@ -60,6 +60,9 @@ Affects if changed:
 
 - prompt:eval-judge (fallback)
 - prompt:rag-answer (fallback)
+- system:rag-api (input)
+  - dataset:audit-log (input)
+  - dataset:llm-traces (input)
 
 ## Approvals
 

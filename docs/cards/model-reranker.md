@@ -54,7 +54,9 @@ Built from:
 
 Affects if changed:
 
-- (nothing)
+- system:rag-api (input)
+  - dataset:audit-log (input)
+  - dataset:llm-traces (input)
 
 ## Approvals
 
