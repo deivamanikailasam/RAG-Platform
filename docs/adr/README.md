@@ -41,5 +41,6 @@
 | [0037](0037-production-environments-canaries-and-recovery.md) | Production environments with gated promotion, canary releases, HA Postgres and online evaluation | Accepted |
 | [0038](0038-a-reuse-kit-for-rag-projects.md) | A reuse kit: versioned rag-core, packaged profiles, standards as code, a project template | Accepted |
 | [0039](0039-switchable-metrics-pushed-down-filters-and-multi-retriever-search.md) | Switchable similarity metrics, pushed-down metadata filters, more fusion, a result cache and multi-retriever search | Accepted |
+| [0040](0040-chunk-trees-metadata-sections-compression-and-embedding-options.md) | Chunk trees, extracted metadata, exact sections, a compression slot and more embedding options | Accepted |
 
 New ADR: `just adr "Short title"`, then fill it in and add a row here.

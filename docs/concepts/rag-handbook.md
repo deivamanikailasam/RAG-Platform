@@ -9,7 +9,7 @@
 > swappable part. This handbook explains each technique in everyday terms, when to pick it, what it
 > costs, what else exists, and the exact line in [`rag.yaml`](../../rag.yaml) that switches it.
 
-Every component listed here is in the generated [catalogue](../catalogue.md) (103 components in 25
+Every component listed here is in the generated [catalogue](../catalogue.md) (128 components in 27
 kinds, with every setting and default). The steps that built them: [30](../steps/step-30-rag-core-contracts-and-components.md)
 (core), [31](../steps/step-31-ingestion-pipeline.md) (ingestion), [32](../steps/step-32-retrieval-and-ranking.md)
 (retrieval), [33](../steps/step-33-augmentation-and-generation.md) (answers),
@@ -17,7 +17,7 @@ kinds, with every setting and default). The steps that built them: [30](../steps
 
 Contents: [1 · RAG in one picture](#1-rag-in-one-picture) · [2 · How switching works](#2-how-switching-works) ·
 [3 · Parsing](#3-parsing-reading-files) · [4 · Cleaning and PII](#4-cleaning-and-personal-data) ·
-[5 · Chunking](#5-chunking-the-six-strategies) · [6 · Enrichment](#6-contextual-enrichment) ·
+[5 · Chunking](#5-chunking-strategies) · [6 · Enrichment](#6-contextual-enrichment) ·
 [7 · Embeddings](#7-embeddings-and-caching) · [8 · Retrieval](#8-retrieval-dense-keyword-hybrid) ·
 [9 · Fusion](#9-fusion-combining-result-lists) · [10 · Reranking](#10-reranking-and-post-processing) ·
 [11 · Query transformations](#11-query-transformations) · [12 · Context packing](#12-context-packing-and-generation) ·
@@ -137,7 +137,7 @@ cache, trace or log ([ADR-0031](../adr/0031-ingest-through-a-replace-not-append-
 **Switch:** `pii: {use: regex, strategy: pseudonymise, key_file: /run/bao/pii_hmac_key}`.
 Readiness **fails** a production profile without a PII component.
 
-## 5. Chunking: the six strategies
+## 5. Chunking strategies
 
 **What it is.** Cutting documents into passages ("chunks") small enough to match a question precisely
 and to fit many into the model's context, but big enough to make sense alone.
@@ -150,12 +150,18 @@ and to fit many into the model's context, but big enough to make sense alone.
 | `sentence-window` | One sentence per chunk; neighbours kept for the answer (with `window-expand`) | FAQs, short precise facts | Many tiny chunks |
 | `semantic` | Cuts where the topic changes (embedding similarity drops) | Transcripts, chats | Slower ingestion (embeds every sentence) |
 | `parent-child` | Search small children, give the model the larger parent (with `parent-expand`) | Contracts, manuals: answers need surrounding detail | More storage; two sizes to tune |
+| `hierarchical` | A tree of any depth (document > section > … > paragraph); leaves know their ancestors (with `auto-merge` or `section-expand`) | Long manuals with deep headings | Larger metadata per leaf |
+| `proposition` | One self-contained fact per chunk (LLM, grounded-checked; rules offline); passage kept for `window-expand` | Precise factual questions over dense prose | 3-5× more chunks; an LLM call per passage |
+| `code` | Source code at top-level definitions, with symbols and line numbers | Repositories, scripts, SQL | Pattern-based, not a parser |
 
 **Switch:** `chunker: {use: parent-child, parent_tokens: 1200, child_tokens: 200, child_overlap: 20}` and
 add `{use: parent-expand}` to `postprocessors`; for sentence windows add `{use: window-expand}`.
 **Key settings:** `max_tokens` (default 400), `overlap_tokens` (40), `min_tokens` (60). The embedder's
 contract caps chunks at its own limit (`max_chunk_tokens` in [`models.yaml`](../../infra/model-serving/models.yaml)).
-**Alternatives:** late chunking, agentic/LLM chunking, proposition indexing; measure against `structure`.
+Structure chunks also record `heading`, `section_path` and `section_numbers`, so a filter, the
+`section` retriever or `section-expand` can return an exact section ([extension 02](../extensions/02-chunking-indexing-compression.md#4-exact-sections)).
+Late chunking is an embedder option (section 7). **Alternatives:** agentic/LLM chunking; measure
+against `structure`.
 **Watch out:** one chunk size for every document type, never measured.
 
 ## 6. Contextual enrichment
@@ -170,10 +176,15 @@ does.
 | `llm-context` | An LLM-written sentence situating the chunk in its document ("contextual retrieval") | One LLM call per chunk |
 | `questions` | The questions the chunk answers | One LLM call per chunk |
 | `graph-entities` | Records named things (codes, acronyms, phrases) per chunk in the graph store | For `graph` RAG |
+| `summary-tree` | RAPTOR: summaries of clusters of chunks, then of the summaries, indexed next to the chunks | An embedding per level; an LLM call per cluster (extractive offline) |
+| `summary` | One summary chunk per document (a "document summary index"); `summary-expand` adds its best chunks | One LLM call per document (extractive offline) |
+| `metadata` | Filterable facts: dates, language, document type, keywords (TF-IDF/YAKE), entities (regex) | Free |
+| `llm-metadata` | The fields you declare, filled by an LLM and checked against the schema | One LLM call per document |
 
 **Switch:** `enrichers: [context-header, llm-context]`. **Choose** LLM context for transcripts and
 long unstructured text; measure recall gain against ingestion cost. Citations always show the
-original chunk text, never the enriched text.
+original chunk text, never the enriched text. LLM-written summaries and metadata are stored only
+when they pass a deterministic check ([extension 02](../extensions/02-chunking-indexing-compression.md#3-metadata-extraction-at-ingestion)).
 
 ## 7. Embeddings and caching
 
@@ -186,6 +197,9 @@ question, retrieve passages…") registered as the prompt `query-instruction`; d
 | `gateway` | Any embedding model behind LiteLLM (here Qwen3-Embedding-0.6B, 1024 dims), batched, dimension-checked |
 | `cached` | Wraps any embedder: the same text is never embedded twice (LRU) |
 | `hashing` | Offline, deterministic word-hash vectors for tests and CI (readiness refuses it in production) |
+| `instructed` | Query/passage prefixes for asymmetric models: presets `e5`, `bge`, `nomic`, `qwen3`, … |
+| `matryoshka` | Keeps the first N dimensions of a Matryoshka-trained model (or `request_dimensions: true` on `gateway`) |
+| `late-chunking` | Embeds the whole document, then pools each chunk's token vectors (context for "it", "this") |
 
 **Switch:** `embedder: {use: cached, inner: {use: gateway, model: embedder, dimensions: 1024, …}}`.
 
@@ -196,8 +210,9 @@ question, retrieve passages…") registered as the prompt `query-instruction`; d
 > ([Step 36](../steps/step-36-lifecycle-threat-model-compliance.md)). That's also why the gateway has no
 > fallback for the embedder.
 
-**Alternatives:** bigger embedders (Qwen3-Embedding-4B/8B), hosted embeddings (Bedrock, Vertex,
-Azure OpenAI), Matryoshka truncation for smaller vectors (`just embed-demo` shows it).
+**Alternatives:** bigger embedders (Qwen3-Embedding-4B/8B), hosted embeddings (OpenAI, Cohere,
+Voyage, Jina, Mistral, Gemini, Bedrock) through a gateway alias. How to choose (language, domain,
+context length, dimensions, MTEB, cost, local vs API) and switch: [extension 02](../extensions/02-chunking-indexing-compression.md#7-choosing-an-embedding-model-and-switching-it-through-the-gateway).
 
 ## 8. Retrieval: dense, keyword, hybrid
 
@@ -213,7 +228,7 @@ the same conformance tests, including access-leak tests.
 | Slot | Options |
 |---|---|
 | `vector_store` | `pgvector` (default: HNSW on halfvec), `qdrant`, `opensearch-knn`, `memory` (tests) |
-| `keyword_index` | `postgres-fts` (default, no extra service), `opensearch` (analysers, synonyms), `memory-bm25` (tests) |
+| `keyword_index` | `postgres-fts` (default, no extra service), `opensearch` (analysers, synonyms), `memory-bm25` (tests), `sparse` / `qdrant-sparse` (sparse vectors from the `sparse_embedder` slot: `bm25` or SPLADE via `splade-tei`) |
 
 **Switch:** `retriever: {use: hybrid, candidates: 30}`; engines via the `local-engines` profile.
 **Choose** Postgres first; add Qdrant/OpenSearch when scale or keyword features demand it.
@@ -235,8 +250,10 @@ or `filters=` in the SDK.
 |---|---|
 | `ensemble` | Several retrievers (another collection, model or profile) in parallel, fused with per-member weights |
 | `router` | One index per department/language/product: keyword rules or an LLM pick the route |
-**Alternatives:** learned sparse (SPLADE), late interaction (ColBERT), engine-native hybrid queries
-(ADR-0032's "revisit when").
+| `section` | "Section 4.2" or a heading title in the question: that exact section first, then the usual results |
+
+**Alternatives:** engine-native hybrid queries (ADR-0032's "revisit when"); learned sparse (SPLADE)
+and late interaction (ColBERT) are now components ([extension 02](../extensions/02-chunking-indexing-compression.md#6-embedding-options)).
 
 ## 9. Fusion: combining result lists
 
@@ -269,6 +286,7 @@ one (30 by default), not 5 or 500.
 | `cross-encoder` | In-process (sentence-transformers) | No server; uses app memory |
 | `llm` | Listwise LLM reranking | Few candidates, high cost |
 | `term-overlap` | Offline stand-in | Tests and CI only (readiness warns) |
+| `maxsim` / `colbert` | Multi-vector late interaction (MaxSim): offline hashed token vectors / a real ColBERT model (PyLate, reference) | Token-level matching |
 
 All rerankers **fail open** by default (`fail_open: true`): if the reranker is down, the fused order is
 used and the failure is counted. **Switch:** `reranker: {use: gateway, top_n: 30, …}` or `reranker: none`.
@@ -283,6 +301,9 @@ used and the failure is counted. **Switch:** `reranker: {use: gateway, top_n: 30
 | `max-per-document` | Caps chunks per document | Long documents dominating |
 | `mmr` | Relevant **and** different | Broad questions |
 | `parent-expand` / `window-expand` | Swap a matched child/sentence for its parent/window | With those chunkers |
+| `auto-merge` | Enough children of one parent found: return the parent, recursively | With `hierarchical` |
+| `section-expand` | Replace a hit by its whole section (token budget); merge hits of one section | Answers need the full rule |
+| `summary-expand` | A retrieved summary brings its document's best detailed chunks | With `summary` / `summary-tree` |
 
 ## 11. Query transformations
 
@@ -316,8 +337,17 @@ order: relevance}` writes numbered `<doc id="n">` blocks within a token budget, 
 | `lost-in-middle` | Best at the start and end, weakest in the middle | Long contexts: models attend less to the middle |
 | `document` | In document order | Narrative continuity |
 
-`compress: true` keeps only the sentences that matter so more sources fit (alternative: LLMLingua-style
-compression).
+`compress: true` keeps only the sentences that matter so more sources fit. For more control, the
+`compressors` slot runs before the context builder (after the context guards), in order, and records
+tokens before/after in the answer trace ([extension 02](../extensions/02-chunking-indexing-compression.md#5-context-compression)):
+
+| Compressor | Keeps | Cost |
+|---|---|---|
+| `extractive` | Sentences relevant to the question (term overlap or embedding similarity) | Free |
+| `embedding-filter` | Chunks/sentences above a similarity threshold | Embeddings |
+| `llm-extract` | What an LLM copies as relevant (verified against the chunk) | An LLM call per chunk |
+| `summarize` | A question-focused summary of long chunks (kept only if grounded) | An LLM call per long chunk |
+| `llmlingua` | Informative tokens only (LLMLingua-2; reference) | A local model |
 
 **Generation:**
 
@@ -494,6 +524,16 @@ ingesting the handbook. In production: online evaluation per release
 | One index per department | `router` retriever |
 | Search a second collection or model too | `ensemble` retriever with `combmnz` or `rrf` |
 | Repeated identical searches | `search_cache: valkey` |
+| Long manuals; answers need the whole subsection | `hierarchical` + `auto-merge`, or `section-expand` |
+| "What is this document about?" | `summary-tree` or `summary` + `summary-expand` |
+| Users cite "section 4.2" or a heading | `retriever: section` (and `min_tokens: 0`) |
+| Filters wanted, documents have no metadata | `metadata` enricher; `llm-metadata` for business fields |
+| Long contexts, short answers, token bills | `compressors: [extractive]`, then `llm-extract` if it pays |
+| e5 / bge / nomic embedding models | `embedder: {use: instructed, preset: …}` |
+| Index too big, Matryoshka-trained model | `matryoshka` or `request_dimensions` |
+| Chunks full of pronouns | `late-chunking` with a long-context model |
+| Exact terms in Qdrant, or synonyms in keyword search | `qdrant-sparse` with `bm25`, or `splade-tei` |
+| Source code | `chunker: code` |
 
 See also: [glossary](../glossary.md) for every term, [catalogue](../catalogue.md) for every setting,
 [architecture overview](../architecture/overview.md) for where each stage runs.

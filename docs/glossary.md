@@ -61,6 +61,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Authorization header | The HTTP request header that carries credentials; for APIs it is `Authorization: Bearer <access token>`. | 17 |
 | Auto-auth | The OpenBao Agent feature that logs in by itself (here with AppRole), renews its token and logs in again when the token reaches its maximum age. | 28 |
 | Auto-fix | A check that changes files to fix the problem itself; you review the change and `git add` it again. | 5 |
+| Auto-merging | When enough of a parent's children (say half of the paragraphs of a subsection) were retrieved, returning the parent instead of the fragments, again one level up if that applies. `postprocessors: [auto-merge]` with the `hierarchical` chunker. | E02 |
 | B-tree | The default Postgres index, for exact values and ranges (an ID, a date); like a sorted phone book. | 11 |
 | Backup receipt | A small JSON file written next to a database dump: its SHA-256 checksum, size, time and the row counts of the important tables, so a restore can be checked against it. | 36 |
 | Baseline (evaluation) | The summary of the last accepted evaluation run, committed in `evals/baselines/`; a new run mustn't fall below it by more than a small tolerance. | 26 |
@@ -105,6 +106,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Checked streaming | Generating the whole answer and passing the output guards before sending any of it (`pipeline.stream: checked`). | 34 |
 | Chunk | A piece of a document that is embedded, retrieved and cited on its own; it carries a stable id, its text, what was embedded, its access rules and metadata. | 31 |
 | Chunk overlap | Tokens repeated at the start of the next chunk so a sentence cut at a boundary still appears whole somewhere (see also Overlap). | 31 |
+| Chunk tree (hierarchical chunking) | Chunks arranged like the document: document > section > subsection > paragraph, each leaf knowing its ancestors, so search can find the small piece and return a bigger one. `chunker: hierarchical`. | E02 |
 | Chunking strategy | The rule that decides where a document is cut into chunks: every N tokens, by paragraphs then sentences, along headings, by sentence, where the topic changes, or small children inside big parents. | 31 |
 | CI (continuous integration) | Automatically checking every change (lint, types, tests, scans) on a fresh machine, so problems are found before they're merged. | 27 |
 | Ciphertext | The scrambled, encrypted version of a value; unreadable without the right key. | 6 |
@@ -120,6 +122,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | CloudNativePG | A Kubernetes operator that runs Postgres with replicas, failover, backups and point-in-time recovery (PITR). | 37 |
 | Cluster / node | A group of machines (nodes) Kubernetes runs containers on; OrbStack gives you a cluster of one node. | 29 |
 | CODEOWNERS | A GitHub file naming who must review changes to which folders. | 4 |
+| ColBERT | A retrieval model that keeps one vector per token of a passage and scores with MaxSim; finer than one vector per passage, cheaper than a cross-encoder at scale. `reranker: colbert` (reference), `maxsim` offline. | E02 |
 | Collection (Qdrant) | Qdrant's equivalent of a table: a set of points sharing vector settings. | 12 |
 | Collector (OpenTelemetry) | A service that receives, processes and exports telemetry; our single governance point that limits memory, scrubs secrets, redacts values, labels and batches (`otel-collector`). | 19 |
 | CombMNZ | A fusion method: CombSUM multiplied by the number of lists that found the item, so agreement between retrievers counts strongly. `fusion: combmnz`. | E01 |
@@ -141,6 +144,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Content addressing | Naming an object by a hash of its content (`sha256`), so identical files share a name and changes are detectable. | 14 |
 | Content hash | A fingerprint (here SHA-256) computed from every byte of a file; any edit, even one character or a line ending, changes it. | 24 |
 | Context compression | Keeping only the sentences of a chunk that matter for the question, so more sources fit in the budget. | 33 |
+| Context compression | Shortening the retrieved passages for one question before the model reads them: keeping relevant sentences, dropping weak chunks, or having an LLM extract or summarise. The `compressors` slot; savings are in the answer trace. | E02 |
 | Context packing | Choosing which retrieved chunks fit the token budget and in what order, and numbering them as `<doc id="n">` blocks. | 33 |
 | Context propagation | Passing the trace id from one service to the next (in the `traceparent` HTTP header) so their spans join one trace. | 19 |
 | Context recall | The share of the right documents that actually reached the model; what architectures change, and the first column of `rag eval-answers`. | 35 |
@@ -177,6 +181,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Dead-letter queue (DLQ) | Where jobs go after failing too many times (here: 3 deliveries), so they stop retrying forever and a human can inspect them. | 15 |
 | Decision log | OPA's record of every decision (input, result, path, time, `decision_id`), written as JSON; the audit evidence for "who was allowed what, and why". | 18 |
 | Decode | The second phase of generation: the model writes the answer one token at a time; its speed is limited by memory bandwidth. | 7 |
+| Decontextualisation | Rewriting a sentence so it makes sense alone: "It is 18 weeks" → "Parental leave is 18 weeks". What proposition chunking aims for. | E02 |
 | Dedicated vector database | A database built only for storing vectors and finding the nearest ones fast, with filters (Qdrant, Milvus, Weaviate), rather than a general database with a vector extension. | 12 |
 | Deduplication | Dropping exact repeats (the same paragraph twice) so they don't crowd out everything else in search results. | 31 |
 | Default privileges (ALTER DEFAULT PRIVILEGES) | A standing instruction that every table a given role creates from now on automatically gets certain grants, so new tables are never invisible to the app. | 11 |
@@ -210,6 +215,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Distributed lock | A short-lived "I'm working on this" marker shared by all workers (`SET key token NX PX 30000`): only one holder, expires on its own, released only with the owner's token. | 15 |
 | Docker Compose | A file (`compose.yaml`) listing many containers and how they connect; `docker compose up` starts them all. | 3 |
 | Docker engine / CLI | The engine runs containers inside the VM; the `docker` command is how you talk to it. | 3 |
+| Document summary index | One summary per document, indexed next to its chunks, so broad questions find the right document; its best detailed chunks are then added. `enrichers: [summary]` + `summary-expand`. | E02 |
 | Dot product (inner product) | Multiply two vectors number by number and add up: large when they point the same way AND are long. Equals cosine similarity for unit-length vectors. `metric: dot`. | E01 |
 | Downstream | Everything that depends on a component, directly or through others; what an impact analysis lists. | 25 |
 | Drift | When the dependency list (`pyproject.toml`) and the lockfile (`uv.lock`) no longer match; `uv sync --locked` catches it. | 2 |
@@ -280,6 +286,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Grafana | Dashboards and visualisation for metrics, logs and traces. | 20 |
 | Grant / flow | A standard recipe for getting a token: authorization code + PKCE (web apps), device flow (CLIs), client credentials (machines). The password grant (ROPC) is switched off. | 16 |
 | GraphRAG (local and global search) | Using a knowledge graph to find related information: local search follows the entities near the question (built in here as `graph`); global search summarises whole communities of entities to answer "what are the main themes?". | 35 |
+| Grounded check | A deterministic test that a model's output (summary, proposition, extract) is made of the source's words, applied before it is indexed or shown; a refusal or invention fails it and the offline method is used instead. | E02 |
 | Groundedness | Whether each claim in an answer is supported by the sources the model was given; checked here lexically (content words and exact numbers must appear in the sources). | 34 |
 | Group (Keycloak) | A set of users who are "with" each other (department, team). It decides what you may SEE: its name goes into the token's `groups` claim and matches documents' `acl_groups`. | 16 |
 | Grouping (alerts) | Alertmanager combining related alerts (same `alertname` and `service` here) into one notification instead of one per time series. | 20 |
@@ -321,6 +328,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Inhibition | An Alertmanager rule that mutes some alerts while another fires: here a critical alert mutes its warning twin with the same `alertname` and `service`. | 20 |
 | Inner source | Open-source habits inside a company: anyone can propose changes to shared code (here, project teams contribute components back to rag-core by pull request). | 38 |
 | `input` vs `data` (Rego) | `input` holds the facts about this one request (who, which action, which documents); `data` holds standing facts loaded with the policy, such as `data.json` mappings. | 18 |
+| Instruction prefix (query / passage prefix) | The marker an asymmetric embedding model was trained with ("query: " / "passage: " for e5, "search_query: " for nomic); without it, recall drops silently. `embedder: {use: instructed, preset: e5}`. | E02 |
 | Instrumentation (automatic vs manual) | Code that creates telemetry: libraries that make spans for you (HTTP, SQL) versus spans you add for your own logic (retrieval, policy decisions). | 19 |
 | Interface (network) | A way the Mac connects to networks: Wi-Fi, Ethernet, or the private localhost loop (see also Network interface). | 3 |
 | Internal user | A user stored inside OpenSearch's own security index (here `rag_search`, `rag_indexer`). | 13 |
@@ -353,8 +361,11 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Label (metric) | A key=value pair that identifies one slice of a metric, e.g. `outcome="error"`, `job="opa"`, `service_version="0.1.0"`. Every distinct label combination is its own time series. | 20 |
 | Label (prompt) | A movable pointer from an environment to a prompt version ("production uses version 1, staging uses version 2"), kept in `prompts/labels.yaml`. | 24 |
 | Langfuse | Open-core (MIT) LLM observability: traces with content, prompts, datasets and scores; owned by ClickHouse, Inc. | 22 |
+| Late chunking | Embedding a whole document with a long-context model and then averaging the token vectors inside each chunk, so each chunk's vector keeps its context (what "it" refers to). `embedder: late-chunking`. | E02 |
+| Late interaction (MaxSim) | Scoring a passage by taking, for each question token, its most similar passage token, and averaging: how ColBERT compares one-vector-per-token representations. | E02 |
 | launchd | macOS's built-in service manager: starts programs at login and restarts them if they crash (agents live in `~/Library/LaunchAgents/`). | 7 |
 | Layout analysis | Working out a page's reading order, columns, tables and figures (Docling does this; plain text extraction doesn't). | 31 |
+| Learned sparse retrieval (SPLADE) | A model writes a weight for each vocabulary word, including related words the text doesn't contain; searched like keywords, with some sense of meaning. `sparse_embedder: splade-tei`. | E02 |
 | Lease | The ID and time to live that come with every dynamic secret. It can be renewed up to the max TTL or revoked early; when it ends, the secret is destroyed (for a database login: sessions ended, user dropped). | 28 |
 | Least privilege | Giving each identity only the access it needs and nothing more. | 10 |
 | Legal basis (GDPR) | The reason that makes processing personal data lawful (contract, legal obligation, legitimate interest…); required on every dataset card with personal data. | 25 |
@@ -370,6 +381,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Liveness / readiness | Two health questions: "is the process alive?" (restart it if not) and "can it serve traffic yet?". | 9 |
 | LLM-as-judge | A model grading another model's answer against a reference. Useful, but biased (prefers longer answers and its own style) and fallible, so here it only advises. | 26 |
 | LLM observability | Recording what an AI system was asked, what it looked up and what it answered, to debug and improve it (Langfuse here). | 22 |
+| LLMLingua | Microsoft's prompt compression: a small model scores each token and the least informative are removed, often 2-5× shorter. `compressors: [llmlingua]` (reference, optional install). | E02 |
 | localhost / 127.0.0.1 | "This machine only": a port bound here is reachable only from your own Mac. | 3 |
 | Lock file (prompts) | `prompts/prompts.lock.json`: the SHA-256 of every released prompt version; entries may be added, never changed or removed. | 24 |
 | Lockfile | A file recording the exact version and hash of every package in the full dependency tree (`uv.lock`). | 2 |
@@ -416,6 +428,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Multi-hop question | A question that needs two or more facts found in different places, in sequence ("which systems did the 2024 incident touch, and who owns them?"). | 35 |
 | Multi-query | An LLM writes several paraphrases of the question; each is searched and the lists are fused. Better recall for questions worded unlike the documents, at the cost of more searches. | 32 |
 | Multi-stage build | A Dockerfile with several `FROM` stages: one with build tools makes the result, the final small image copies only that result (here the finished `.venv`). | 17 |
+| Multi-vector retrieval | Representing a passage by many vectors (one per token or per part) instead of one; ColBERT is the best-known example. | E02 |
 | Multi-window alert | A burn-rate alert that requires both a long window (1 h or 6 h: a real trend) and a short one (5 min or 30 min: still happening) to be over the threshold, so blips don't page and alerts clear quickly after recovery. | 20 |
 | Multitenancy / tenant | Serving many customers or departments from one system / one such customer, whose data must stay separate. | 12 |
 | mypy | The most established Python type checker; run in strict mode here. | 5 |
@@ -526,6 +539,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Prompt template | A prompt with placeholders that get filled in for each request. | 24 |
 | Prompts as code | Keeping prompts as files in git, so they get reviews, history and CI like code. | 24 |
 | PromQL | Prometheus's query language: select series by name and labels, then compute with functions like `rate()`, `increase()`, `sum by (…)` and `histogram_quantile`. | 20 |
+| Proposition chunking | Indexing atomic, self-contained facts ("Partners get four weeks of paid leave.") instead of passages (Dense X Retrieval, 2023); the passage is kept for the model to read. `chunker: proposition`. | E02 |
 | Protocol mapper | A Keycloak rule that puts an extra fact into tokens, such as the `groups` claim or an extra audience. | 16 |
 | Protocol (structural typing) | A Python type that describes a shape (methods and attributes); any class with that shape fits, no base class needed. `runtime_checkable` lets `isinstance` check it too. | 30 |
 | Provenance | Where something came from, and how it was made. | 25 |
@@ -554,6 +568,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | RAG architecture | The overall design of how a RAG system gathers context and checks its answer (naive, advanced, corrective, agentic…); here, the component in the `pipeline` slot. | 35 |
 | `rag doctor` | Checks a project against the platform standards: configuration, readiness, evaluation sets, CI gates and governance files. | 38 |
 | `rate()` / `increase()` | PromQL functions for counters: `rate` is the per-second speed over a window, `increase` the total growth over it. Both handle counter resets when a process restarts; neither can see a counter's first appearance as growth. | 20 |
+| RAPTOR | Recursive Abstractive Processing for Tree-Organized Retrieval (2024): cluster chunks, summarise each cluster, then cluster and summarise the summaries; all levels are indexed. `enrichers: [summary-tree]`. | E02 |
 | Rate limit (RPM / TPM) | How many requests per minute / tokens per minute a key may use; going over returns 429 Too Many Requests. | 10 |
 | Raw zone (bronze) | The part of a data platform holding immutable original data, from which everything else can be rebuilt. | 14 |
 | RBAC (role-based access control) | Deciding what each user, key or token may read or write by the role or permissions it carries. | 12 |
@@ -654,6 +669,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Secrets manager | A server whose job is to store secrets and hand them out to the right clients, with an audit trail; here OpenBao. | 28 |
 | SecretStr | A pydantic type that prints as `**********`; the real value needs a deliberate `.get_secret_value()`. | 6 |
 | `SECURITY DEFINER` | A Postgres function that runs with the rights of its owner, not its caller; lets rag-api append audit events without any rights on the table. | 23 |
+| Section path | The headings above a chunk, recorded as every enclosing level ("Handbook", "Handbook > 4 Leave", …) plus any section numbers, so a filter or the `section` retriever can pick an exact section. | E02 |
 | Security plugin | OpenSearch's built-in TLS, users, roles and permissions; never disable it. | 13 |
 | Self-query | Extracting a metadata filter from the question itself ("HR policies updated after 2025" → department = hr, updated ≥ 2026-01-01) against a declared schema, by rules or an LLM whose output is checked. `query_transformer: self-query`. | E01 |
 | Self-reflective RAG (Self-RAG) | The system critiques its own answer against the sources and retrieves more and regenerates if it falls short; the `self-reflective` architecture. | 35 |
@@ -742,6 +758,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Text normalisation | Tidying extracted text: one Unicode form, joined hyphenated words, collapsed spaces, removed control characters. Different from vector normalisation. | 31 |
 | Text-to-SQL | A model writing a database query from a question; the `sql` architecture, where the result becomes a cited source. | 35 |
 | text vs keyword field | `text` is analysed for full-text search; `keyword` is stored exactly, for filters and IDs. | 13 |
+| TF-IDF | Term frequency × inverse document frequency: a word scores high when frequent in this text and rare in the others. Used for per-chunk keywords by the `metadata` enricher. | E02 |
 | Thinking mode | Qwen models' optional hidden reasoning before the answer; better on hard questions, slower and more tokens (`enable_thinking`). | 7 |
 | Threat model | A structured list of what could go wrong with a system, who could cause it, and what stops it; here generated from `docs/compliance/risk-register.yaml`. | 36 |
 | Threshold | The minimum or maximum a metric must reach for a run to pass the gate, e.g. `recall@5: {min: 0.9}` or `leaked_docs: {max: 0}`. | 26 |
@@ -749,6 +766,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Time series | One metric with one exact set of labels, sampled over time, e.g. `rag_search_requests_total{outcome="ok"}`. | 20 |
 | Token | The unit a model reads and writes: roughly ¾ of an English word. | 7 |
 | Token budget | The share of the model's context window given to retrieved documents (3000 tokens by default), leaving room for the instructions, the question and the answer. | 33 |
+| Token embeddings | One vector per token, as a transformer computes them before pooling into one vector per text; what late chunking pools per chunk and ColBERT keeps. | E02 |
 | Token filter | An analyzer step that changes the token stream: lowercase, synonyms, stemming. | 13 |
 | Token introspection (RFC 7662) | Asking the identity provider "is this token still valid?" on every request: instant revocation, at the cost of a network call each time. | 17 |
 | Token (OpenBao) | What a successful OpenBao login returns: a credential with policies and a TTL, sent as `X-Vault-Token` on every request. Not the same as a model's token. | 28 |
@@ -796,4 +814,5 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | WORM (write once, read many) | Storage where data can be written once and then never changed or deleted until its retention ends; what object lock provides. | 14 |
 | `WWW-Authenticate` | The response header on a 401 telling the client a bearer token is required, or (with `error="invalid_token"`) that the one sent was not accepted. | 17 |
 | `yaml.safe_load` | Reads YAML as plain data only. The unsafe `yaml.load` can construct Python objects, so a hostile file could run code. | 24 |
+| YAKE | Yet Another Keyword Extractor: picks a document's keywords from features of the text alone (casing, position, frequency, spread), no corpus or model. `keyword_method: yake`. | E02 |
 | Zanzibar | Google's paper and system for relationship-based authorisation at global scale; the model behind OpenFGA and SpiceDB. | 18 |
