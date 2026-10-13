@@ -381,6 +381,8 @@ ci-config:
     just guard-eval
     just answer-eval
     just compliance-check
+    just doctor
+    just catalogue --check
 
 # rag.yaml: every profile names real components with valid settings (Step 30), no services needed
 # Step 37: and the production profile must be fit for production (no stand-ins, the required guards)
@@ -682,3 +684,24 @@ vendor what version:
     name="$(basename "$file")"
     sed -i.bak -E "/$name/ s|# v[0-9.]+, sha256 [0-9a-f]{64}|# {{version}}, sha256 $sha|" "$kust" && rm "$kust.bak"
     echo "updated $file ($sha): update the image digests in $kust too, then run just k8s-check"
+
+# ---- Reuse (Step 38) ----
+
+# A new RAG project from the template (answers asked interactively), e.g. just new-project ../hr-assistant
+new-project dest:
+    uvx copier copy --trust templates/rag-project {{dest}}
+
+# Does a project (default: this repository) meet the platform standards?
+doctor path=".":
+    uv run rag doctor {{path}}
+
+# The catalogue of every switchable component, generated from the registry
+catalogue *args:
+    uv run python scripts/catalogue.py {{args}}
+
+# rag-core ships the platform profiles; keep its copy identical to rag.yaml after editing rag.yaml
+sync-profiles:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    out=libs/rag-core/src/rag_core/profiles/platform.yaml
+    head -4 "$out" > "$out.new" && cat rag.yaml >> "$out.new" && mv "$out.new" "$out"
