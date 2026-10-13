@@ -83,7 +83,7 @@ def spec(kind: str, name: str) -> Spec:
 # A "slot" is a role in a pipeline; its kind says which components may fill it.
 # Plural slots take a list of components applied in order.
 SLOTS: dict[str, str] = {
-    "llm": "llm", "judge_llm": "llm", "token_counter": "token_counter", "embedder": "embedder",
+    "llm": "llm", "judge_llm": "llm", "answer_llm": "llm", "token_counter": "token_counter", "embedder": "embedder",
     "parsers": "parser", "normalizers": "normalizer", "pii": "pii", "chunker": "chunker",
     "enrichers": "enricher", "vector_store": "vector_store", "keyword_index": "keyword_index",
     "query_transformer": "query_transformer", "retriever": "retriever", "fusion": "fusion",

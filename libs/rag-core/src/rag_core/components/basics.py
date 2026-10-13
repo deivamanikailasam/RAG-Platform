@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import hashlib
 import itertools
+import json
 import math
 import os
 import re
 import threading
 from collections import Counter, defaultdict
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -143,6 +144,39 @@ class GatewayLLM:
                          max_tokens=max_tokens, temperature=temperature)  # fmt: skip
         return str(data["choices"][0]["message"]["content"] or "")
 
+    def complete_with_usage(self, system: str, user: str, *, max_tokens: int = 512,
+                            temperature: float = 0.0) -> tuple[str, dict[str, int]]:  # fmt: skip
+        """The reply and the token counts the gateway reported (for budgets, audit and cost)."""
+        data = self.chat([{"role": "system", "content": system}, {"role": "user", "content": user}],
+                         max_tokens=max_tokens, temperature=temperature)  # fmt: skip
+        usage = {k: int(v) for k, v in (data.get("usage") or {}).items() if isinstance(v, int)}
+        return str(data["choices"][0]["message"]["content"] or ""), usage
+
+    def stream(self, system: str, user: str, *, max_tokens: int = 512, temperature: float = 0.0,
+               usage: dict[str, int] | None = None) -> Iterator[str]:  # fmt: skip
+        """Token deltas as the model produces them (server-sent events). `usage`, if given, is
+        filled with the token counts when the stream ends. No retries once text has been sent."""
+        body = {"model": self.model, "max_tokens": max_tokens, "temperature": temperature, "stream": True,
+                "stream_options": {"include_usage": True},
+                "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}  # fmt: skip
+        headers = {"Authorization": f"Bearer {self._key.get_secret_value()}"}
+        with self._http.stream("POST", "chat/completions", json=body, headers=headers) as r:
+            r.raise_for_status()
+            for line in r.iter_lines():
+                if not line.startswith("data:"):
+                    continue
+                payload = line[5:].strip()
+                if payload == "[DONE]":
+                    break
+                event = json.loads(payload)
+                if usage is not None and event.get("usage"):
+                    usage.update(
+                        {k: int(v) for k, v in event["usage"].items() if isinstance(v, int)}
+                    )
+                for choice in event.get("choices") or []:
+                    if delta := (choice.get("delta") or {}).get("content"):
+                        yield str(delta)
+
 
 class FileSecret(SecretStr):
     """A secret read from a file on EVERY use, so a key rotated by OpenBao Agent (Step 28) is
@@ -195,6 +229,22 @@ class ScriptedLLM:
             if needle in user or needle in system:
                 return reply
         return self.default
+
+    def complete_with_usage(self, system: str, user: str, *, max_tokens: int = 512,
+                            temperature: float = 0.0) -> tuple[str, dict[str, int]]:  # fmt: skip
+        """The reply plus word counts standing in for token counts (Step 33's usage records)."""
+        reply = self.complete(system, user, max_tokens=max_tokens, temperature=temperature)
+        return reply, {"prompt_tokens": len(words(system)) + len(words(user)),
+                       "completion_tokens": len(words(reply))}  # fmt: skip
+
+    def stream(self, system: str, user: str, *, max_tokens: int = 512, temperature: float = 0.0,
+               usage: dict[str, int] | None = None) -> Iterator[str]:  # fmt: skip
+        """The reply word by word, like a streaming model; `usage` is filled at the end."""
+        reply, counts = self.complete_with_usage(system, user, max_tokens=max_tokens,
+                                                 temperature=temperature)  # fmt: skip
+        yield from re.findall(r"\S+\s*|\s+", reply)
+        if usage is not None:
+            usage.update(counts)
 
 
 @register(

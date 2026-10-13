@@ -119,6 +119,8 @@ class LlmTransformer:
         self.kind, self.llm, self.p = kind, llm, p
 
     def transform(self, query: Query) -> list[str]:
+        if self.kind == "rewrite" and not query.history:
+            return [query.text]  # Step 33: nothing to resolve, so no model call (a first question)
         system = (self.p.system or PROMPTS[self.kind]).replace("{n}", str(self.p.n))
         user = _conversation(query) if self.kind == "rewrite" else query.text
         try:
