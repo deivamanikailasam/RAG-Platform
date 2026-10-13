@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cluster
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"  # guard rails before any workload
+  # No deletion finalizer on purpose: deleting this Application must NOT delete what it manages.
+spec:
+  project: platform
+  source:
+    repoURL: git@github.com:owner/rag-platform.git
+    targetRevision: main
+    path: deploy/cluster
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: rag
+  syncPolicy:
+    automated:
+      prune: false  # never auto-delete a namespace (and everything in it): do it by hand
+      selfHeal: true  # changed by hand in the cluster = changed back to what git says
+    syncOptions:
+      - ServerSideApply=true
+      - PruneLast=true
+    retry:
+      limit: 5
+      backoff: { duration: 10s, factor: 2, maxDuration: 3m }

@@ -1,0 +1,219 @@
+# Risk register (Step 36): the threats to the RAG platform (STRIDE + safety), the controls that
+# treat them, the EVIDENCE that each control works (files and tests that CI runs), and how each
+# control maps to NIST AI RMF 1.0, ISO/IEC 42001:2023 Annex A, the EU AI Act and the Australian
+# Privacy Principles. `just compliance-check` validates it; `just compliance-docs` renders
+# docs/security/threat-model.md and docs/compliance/controls.md from it.
+#
+# Mappings show where a control CONTRIBUTES; they are not legal advice, and whether an obligation
+# applies (e.g. EU AI Act high-risk duties) depends on the use case. Review with your legal team.
+version: 1
+
+controls:
+  - id: C-AUTH
+    title: Short-lived signed tokens, checked on every request
+    description: Keycloak OIDC; RS256 only, issuer, audience, expiry and allowed clients checked; 401 vs 403.
+    steps: [16, 17]
+    evidence: [services/rag-api/tests/test_auth.py::test_bad_tokens_get_401]
+    frameworks: {nist: [MEASURE 2.7], iso42001: [A.6.2.5], eu_ai_act: [Art. 15], app: [APP 11]}
+  - id: C-AUTHZ
+    title: Policy-as-code authorisation with pre-filter and post-check
+    description: OPA decides actions and the visible documents; the filter goes into every query; every result is re-checked.
+    steps: [18, 32, 33]
+    evidence: [policies/rag/authz/authz_test.rego, services/rag-api/tests/test_policy.py::test_search_applies_the_policy_filter,
+               services/rag-api/tests/test_answer_api.py::test_opa_post_check_reaches_the_model]
+    frameworks: {nist: [MEASURE 2.7], iso42001: [A.9.2], eu_ai_act: [Art. 15], app: [APP 6, APP 11]}
+  - id: C-STORE-ACL
+    title: Access enforced inside every store, proven by one conformance kit
+    description: pgvector, Postgres FTS, Qdrant and OpenSearch filter by tenant, classification and groups in the query; the search pipeline re-checks.
+    steps: [11, 12, 13, 31, 32]
+    evidence: [libs/rag-core/tests/test_stores.py::test_pgvector_conforms, libs/rag-core/tests/test_retrieval.py::test_pipeline_drops_what_a_buggy_store_leaks]
+    frameworks: {nist: [MEASURE 2.7], iso42001: [A.6.2.4], eu_ai_act: [Art. 15], app: [APP 11]}
+  - id: C-RLS
+    title: Tenant isolation by row-level security
+    description: The database itself returns only the tenant set for the transaction; nothing set means nothing returned.
+    steps: [36]
+    evidence: [libs/rag-core/tests/test_lifecycle.py::test_row_level_security_isolates_tenants]
+    frameworks: {nist: [MEASURE 2.7], iso42001: [A.6.2.5], eu_ai_act: [Art. 15], app: [APP 11]}
+  - id: C-SESSION
+    title: Conversations belong to one person and expire
+    description: Memory keys combine tenant, person and session; TTL; erasure by person.
+    steps: [33, 36]
+    evidence: [libs/rag-core/tests/test_answer.py::test_memory_makes_follow_ups_work_and_is_per_person, libs/rag-core/tests/test_lifecycle.py::test_valkey_memory_forgets_one_person]
+    frameworks: {nist: [MEASURE 2.10], iso42001: [A.7.2], eu_ai_act: [Art. 10], app: [APP 11]}
+  - id: C-CACHE
+    title: Answer caches keyed by who can see what, reset by every change
+    description: Cache key includes the access fingerprint, prompt, model, settings and an index epoch bumped by ingestion and access changes.
+    steps: [33, 36]
+    evidence: [libs/rag-core/tests/test_answer.py::test_cache_hits_are_per_access_and_end_with_ingestion, libs/rag-core/tests/test_lifecycle.py::test_revocation_reaches_search_answers_cache_and_manifest]
+    frameworks: {nist: [MEASURE 2.7], iso42001: [A.6.2.4], eu_ai_act: [Art. 15], app: [APP 11]}
+  - id: C-PII
+    title: Personal data redacted before indexing and in questions and answers
+    description: Checksummed detectors; mask, keyed pseudonym or remove at ingestion; input and output PII guards.
+    steps: [31, 34]
+    evidence: [libs/rag-core/tests/test_parsing_cleaning.py::test_pii_strategies, libs/rag-core/tests/test_guards.py::test_personal_data_never_reaches_memory_or_cache]
+    frameworks: {nist: [MEASURE 2.10], iso42001: [A.7.4, A.7.6], eu_ai_act: [Art. 10], app: [APP 3, APP 6, APP 11]}
+  - id: C-INJECTION
+    title: Prompt-injection and jailbreak guards, measured in CI
+    description: Input patterns (incl. base64), poisoned-document removal, optional model judge or vendor service; catch and false-positive gate.
+    steps: [24, 34]
+    evidence: [libs/rag-core/tests/test_guards.py::test_poisoned_document_is_dropped_before_the_model, examples/eval/guards.yaml]
+    frameworks: {nist: [MEASURE 2.7, MEASURE 2.6], iso42001: [A.6.2.4], eu_ai_act: [Art. 15], app: [APP 11]}
+  - id: C-OUTPUT
+    title: Output guards for secrets, personal data and toxicity
+    description: Answers are checked against key/token patterns, PII detectors and a toxicity list before release.
+    steps: [34]
+    evidence: [libs/rag-core/tests/test_guards.py::test_output_pii_secrets_and_toxicity]
+    frameworks: {nist: [MEASURE 2.6, MEASURE 2.10], iso42001: [A.6.2.4], eu_ai_act: [Art. 15], app: [APP 11]}
+  - id: C-GROUND
+    title: Grounded answers with checked citations and honest abstention
+    description: Numbered sources, citation validation, abstain without hits, uncited policy, groundedness guard, corrective and self-reflective options.
+    steps: [33, 34, 35]
+    evidence: [libs/rag-core/tests/test_answer.py::test_citations_are_checked_against_the_context, libs/rag-core/tests/test_guards.py::test_groundedness_checks_words_and_exact_numbers]
+    frameworks: {nist: [MEASURE 2.5, MEASURE 2.9], iso42001: [A.6.2.4], eu_ai_act: [Art. 13, Art. 15], app: [APP 10]}
+  - id: C-AUDIT
+    title: Tamper-evident audit log of every search and answer, without text
+    description: Hash-chained, anchored to object storage; ids, versions, guard verdicts, outcomes; recorded before data leaves.
+    steps: [23, 33, 34]
+    evidence: [tests/test_audit_chain.py::test_verify_passes_on_a_clean_log, services/rag-api/tests/test_answer_api.py::test_no_audit_no_answer]
+    frameworks: {nist: [MEASURE 2.8], iso42001: [A.6.2.8], eu_ai_act: [Art. 12], app: [APP 1]}
+  - id: C-EVAL
+    title: Evaluation gates on every change
+    description: Retrieval, answer, guard and architecture gates in CI; golden datasets; baselines.
+    steps: [26, 32, 34, 35]
+    evidence: [evals/gates.yaml, libs/rag-evals/tests/test_gates.py, libs/rag-core/tests/test_retrieval.py::test_eval_search_gate_and_errors]
+    frameworks: {nist: [MEASURE 2.3, MEASURE 2.5, MEASURE 2.13], iso42001: [A.6.2.4], eu_ai_act: [Art. 9, Art. 15], app: [APP 10]}
+  - id: C-PROMPTS
+    title: Versioned, locked, reviewed prompts
+    description: Prompt registry with a lock file; labels per environment; promotion by pull request; refs recorded with every answer.
+    steps: [24]
+    evidence: [libs/rag-common/tests/test_prompts.py::test_the_real_registry_is_valid]
+    frameworks: {nist: [MEASURE 2.8], iso42001: [A.6.2.3, A.6.2.7], eu_ai_act: [Art. 11], app: [APP 1]}
+  - id: C-CARDS
+    title: Model, dataset and system cards with lineage
+    description: Cards for every model, dataset and the system; lineage events from ingestion.
+    steps: [25]
+    evidence: [libs/rag-common/tests/test_cards.py, docs/cards/system-rag-api.md]
+    frameworks: {nist: [GOVERN 1.6, MEASURE 2.8], iso42001: [A.6.2.7, A.7.5, A.8.2], eu_ai_act: [Art. 11, Art. 13], app: [APP 1]}
+  - id: C-SECRETS
+    title: Dynamic, short-lived secrets from files, never config or env in containers
+    description: OpenBao issues database logins per pod; keys rendered to files and re-read on rotation.
+    steps: [6, 28, 32]
+    evidence: [tests/test_vault.py, libs/rag-core/tests/test_retrieval.py::test_secrets_come_from_files_and_rotate]
+    frameworks: {nist: [MEASURE 2.7], iso42001: [A.6.2.5], eu_ai_act: [Art. 15], app: [APP 11]}
+  - id: C-SUPPLY
+    title: Pinned, scanned, signed supply chain
+    description: Actions pinned to commits, dependency and licence checks, SBOM, image signing and attestation, digest-pinned deploys.
+    steps: [27, 29]
+    evidence: [tests/test_ci_policy.py::test_actions_are_pinned_to_a_commit_with_its_version_noted, tests/test_licences.py, .github/workflows/release.yml]
+    frameworks: {nist: [GOVERN 6.1, MEASURE 2.7], iso42001: [A.10.3], eu_ai_act: [Art. 15], app: [APP 11]}
+  - id: C-DEPLOY
+    title: Deploy and roll back by pull request, guarded by admission policies
+    description: GitOps with Argo CD; hardened workloads; unpinned images refused; rollback is a revert.
+    steps: [29, 37]
+    evidence: [tests/test_k8s.py::test_rag_api_workload_is_hardened, tests/test_promote.py]
+    frameworks: {nist: [MANAGE 2.4], iso42001: [A.6.2.5], eu_ai_act: [Art. 15], app: [APP 11]}
+  - id: C-OBSERVE
+    title: Traces, metrics and alerts without personal text
+    description: OpenTelemetry spans per stage, SLOs and alerts, masked LLM traces, guard verdict metrics.
+    steps: [19, 20, 21, 22, 34]
+    evidence: [services/rag-api/tests/test_telemetry.py::test_no_token_and_no_question_text_in_any_span]
+    frameworks: {nist: [MEASURE 2.4, MANAGE 4.1], iso42001: [A.6.2.6], eu_ai_act: [Art. 12], app: [APP 11]}
+  - id: C-FEEDBACK
+    title: User feedback tied to each answer
+    description: Thumbs up/down with a fixed reason list, audited, joined to traces by answer id.
+    steps: [33, 37]
+    evidence: [services/rag-api/tests/test_answer_api.py::test_feedback]
+    frameworks: {nist: [MANAGE 4.1, MEASURE 2.4], iso42001: [A.6.2.6, A.8.3], eu_ai_act: [Art. 14], app: [APP 13]}
+  - id: C-LIFECYCLE
+    title: Retention, erasure and immediate revocation
+    description: Retention rules (scheduled nightly, legal holds win, Step 37), erasure of sources (all object versions; under a hold only with a recorded override), of a person's conversations and cached answers, and access changes in every store at once.
+    steps: [36, 37]
+    evidence: [libs/rag-core/tests/test_lifecycle.py::test_retention_dry_run_then_apply, libs/rag-core/tests/test_lifecycle.py::test_a_legal_hold_wins_over_retention, libs/rag-core/tests/test_lifecycle.py::test_erase_source_removes_every_version_and_every_copy,
+               libs/rag-core/tests/test_lifecycle.py::test_revocation_reaches_search_answers_cache_and_manifest]
+    frameworks: {nist: [MEASURE 2.10, MANAGE 2.4], iso42001: [A.7.2, A.7.5], eu_ai_act: [Art. 10], app: [APP 11, APP 12, APP 13]}
+  - id: C-BACKUP
+    title: Backups with restore drills
+    description: Custom-format dumps with a checksum and row-count receipt, uploaded to locked storage; a drill restores and compares.
+    steps: [36]
+    evidence: [tests/test_backup.py::test_backup_and_restore_drill]
+    frameworks: {nist: [MEASURE 2.7], iso42001: [A.6.2.6], eu_ai_act: [Art. 15], app: [APP 11]}
+  - id: C-LIMITS
+    title: Limits on cost and blast radius
+    description: Gateway budgets and rate limits, input size guard, SQL authorizer with step and row limits, agent step limits.
+    steps: [10, 34, 35]
+    evidence: [libs/rag-core/tests/test_architectures.py::test_sql_authorizer_allows_only_reads_of_permitted_tables, libs/rag-core/tests/test_guards.py::test_pii_topics_and_size]
+    frameworks: {nist: [MEASURE 2.7], iso42001: [A.6.2.4], eu_ai_act: [Art. 15], app: [APP 11]}
+  - id: C-RESILIENCE
+    title: Degrade, don't fail
+    description: Rerankers and helpers fail open (counted); planners and SQL fall back to documents; extractive fallback generator.
+    steps: [32, 33, 35]
+    evidence: [libs/rag-core/tests/test_retrieval.py::test_reranker_failure_is_fail_open_by_default, libs/rag-core/tests/test_architectures.py::test_agentic_falls_back_when_the_planner_fails]
+    frameworks: {nist: [MEASURE 2.7], iso42001: [A.6.2.6], eu_ai_act: [Art. 15], app: []}
+  - id: C-TRANSPARENCY
+    title: People know they're using AI, see sources, and can't be misled by refusals
+    description: System card, cited sources in every answer, fixed messages for blocked or out-of-scope questions, AI disclosure in the client.
+    steps: [25, 33, 34]
+    evidence: [docs/cards/system-rag-api.md, services/rag-api/tests/test_answer_api.py::test_guard_block_shows_a_message_and_audits_the_reason]
+    frameworks: {nist: [MEASURE 2.8, MEASURE 2.9], iso42001: [A.8.2], eu_ai_act: [Art. 13, Art. 50], app: [APP 1, APP 5]}
+  - id: C-OVERSIGHT
+    title: Human oversight and escalation
+    description: Abstention instead of guesses, referral messages for out-of-scope topics, runbooks, feedback review, kill switch by rollback.
+    steps: [29, 33, 34, 37]
+    evidence: [docs/runbooks/rag-policy-mismatch.md, docs/runbooks/kubernetes.md]
+    frameworks: {nist: [MANAGE 2.4, MANAGE 4.3], iso42001: [A.9.2, A.9.4], eu_ai_act: [Art. 14], app: [APP 1]}
+  # ---- Step 37: production ----
+  - id: C-PROMOTION
+    title: Promotion only with evidence, a soak in staging and production readiness
+    description: deploy/envs/promotion.yaml checked by scripts/gates.py in `just promote`; evidence per digest that expires; 24 h soak; online evaluation; no critical alert; change freezes; break glass recorded; `rag config readiness` refuses test stand-ins and missing guards.
+    steps: [37]
+    evidence: [tests/test_gates.py::test_prod_waits_for_the_soak_period, tests/test_gates.py::test_evidence_must_be_for_this_digest_passing_and_fresh,
+               libs/rag-core/tests/test_readiness.py::test_the_production_profile_is_ready]
+    frameworks: {nist: [MANAGE 2.4, MEASURE 2.7], iso42001: [A.6.2.5], eu_ai_act: [Art. 15], app: [APP 11]}
+  - id: C-CANARY
+    title: Canary releases that roll back by themselves
+    description: Argo Rollouts gives a new release 10, 25, 50 then 100% of pods while Prometheus checks and an online-evaluation Job compare it with the stable release; any failed check scales the canary to zero.
+    steps: [37]
+    evidence: [tests/test_environments.py::test_releases_are_canaries_with_analysis, tests/test_environments.py::test_analysis_queries_are_valid_promql]
+    frameworks: {nist: [MANAGE 2.4, MEASURE 2.4], iso42001: [A.6.2.6], eu_ai_act: [Art. 15], app: [APP 11]}
+  - id: C-ONLINE-EVAL
+    title: Answer quality watched in production, per release
+    description: rag online-eval joins audit records and feedback by answer id, compares releases with a significance test and lists answers to review; answer-quality alerts with unit tests.
+    steps: [37]
+    evidence: [libs/rag-core/tests/test_online.py::test_a_clearly_worse_canary_fails_and_a_similar_one_passes, infra/config/prometheus/tests/rag_answers_test.yml,
+               tests/test_environments.py::test_alert_rules_and_their_tests_pass]
+    frameworks: {nist: [MEASURE 2.4, MANAGE 4.1], iso42001: [A.6.2.6, A.8.3], eu_ai_act: [Art. 12, Art. 14], app: [APP 11]}
+  - id: C-HA-DR
+    title: Highly available database with point-in-time recovery and drills
+    description: CloudNativePG over three zones with quorum synchronous commit, WAL archiving and nightly base backups to a locked bucket, 30-day point-in-time recovery, monthly restore drill into a new cluster.
+    steps: [37]
+    evidence: [tests/test_environments.py::test_prod_database_is_ha_with_point_in_time_recovery, tests/test_environments.py::test_dr_drill_renders_a_point_in_time_restore,
+               docs/runbooks/disaster-recovery.md]
+    frameworks: {nist: [MEASURE 2.7, MANAGE 2.4], iso42001: [A.6.2.6], eu_ai_act: [Art. 15], app: [APP 11]}
+  - id: C-WORKLOAD-ID
+    title: Each workload logs in as itself, with only its own secrets
+    description: The ingestion worker and lifecycle jobs use the rag-ingest service account and OpenBao role; rag-api can't read the originals, the worker can't use rag-api's leases; scheduled jobs pass the same admission policies.
+    steps: [37]
+    evidence: [tests/test_vault.py::test_the_ingestion_worker_has_its_own_identity, tests/test_environments.py::test_the_worker_has_its_own_identity,
+               tests/test_environments.py::test_an_unhardened_cronjob_is_refused]
+    frameworks: {nist: [MEASURE 2.7], iso42001: [A.6.2.5], eu_ai_act: [Art. 15], app: [APP 11]}
+
+threats:
+  - {id: T01, category: Spoofing, component: rag-api, threat: "A stolen or forged token is used to call the API.", controls: [C-AUTH, C-SECRETS], residual: Low}
+  - {id: T02, category: Spoofing, component: conversation memory, threat: "Someone reads another person's conversation by guessing a session id.", controls: [C-SESSION], residual: Low}
+  - {id: T03, category: Tampering, component: ingestion, threat: "A poisoned document plants instructions for the model (indirect prompt injection).", controls: [C-INJECTION, C-GROUND, C-AUDIT], residual: Medium}
+  - {id: T04, category: Tampering, component: audit log, threat: "An administrator rewrites the audit history.", controls: [C-AUDIT], residual: Low}
+  - {id: T05, category: Tampering, component: build and deploy, threat: "A malicious dependency or image reaches production.", controls: [C-SUPPLY, C-DEPLOY, C-PROMOTION, C-CANARY], residual: Medium}
+  - {id: T06, category: Tampering, component: prompts, threat: "A prompt, model or dataset is changed without review and alters behaviour.", controls: [C-PROMPTS, C-EVAL, C-CARDS, C-PROMOTION, C-ONLINE-EVAL], residual: Low}
+  - {id: T07, category: Repudiation, component: rag-api, threat: "A user denies receiving an answer, or an operator denies a change.", controls: [C-AUDIT, C-DEPLOY], residual: Low}
+  - {id: T08, category: Information disclosure, component: retrieval, threat: "An answer reveals a document the person may not see.", controls: [C-AUTHZ, C-STORE-ACL, C-CACHE], residual: Low}
+  - {id: T09, category: Information disclosure, component: "stores, logs and traces", threat: "Personal data ends up in indexes, caches, logs or traces.", controls: [C-PII, C-AUDIT, C-OBSERVE, C-LIFECYCLE], residual: Medium}
+  - {id: T10, category: Information disclosure, component: model output, threat: "The model reveals its system prompt, a secret or personal data.", controls: [C-INJECTION, C-OUTPUT], residual: Medium}
+  - {id: T11, category: Information disclosure, component: multi-tenant data, threat: "A query bug returns another tenant's data.", controls: [C-RLS, C-STORE-ACL], residual: Low}
+  - {id: T12, category: Information disclosure, component: model providers, threat: "Questions and documents are sent to a model provider abroad.", controls: [C-LIMITS, C-PII], residual: Medium}
+  - {id: T13, category: Denial of service, component: rag-api, threat: "Huge inputs, runaway agents or SQL, or cost abuse exhaust capacity or budget.", controls: [C-LIMITS, C-OBSERVE], residual: Medium}
+  - {id: T14, category: Denial of service, component: dependencies, threat: "A model, reranker or store outage takes answers down.", controls: [C-RESILIENCE, C-BACKUP, C-OBSERVE, C-HA-DR], residual: Medium}
+  - {id: T15, category: Elevation of privilege, component: SQL RAG, threat: "Generated SQL writes data or reads tables beyond the person's access.", controls: [C-LIMITS, C-AUTHZ], residual: Low}
+  - {id: T16, category: Elevation of privilege, component: model, threat: "A jailbreak makes the assistant ignore its rules or scope.", controls: [C-INJECTION, C-OVERSIGHT], residual: Medium}
+  - {id: T17, category: Elevation of privilege, component: platform, threat: "A compromised pod uses broad database or network access.", controls: [C-SECRETS, C-DEPLOY, C-RLS, C-WORKLOAD-ID], residual: Low}
+  - {id: T18, category: Safety, component: answers, threat: "A confident wrong answer is acted on (hallucination, outdated document).", controls: [C-GROUND, C-EVAL, C-FEEDBACK, C-OVERSIGHT, C-LIFECYCLE, C-ONLINE-EVAL, C-CANARY], residual: Medium}
+  - {id: T19, category: Safety, component: answers, threat: "People don't realise they're dealing with AI, or can't check where an answer came from.", controls: [C-TRANSPARENCY, C-CARDS], residual: Low}

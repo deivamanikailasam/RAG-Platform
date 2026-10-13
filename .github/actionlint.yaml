@@ -1,0 +1,4 @@
+# Labels of our own self-hosted runners, so actionlint knows they're intentional (Step 27).
+self-hosted-runner:
+  labels:
+    - rag-models  # the Mac that serves the models (evals.yml)

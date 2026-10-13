@@ -1,0 +1,55 @@
+# --- Python ---
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# --- Secrets: never commit (Step 6 handles these properly) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- Data and models: far too big for git, and may be sensitive ---
+data/
+# ...but documentation ABOUT the data stores (Step 14) is not data
+!docs/data/
+# ...and the database tier's MANIFESTS (Step 37: CloudNativePG cluster, backups) are code
+!deploy/data/
+models/
+# ...but model CARDS (Step 25) are documentation, not model weights
+!cards/models/
+*.gguf
+*.safetensors
+*.bin
+*.parquet
+
+# --- OS / editor clutter ---
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.direnv/
+
+# --- Database backups (Step 11): they contain all your data, never commit them ---
+backups/
+
+# --- Evaluation runs (Step 26): runs are local; baselines and datasets are committed ---
+evals/runs/
+
+# --- Pinned CI tools (Step 27): `just tools` downloads them here, checksum-verified ---
+.tools/
+
+# --- OpenBao (Step 28): the agent's role ID + single-use secret ID, short-lived database logins ---
+.bao/
+
+# --- Promotion evidence (Step 37): build artefacts from release.yml, downloaded per digest; never committed ---
+release-evidence/

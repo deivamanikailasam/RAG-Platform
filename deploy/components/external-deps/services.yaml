@@ -1,0 +1,50 @@
+# ExternalName = a DNS alias: <name>.rag.svc resolves to your Mac (host.docker.internal), where
+# Compose publishes each service's port. Check with: just k8s-deps-check
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rag-db  # Postgres: rag and audit databases (Steps 11, 23)
+spec:
+  type: ExternalName
+  externalName: host.docker.internal
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: litellm  # model gateway (Step 9)
+spec:
+  type: ExternalName
+  externalName: host.docker.internal
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: opa  # policy engine (Step 18)
+spec:
+  type: ExternalName
+  externalName: host.docker.internal
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openbao  # secrets (Step 28)
+spec:
+  type: ExternalName
+  externalName: host.docker.internal
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak  # identity provider (Step 16), published on 8180
+spec:
+  type: ExternalName
+  externalName: host.docker.internal
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector  # telemetry (Step 19)
+spec:
+  type: ExternalName
+  externalName: host.docker.internal

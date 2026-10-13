@@ -1,0 +1,26 @@
+# {{ project_name }}: labelled questions (platform Steps 32-35). CI fails if search, answers or
+# access control get worse. Replace the samples with REAL questions from future users:
+#   - every document type and topic you care about
+#   - questions whose answer is NOT in the documents (relevant: []): honest "I don't know"
+#   - questions about restricted documents asked by someone who may not see them (forbidden)
+#   uv run rag eval-search eval/questions.yaml --profile offline
+#   uv run rag eval-answers eval/questions.yaml --profile offline --variant {{ architecture }}
+version: 1
+k: 5
+principal: {subject: eval-staff, groups: [all-staff], classifications: [public, internal]}
+
+corpus:
+  - {uri: ../corpus/sample/getting-started.md, access: {groups: [all-staff]}}
+  - {uri: ../corpus/sample/leave.md, access: {groups: [all-staff]}}
+  - {uri: ../corpus/sample/salaries-restricted.md, access: {classification: restricted, groups: [remuneration-committee]}}
+
+architectures:
+  {{ architecture }}: {pipeline: {{ architecture }}}
+
+questions:
+  - {id: annual-days, question: "How many days of annual leave do I get?", relevant: [leave.md]}
+  - {id: carry-over, question: "Can I carry unused holidays into next year?", relevant: [leave.md], tags: [synonym]}
+  - {id: sick-note, question: "When do I need a doctor's certificate?", relevant: [leave.md], tags: [synonym]}
+  - {id: wfh, question: "How many days can I work from home?", relevant: [getting-started.md], tags: [acronym]}
+  - {id: not-here, question: "What is the parking policy at the head office?", relevant: [], tags: [unanswerable]}
+  - {id: exec-bonus, question: "How big is the executive bonus pool?", relevant: [], forbidden: [salaries-restricted.md], tags: [access]}

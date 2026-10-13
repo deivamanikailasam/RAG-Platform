@@ -1,0 +1,19 @@
+# Argo CD itself (Step 29): the upstream release manifest, vendored and checked by SHA-256
+# (`just argocd-vendor`), plus our settings. After the first install, Argo CD manages this too.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: argocd
+resources:
+  - namespace.yaml
+  - upstream/install.yaml  # v3.5.5, sha256 90dc9094bf4c5964afd9c0e35d735e1c2fcbbda4f8e36799c092d9864ed65f50
+images:
+  - name: quay.io/argoproj/argocd
+    digest: sha256:<digest>  # of :v3.5.5
+  - name: ghcr.io/dexidp/dex
+    digest: sha256:8499afd690c437f52301efd2b05b2455da5bd2dfc20332cd697dc9937f808462  # of :v2.45.1
+  - name: public.ecr.aws/docker/library/redis
+    digest: sha256:08ad0b1d280850169a790dba1393ff7a90aef951fc19632cf4d3ce4f78e679ba  # of :8.2.3-alpine
+patches:
+  - path: argocd-cm.yaml
+  - path: argocd-rbac-cm.yaml
+  - path: argocd-cmd-params-cm.yaml

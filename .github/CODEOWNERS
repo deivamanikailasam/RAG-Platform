@@ -1,0 +1,14 @@
+# Every change needs review from the owner. Teams would list different owners per folder, e.g.:
+#   /infra/           @platform-team
+#   /evals/           @ml-quality-team
+*       @deivamanikailasam
+
+# Prompts change what every user sees: their owners review every change.
+/prompts/       @deivamanikailasam
+
+# Cards are signed off by the people who own the answers. In a company:
+#   models -> platform team · datasets -> each data owner · systems -> product + legal · policy -> platform owner
+/cards/models/      @deivamanikailasam
+/cards/datasets/    @deivamanikailasam
+/cards/systems/     @deivamanikailasam
+/cards/policy.yaml  @deivamanikailasam

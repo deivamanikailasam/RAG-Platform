@@ -1,0 +1,60 @@
+# A new RAG project on the platform (Step 38).
+#   uvx copier copy gh:owner/rag-platform/templates/rag-project ../hr-assistant   (or a local path)
+#   cd ../hr-assistant && just check
+# Later platform improvements: `uvx copier update` re-applies the template, keeping your answers.
+_subdirectory: template
+_min_copier_version: "9.4"
+_answers_file: .copier-answers.yml
+
+project_name:
+  type: str
+  help: What people will call it (e.g. "HR policy assistant")
+  validator: "{% if not project_name.strip() %}required{% endif %}"
+slug:
+  type: str
+  help: Short name for folders, images and services (lowercase, dashes)
+  default: "{{ project_name.lower().replace(' ', '-') | regex_replace('[^a-z0-9-]', '') }}"
+  validator: "{% if not (slug | regex_search('^[a-z][a-z0-9-]{1,38}[a-z0-9]$')) %}lowercase letters, digits and dashes, 3-40 characters{% endif %}"
+module:
+  type: str
+  default: "{{ slug.replace('-', '_') }}"
+  when: false
+owner:
+  type: str
+  help: The team that owns it (a group in your identity provider)
+  default: "{{ slug }}-team"
+purpose:
+  type: str
+  help: One sentence on what it answers and for whom (goes into the system card)
+  default: "Answers staff questions from {{ project_name }} documents, with citations."
+architecture:
+  type: str
+  help: RAG architecture (Step 35); you can switch later with one line
+  # graph and sql exist too (Step 35): graph needs a durable graph store before production, sql
+  # needs your table definitions; add them by hand when you need them.
+  choices: [standard, corrective, self-reflective, adaptive, agentic]
+  default: standard
+search_engine:
+  type: str
+  help: Where vectors and keywords live (Steps 11-13)
+  choices:
+    "Postgres (pgvector + full text): simplest, one database": postgres
+    "Qdrant + OpenSearch: dedicated engines, more to run": engines
+  default: postgres
+highest_classification:
+  type: str
+  help: The most sensitive documents it will hold (Step 18)
+  choices: [public, internal, confidential, restricted]
+  default: internal
+personal_data:
+  type: bool
+  help: Will documents contain personal information? (pseudonymised at ingestion if yes)
+  default: true
+retention_days:
+  type: int
+  help: Default retention for indexed documents, in days (0 = keep until the source deletes)
+  default: 0
+platform_version:
+  type: str
+  help: rag-core version to build on (semantic versioning; 1.x keeps its contracts)
+  default: "1.0.0"

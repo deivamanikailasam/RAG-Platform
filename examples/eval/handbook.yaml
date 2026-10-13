@@ -1,0 +1,109 @@
+# Search evaluation on the sample handbook (Step 32).
+#   uv run rag eval-search examples/eval/handbook.yaml --profile offline
+# Every question lists the documents that answer it (by file name). "forbidden" documents must
+# never be returned to this person: a leak fails the run, whatever the other scores.
+version: 1
+k: 5
+principal: {subject: eval-staff, groups: [all-staff], classifications: [public, internal]}
+
+corpus:
+  - {uri: ../corpus/handbook/annual-leave.md, access: {groups: [all-staff]}, metadata: {updated: "2026-02-01"}}
+  - {uri: ../corpus/handbook/annual-leave-2021.md, access: {groups: [all-staff]}, metadata: {updated: "2021-03-01"}}
+  - {uri: ../corpus/handbook/parental-leave.md, access: {groups: [all-staff]}, metadata: {updated: "2025-07-01"}}
+  - {uri: ../corpus/handbook/sick-leave.md, access: {groups: [all-staff]}, metadata: {updated: "2025-01-15"}}
+  - {uri: ../corpus/handbook/remote-work.md, access: {groups: [all-staff]}, metadata: {updated: "2025-11-03"}}
+  - {uri: ../corpus/handbook/travel.md, access: {groups: [all-staff]}, metadata: {updated: "2026-01-10"}}
+  - {uri: ../corpus/handbook/expenses.md, access: {groups: [all-staff]}, metadata: {updated: "2025-09-01"}}
+  - {uri: ../corpus/handbook/security-passwords.md, access: {groups: [all-staff]}, metadata: {updated: "2025-05-20"}}
+  - {uri: ../corpus/handbook/incident-response.md, access: {groups: [all-staff]}, metadata: {updated: "2025-08-12"}}
+  - {uri: ../corpus/handbook/vpn-troubleshooting.md, access: {groups: [all-staff]}, metadata: {updated: "2026-03-02"}}
+  - {uri: ../corpus/handbook/laptop-policy.md, access: {groups: [all-staff]}, metadata: {updated: "2024-11-30"}}
+  - {uri: ../corpus/handbook/code-of-conduct.md, access: {groups: [all-staff]}, metadata: {updated: "2024-06-01"}}
+  - {uri: ../corpus/handbook/data-classification.md, access: {groups: [all-staff]}, metadata: {updated: "2025-04-01"}}
+  - {uri: ../corpus/handbook/ai-usage.md, access: {groups: [all-staff]}, metadata: {updated: "2026-04-15"}}
+  - {uri: ../corpus/handbook/onboarding.md, access: {groups: [all-staff]}, metadata: {updated: "2025-02-01"}}
+  - {uri: ../corpus/handbook/performance-reviews.md, access: {groups: [all-staff]}, metadata: {updated: "2025-12-01"}}
+  - {uri: ../corpus/handbook/exec-compensation.md, access: {classification: restricted, groups: [executives]}}
+
+# Each variant changes a few slots of the chosen profile; everything else stays as configured.
+variants:
+  keyword:               {retriever: keyword, reranker: none}
+  dense:                 {retriever: dense, reranker: none}
+  hybrid-rrf:            {retriever: hybrid, fusion: rrf, reranker: none}
+  hybrid-weighted:       {retriever: hybrid, fusion: {use: weighted, weights: {dense: 0.5, sparse: 0.5}}, reranker: none}
+  hybrid-dbsf:           {retriever: hybrid, fusion: dbsf, reranker: none}
+  hybrid+expand-terms:   {retriever: hybrid, reranker: none, query_transformer: {use: expand-terms, terms: {wfh: work from home, mfa: multi-factor authentication, sev1: severity incident}}}
+  hybrid+history:        {retriever: hybrid, reranker: none, query_transformer: with-history}
+  hybrid+rerank:         {retriever: hybrid, reranker: {use: term-overlap, top_n: 30}}
+  hybrid+rerank+recency: {retriever: hybrid, reranker: {use: term-overlap, top_n: 30}, postprocessors: [{use: recency, weight: 0.15, half_life_days: 730}]}
+  hybrid+mmr+per-doc:    {retriever: hybrid, reranker: none, postprocessors: [{use: mmr, lambda: 0.7}, {use: max-per-document, n: 1}]}
+  all-together:          {retriever: hybrid, query_transformer: with-history, reranker: {use: term-overlap, top_n: 30}, postprocessors: [dedupe, {use: recency, weight: 0.15, half_life_days: 730}, {use: max-per-document, n: 2}]}
+  # extension 02: chunking, indexing and embedding options, side by side on the same questions
+  hierarchical+merge:    {retriever: hybrid, reranker: none, chunker: {use: hierarchical, leaf_tokens: 120}, postprocessors: [auto-merge, {use: max-per-document, n: 2}]}
+  proposition:           {retriever: hybrid, reranker: none, chunker: {use: proposition, use_llm: false}, postprocessors: [window-expand, {use: max-per-document, n: 2}]}
+  summary-tree:          {retriever: hybrid, reranker: none, enrichers: [context-header, summary-tree]}
+  metadata+summary:      {retriever: hybrid, reranker: none, enrichers: [context-header, metadata, summary]}
+  sparse-bm25:           {retriever: hybrid, reranker: none, keyword_index: sparse, sparse_embedder: bm25}
+  late-chunking:         {retriever: dense, reranker: none, embedder: {use: late-chunking, dimensions: 256}}
+  matryoshka-128:        {retriever: dense, reranker: none, embedder: {use: matryoshka, dimensions: 128, inner: {use: hashing, dimensions: 256}}}
+  hybrid+maxsim:         {retriever: hybrid, reranker: {use: maxsim, top_n: 30}}
+  section-retriever:     {retriever: section, reranker: none}
+
+# Architectures (Step 35): `rag eval-answers` builds each one on the same profile and questions.
+architectures:
+  naive:            {pipeline: naive}
+  standard:         {pipeline: standard}
+  corrective:       {pipeline: corrective}
+  self-reflective:  {pipeline: self-reflective}
+  adaptive:         {pipeline: adaptive}
+  graph:            {pipeline: graph, graph_store: memory, enrichers: [context-header, graph-entities]}
+  # extension 03 (docs/extensions/03-more-rag-architectures.md): offline, the model-based steps
+  # use their heuristic (no model) mode, so these rows compare the plumbing, not a model
+  vector:           {pipeline: vector}
+  keyword:          {pipeline: keyword}
+  pageindex:        {pipeline: {use: pageindex, navigator: heuristic}, toc_store: memory}
+  rag-fusion:       {pipeline: {use: rag-fusion, variant_source: heuristic}}
+  conversational:   {pipeline: {use: conversational, rewriter: heuristic}}
+  long-context:     {pipeline: long-context}
+  flare:            {pipeline: flare}
+  speculative:      {pipeline: {use: speculative, drafter: generator, verifier: support}}
+  graph-global:     {pipeline: graph-global, graph_store: memory, enrichers: [context-header, llm-entities]}
+
+# extension 04: `reference` is the answer a person would accept; `rag eval-answers` scores
+# correctness against it (and context recall from it). Questions without one are still scored
+# on everything else.
+questions:
+  - {id: leave-days, question: "How many days of annual leave do full-time staff get?", relevant: [annual-leave.md], tags: [paraphrase], reference: "Full-time staff get 25 days of annual leave per year, plus public holidays."}
+  - {id: carry-over, question: "Can I carry unused holidays over to next year?", relevant: [annual-leave.md], tags: [synonym]}
+  - {id: secondary-carer, question: "What parental leave does a secondary carer get?", relevant: [parental-leave.md], reference: "A secondary carer receives 4 weeks of parental leave at full pay."}
+  - {id: doctor-note, question: "Do I need a doctor's note when I'm off sick?", relevant: [sick-leave.md], tags: [synonym], reference: "A doctor's note is needed only for absences of more than two consecutive days."}
+  - {id: wfh-days, question: "How many days a week can I WFH?", relevant: [remote-work.md], tags: [acronym], reference: "Staff may work from home up to three days a week, agreed with their manager."}
+  - {id: home-office, question: "Is there money for setting up my home office?", relevant: [remote-work.md]}
+  - {id: business-class, question: "Can I fly business class to London?", relevant: [travel.md]}
+  - {id: per-diem, question: "What is the daily meal allowance on a domestic trip?", relevant: [travel.md], tags: [synonym]}
+  - {id: claim-deadline, question: "How long do I have to submit an expense claim?", relevant: [expenses.md], reference: "Submit expense claims within 30 days of spending the money."}
+  - {id: wine-client, question: "Will the company pay for wine at a client dinner?", relevant: [expenses.md], tags: [synonym]}
+  - {id: e4021, question: "My VPN shows E-4021", relevant: [vpn-troubleshooting.md], tags: [code]}
+  - {id: e1107, question: "What does error E-1107 mean?", relevant: [vpn-troubleshooting.md], tags: [code]}
+  - {id: password-length, question: "How long does my password have to be?", relevant: [security-passwords.md], reference: "Passwords must be at least 14 characters long."}
+  - {id: mfa-sms, question: "Can I use SMS codes for MFA?", relevant: [security-passwords.md], tags: [acronym]}
+  - {id: clicked-link, question: "I clicked a link in a suspicious email, who do I tell?", relevant: [incident-response.md]}
+  - {id: sev1, question: "How quickly must a SEV1 be acknowledged?", relevant: [incident-response.md], tags: [code]}
+  - {id: lost-laptop, question: "I left my laptop in a taxi, what should I do?", relevant: [laptop-policy.md], tags: [paraphrase]}
+  - {id: supplier-gift, question: "A supplier sent me concert tickets, do I need to declare them?", relevant: [code-of-conduct.md], tags: [paraphrase]}
+  - {id: chatgpt-customer, question: "Can I paste customer data into ChatGPT?", relevant: [ai-usage.md, data-classification.md], tags: [multi-doc]}
+  - {id: salary-review, question: "When do salary reviews happen?", relevant: [performance-reviews.md]}
+  - {id: first-month-training, question: "Which training must new starters finish in their first month?", relevant: [onboarding.md]}
+  - {id: per-diem-and-claims, question: "What is the international per diem and how long do I have to claim expenses?", relevant: [travel.md, expenses.md], tags: [multi-doc]}
+  - id: followup-vpn
+    history: [{role: user, text: "My VPN keeps failing with E-4021"}, {role: assistant, text: "That means your device certificate expired."}]
+    question: "How do I fix it?"
+    relevant: [vpn-troubleshooting.md]
+    tags: [follow-up]
+  - id: followup-leave
+    history: [{role: user, text: "How much parental leave do primary carers get?"}, {role: assistant, text: "18 weeks at full pay."}]
+    question: "Can I take it in two blocks?"
+    relevant: [parental-leave.md]
+    tags: [follow-up]
+  # access control: the executive bonus document exists, but this person must never get it
+  - {id: exec-bonus, question: "How big is the executive bonus pool?", relevant: [], forbidden: [exec-compensation.md], tags: [access]}

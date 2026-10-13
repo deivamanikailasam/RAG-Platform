@@ -1,0 +1,23 @@
+# Trivy findings we accept ON PURPOSE (Step 29). Each one says why, and expires: then it's reviewed again.
+misconfigurations:
+  - id: KSV-0108
+    statement: >-
+      ExternalName Services point at the Compose services on this Mac (components/external-deps).
+      The known risk (CVE-2020-8554) needs an attacker who can create Services; only Argo CD can
+      (git review) in namespace rag. Replace with in-cluster services when Postgres etc. move.
+    expired_at: 2027-04-01
+  - id: KSV-0125
+    statement: >-
+      Trivy's default "trusted registries" list doesn't know ours. Our own admission policy
+      (deploy/cluster/policy-images.yaml) allows only ghcr.io/owner/ and quay.io/openbao/, by digest.
+    expired_at: 2027-04-01
+  - id: KSV-01010
+    statement: >-
+      False positive: the agent's ConfigMap contains the setting name "error_on_missing_key", no secret.
+    expired_at: 2027-04-01
+  - id: KSV-0109
+    statement: >-
+      False positive (Step 37, seen when scanning staging and prod): the OpenBao Agent ConfigMaps hold TEMPLATES whose
+      "contents" setting names where a secret lives in OpenBao; the secret values are only ever
+      rendered into an in-memory volume inside the pod, never into the ConfigMap.
+    expired_at: 2027-04-01

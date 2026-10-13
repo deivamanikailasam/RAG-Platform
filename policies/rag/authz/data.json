@@ -1,0 +1,22 @@
+{
+    "action_roles": {
+        "search": "rag-user",
+        "answer": "rag-user",
+        "feedback": "rag-user",
+        "admin:ping": "rag-admin",
+        "collections:manage": "rag-admin",
+        "audit:read": "rag-auditor",
+        "documents:ingest": "rag-ingest"
+    },
+    "group_clearance": {
+        "all-staff": "internal",
+        "engineering": "internal",
+        "hr": "confidential",
+        "executives": "restricted",
+        "platform-admins": "internal",
+        "auditors": "internal"
+    },
+    "capped_groups": {
+        "contractors": "internal"
+    }
+}

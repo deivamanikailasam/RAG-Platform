@@ -1,0 +1,35 @@
+# ADR-0001: Build {{ project_name }} on the RAG platform
+
+- **Status:** Accepted
+- **Date:** <today>
+- **Deciders:** {{ owner }}
+
+## Context
+{{ project_name }} needs to answer questions from documents ({{ purpose }}). It needs search,
+cited answers, access control, guardrails, evaluation, audit and a way to production, all of which
+the RAG platform already provides, tested once for every project.
+
+## Decision
+- Build on rag-core {{ platform_version }} (semantic versioning: `>={{ platform_version }},<2`), made from
+  the platform's project template (`templates/rag-project`).
+- `rag.yaml` includes the platform's profiles (`include: {platform: rag-core:platform.yaml}`) and
+  says only what differs: the `{{ architecture }}` architecture and this project's collections in
+  {{ 'Postgres (pgvector + full text)' if search_engine == 'postgres' else 'Qdrant and OpenSearch' }}.
+- What the platform lacks is added as our own components in `src/{{ module }}/components.py`,
+  registered through the `rag_core.components` entry point; generally useful ones are proposed
+  back to rag-core by pull request.
+- `just check` (tests, readiness, evaluations, `rag doctor`) runs on every pull request.
+
+## Alternatives considered
+| Option | Pros | Cons | Why not chosen |
+|---|---|---|---|
+| Our own RAG stack | Full control | Months of work; every control re-built and re-reviewed | The platform has them |
+| A general framework (LlamaIndex, LangChain, Haystack) | Large ecosystem | No platform gates, standards or evidence | We'd rebuild the gates around it |
+| A managed RAG service | Fastest start | Access control and evaluation fit unclear; data leaves our control | Not proven for our data |
+
+## Consequences
++ The platform's tested defaults, evidence and improvements (`uvx copier update`, new rag-core 1.x).
+- We follow the platform's standards (docs/standards/rag-standards.md) and its release cadence.
+
+## Revisit when
+The platform can't express something we need with configuration or a plugin.

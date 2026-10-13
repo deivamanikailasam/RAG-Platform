@@ -1,0 +1,27 @@
+# Default deny, then allow exactly what rag-api needs (Step 29). Needs a network plugin that
+# enforces NetworkPolicy: check yours with `just k8s-netpol-check` (some, like plain Flannel, don't).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rag-api
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: rag-api }  # kustomize adds the shared labels too
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - ports: [{ port: 8000 }]
+  egress:
+    - ports: [{ port: 53, protocol: UDP }, { port: 53, protocol: TCP }]  # DNS
+    # the platform's services on your Mac (external-deps): Postgres, LiteLLM, OPA, OpenBao,
+    # Keycloak, OpenTelemetry. By port: their addresses belong to OrbStack, not to us.
+    - ports: [{ port: 5432 }, { port: 4000 }, { port: 8181 }, { port: 8200 }, { port: 8180 }, { port: 4317 },
+              { port: 6379 }]  # Valkey: conversation memory and the answer cache (Step 33)
+---
+# Everything else in the namespace: nothing in, nothing out, unless a policy above allows it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]

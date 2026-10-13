@@ -1,0 +1,33 @@
+# Reference copy of ~/.gitconfig (Step 4): what the `git config --global ...` commands produce.
+# Don't copy blindly: run bootstrap/git-setup.sh (or the commands in docs/steps/step-04-*.md),
+# which fills in YOUR name, email and key path.
+[user]
+	name = Your Name
+	# Your GitHub email, or the private noreply address (12345678+yourname@users.noreply.github.com)
+	email = you@example.com
+	# Public half of the SSH key used to sign commits
+	signingkey = ~/.ssh/id_ed25519.pub
+[init]
+	# New repositories start on "main"
+	defaultBranch = main
+[pull]
+	# Never create surprise merge commits on pull
+	ff = only
+[fetch]
+	# Forget branches deleted on the server
+	prune = true
+[core]
+	# Store LF line endings (Linux-style) in the repo
+	autocrlf = input
+[gpg]
+	# Sign with SSH keys instead of GPG
+	format = ssh
+[gpg "ssh"]
+	# Keys git trusts when verifying signatures locally
+	allowedSignersFile = ~/.ssh/allowed_signers
+[commit]
+	# Sign every commit
+	gpgsign = true
+[tag]
+	# Sign every tag
+	gpgsign = true

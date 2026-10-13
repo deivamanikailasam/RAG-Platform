@@ -1,0 +1,94 @@
+# Unit tests for the answer-quality alerts (Step 37).     Run: just alerts-test
+rule_files:
+  - ../rules/rag-answers.yml
+evaluation_interval: 1m
+
+tests:
+  # 1. A normal day: 2% blocked, 10% abstained -> nothing fires.
+  - interval: 1m
+    input_series:
+      - series: 'rag_answer_requests_total{deployment_environment_name="prod",outcome="answered"}'
+        values: "0+88x1500"
+      - series: 'rag_answer_requests_total{deployment_environment_name="prod",outcome="abstained"}'
+        values: "0+10x1500"
+      - series: 'rag_answer_requests_total{deployment_environment_name="prod",outcome="blocked"}'
+        values: "0+2x1500"
+    alert_rule_test:
+      - { eval_time: 25h, alertname: RagGuardBlocksSpike, exp_alerts: [] }
+      - { eval_time: 25h, alertname: RagAbstentionSpike, exp_alerts: [] }
+
+  # 2. After a quiet day, blocks jump from 2% to 20% (an injection campaign) -> warning.
+  - interval: 1m
+    input_series:
+      - series: 'rag_answer_requests_total{deployment_environment_name="prod",outcome="answered"}'
+        values: "0+88x1440 126720+70x60"
+      - series: 'rag_answer_requests_total{deployment_environment_name="prod",outcome="abstained"}'
+        values: "0+10x1440 14400+10x60"
+      - series: 'rag_answer_requests_total{deployment_environment_name="prod",outcome="blocked"}'
+        values: "0+2x1440 2880+20x60"
+    alert_rule_test:
+      - eval_time: 1d50m
+        alertname: RagGuardBlocksSpike
+        exp_alerts:
+          - exp_labels: { severity: warning, service: rag-api, deployment_environment_name: prod, outcome: blocked }
+            exp_annotations:
+              summary: "20% of answers blocked in prod (3x the daily rate)"
+              runbook: docs/runbooks/answer-quality.md
+      - { eval_time: 1d50m, alertname: RagAbstentionSpike, exp_alerts: [] }
+
+  # 3. The index broke: abstentions go from 10% to 60% -> warning (and blocks stay quiet).
+  - interval: 1m
+    input_series:
+      - series: 'rag_answer_requests_total{deployment_environment_name="prod",outcome="answered"}'
+        values: "0+88x1440 126720+38x60"
+      - series: 'rag_answer_requests_total{deployment_environment_name="prod",outcome="abstained"}'
+        values: "0+10x1440 14400+60x60"
+      - series: 'rag_answer_requests_total{deployment_environment_name="prod",outcome="blocked"}'
+        values: "0+2x1440 2880+2x60"
+    alert_rule_test:
+      - eval_time: 1d50m
+        alertname: RagAbstentionSpike
+        exp_alerts:
+          - exp_labels: { severity: warning, service: rag-api, deployment_environment_name: prod, outcome: abstained }
+            exp_annotations:
+              summary: "60% of answers are abstentions in prod"
+              runbook: docs/runbooks/answer-quality.md
+      - { eval_time: 1d50m, alertname: RagGuardBlocksSpike, exp_alerts: [] }
+
+  # 4. Thumbs down: 40% of 60 ratings an hour -> warning; 40% of 6 ratings -> too few to say.
+  - interval: 1m
+    input_series:
+      - series: 'rag_feedback_total{deployment_environment_name="prod",rating="down",reason="wrong"}'
+        values: "0+0.4x120"
+      - series: 'rag_feedback_total{deployment_environment_name="prod",rating="up",reason="none"}'
+        values: "0+0.6x120"
+      - series: 'rag_feedback_total{deployment_environment_name="staging",rating="down",reason="wrong"}'
+        values: "0+0.04x120"
+      - series: 'rag_feedback_total{deployment_environment_name="staging",rating="up",reason="none"}'
+        values: "0+0.06x120"
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: RagThumbsDownHigh
+        exp_alerts:
+          - exp_labels: { severity: warning, service: rag-api, deployment_environment_name: prod }
+            exp_annotations:
+              summary: "40% thumbs down in the last hour (prod)"
+              runbook: docs/runbooks/answer-quality.md
+
+  # 5. Slow answers: every answer takes 12-15 s for 30 minutes -> warning.
+  - interval: 1m
+    input_series:
+      - series: 'rag_answer_duration_seconds_bucket{deployment_environment_name="prod",le="10"}'
+        values: "0x40"
+      - series: 'rag_answer_duration_seconds_bucket{deployment_environment_name="prod",le="30"}'
+        values: "0+5x40"
+      - series: 'rag_answer_duration_seconds_bucket{deployment_environment_name="prod",le="+Inf"}'
+        values: "0+5x40"
+    alert_rule_test:
+      - eval_time: 35m
+        alertname: RagAnswerLatencyHigh
+        exp_alerts:
+          - exp_labels: { severity: warning, service: rag-api, deployment_environment_name: prod }
+            exp_annotations:
+              summary: "p95 answer time 29s in prod"
+              runbook: docs/runbooks/answer-quality.md

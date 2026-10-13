@@ -1,0 +1,9 @@
+# Voluntary disruptions (node drain, cluster upgrade) never take the last serving pod away.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: rag-api
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: {}  # filled in by the kustomization's labels

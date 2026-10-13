@@ -1,0 +1,15 @@
+# {{ project_name }}: risk acceptance
+
+The platform's risk register (rag-platform `docs/compliance/risk-register.yaml`, 23 threats,
+30 controls, each with evidence) applies to this project as it runs on the platform. This page
+records what is SPECIFIC to {{ project_name }}.
+
+| Question | Answer |
+|---|---|
+| Highest classification held | {{ highest_classification }} |
+| Personal data | {{ 'yes' if personal_data else 'no' }} |
+| Users | <who, how many, internal/external> |
+| Could an answer harm someone if wrong? | <how; what the oversight is> |
+| EU AI Act / local law classification | <e.g. not high-risk; transparency duties apply> |
+| Residual risks accepted | <list, with the platform threat ids, e.g. T03 Medium> |
+| Accepted by | <name, role, date> |

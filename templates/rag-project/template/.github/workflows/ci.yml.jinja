@@ -1,0 +1,20 @@
+# {{ project_name }}: every pull request runs the platform's gates (platform Steps 27, 38).
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      # Pin actions to a commit (platform Step 27): replace <sha> with the commit of each version
+      - uses: actions/checkout@<sha>  # v5
+        with: {persist-credentials: false}
+      - uses: astral-sh/setup-uv@<sha>  # v7
+      - uses: extractions/setup-just@<sha>  # v3
+      - run: uv sync --locked
+      - run: just check

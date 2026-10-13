@@ -1,0 +1,22 @@
+[project]
+name = "rag-common"
+version = "0.1.0"
+description = "Shared library imported by every RAG platform service (Step 4; grows in later steps)"
+readme = "README.md"
+authors = [
+    { name = "deivamanikailasam", email = "80557361+deivamanikailasam@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "opentelemetry-api>=1.45.1",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.45.1",
+    "opentelemetry-sdk>=1.45.1",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.15.0",
+    "pyjwt[crypto]>=2.15.1",
+    "pyyaml>=6.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.32,<0.12.0"]
+build-backend = "uv_build"

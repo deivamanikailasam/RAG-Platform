@@ -1,0 +1,907 @@
+# The platform stack. Start with:   just up   (secrets are decrypted in memory by sops)
+name: rag-platform
+
+# Step 21: every container's stdout/stderr goes to the Collector through Docker's own "fluentd" log
+# driver. The Docker ENGINE pushes the lines out, so no log agent needs the Docker socket.
+x-logging: &to-collector
+  driver: fluentd
+  options:
+    fluentd-address: 127.0.0.1:24224          # the Collector's published port (the Docker engine connects)
+    fluentd-async: "true"                     # never block a container because the Collector is down
+    labels: com.docker.compose.service        # attach the Compose service name to every line
+    tag: docker
+
+# Step 22: settings shared by langfuse-web and langfuse-worker. Langfuse reads its settings ONLY from
+# environment variables (no *_FILE support); the values come from `sops exec-env` at `just up`.
+x-langfuse-env: &langfuse-env
+  NEXTAUTH_URL: http://localhost:3002
+  DATABASE_URL: postgresql://langfuse:${LANGFUSE_DB_PASSWORD}@langfuse-db:5432/langfuse
+  SALT: ${LANGFUSE_SALT}
+  ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY}
+  TELEMETRY_ENABLED: "false"                                  # no usage data sent to the vendor
+  CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse-clickhouse:9000
+  CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+  CLICKHOUSE_USER: langfuse
+  CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD}
+  CLICKHOUSE_CLUSTER_ENABLED: "false"
+  REDIS_HOST: langfuse-valkey
+  REDIS_PORT: "6379"
+  REDIS_AUTH: ${LANGFUSE_VALKEY_PASSWORD}
+  LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+  LANGFUSE_S3_EVENT_UPLOAD_REGION: us-east-1
+  LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://object-store:8333
+  LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${S3_LANGFUSE_ACCESS_KEY}
+  LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${S3_LANGFUSE_SECRET_KEY}
+  LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"           # required for SeaweedFS
+  LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
+  LANGFUSE_S3_MEDIA_UPLOAD_REGION: us-east-1
+  LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://localhost:8333    # what your BROWSER uses
+  LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: ${S3_LANGFUSE_ACCESS_KEY}
+  LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${S3_LANGFUSE_SECRET_KEY}
+  LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+
+services:
+  litellm-db:                                                 # the gateway's own private database (Step 10)
+    image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24   # pin by digest (Step 9 method)
+    environment:
+      POSTGRES_DB: litellm
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD_FILE: /run/secrets/litellm_db_password   # official image reads the password from a file
+    secrets: [litellm_db_password]
+    volumes:
+      - litellm-db-data:/var/lib/postgresql/data              # named volume (Step 3): fast, survives restarts
+    # NO "ports:" section. Only containers on this Compose network can reach it.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm -d litellm"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: *to-collector                                    # Step 21: output to the Collector -> Loki
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits: { memory: 512m, cpus: "1" }
+
+  litellm:
+    image: ghcr.io/berriai/litellm:v1.104.0@sha256:625981c83410a3ea68eb0697590a57ec1d764d634514d54fa5db0591077ee839
+    # The image only reads keys from environment variables, so a tiny wrapper reads the secret FILES
+    # and exports them inside the container process only. They never appear in `docker inspect`.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        export LITELLM_MASTER_KEY="$$(cat /run/secrets/litellm_master_key)"
+        TEI_API_KEY="$$(cat /run/secrets/tei_api_key)"
+        LITELLM_SALT_KEY="$$(cat /run/secrets/litellm_salt_key)"
+        DATABASE_URL="postgresql://litellm:$$(cat /run/secrets/litellm_db_password)@litellm-db:5432/litellm"
+        REDIS_URL="redis://litellm:$$(cat /run/secrets/valkey_litellm_password)@valkey:6379/0" &&
+        exec litellm --config /app/config.yaml --host 0.0.0.0 --port 4000
+    secrets: [litellm_master_key, tei_api_key, litellm_salt_key, litellm_db_password,
+              valkey_litellm_password]
+    depends_on:
+      litellm-db: { condition: service_healthy }             # don't start until the database answers
+      valkey:     { condition: service_healthy }             # …and the response cache (Step 15)
+    volumes:
+      - ../config/litellm/config.yaml:/app/config.yaml:ro     # config is read-only inside the container
+    environment:                                              # LiteLLM's OpenTelemetry callback (Step 19)
+      OTEL_EXPORTER: otlp_http
+      OTEL_ENDPOINT: http://otel-collector:4318
+      OTEL_SERVICE_NAME: litellm
+    ports:
+      - "127.0.0.1:4000:4000"                                 # localhost only (Step 3 rule)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"                   # reach the native model servers, on any runtime
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging: *to-collector                                    # Step 21: output to the Collector -> Loki
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits: { memory: 2g, cpus: "2" }
+
+  rag-db:                                                     # the platform's document + vector store (Step 11)
+    image: pgvector/pgvector:0.8.7-pg17@sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d   # Postgres 17 + pgvector 0.8.7, pinned by digest
+    environment:
+      POSTGRES_DB: rag
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/rag_db_superuser_password
+    secrets: [rag_db_superuser_password, rag_db_migrator_password, rag_db_app_password, rag_db_readonly_password,
+              rag_db_metrics_password,                  # Step 20: the rag_metrics (pg_monitor) role
+              audit_db_migrator_password, audit_db_writer_password, audit_db_reader_password,   # Step 23: the audit database
+              vault_admin_pg_password]                  # Step 28: bootstrap for 03-openbao.sh; rotated by OpenBao
+    volumes:
+      - rag-db-data:/var/lib/postgresql/data
+      - ../config/rag-db/init:/docker-entrypoint-initdb.d:ro  # one-time bootstrap: roles, extensions, schema (+ audit DB, Step 23; OpenBao logins, Step 28)
+    command:
+      - postgres
+      - -c
+      - shared_buffers=1GB                      # Postgres's own cache (~25% of the container's memory)
+      - -c
+      - effective_cache_size=3GB                # hint: total memory available for caching
+      - -c
+      - maintenance_work_mem=1GB                # HNSW builds are much faster when the graph fits here
+      - -c
+      - work_mem=32MB                           # per sort/hash operation
+      - -c
+      - max_connections=100
+      - -c
+      - shared_preload_libraries=pg_stat_statements   # per-query statistics for Step 20
+      - -c
+      - log_min_duration_statement=500          # log any query slower than 500 ms
+      - -c
+      - password_encryption=scram-sha-256
+    shm_size: 1g                                # parallel index builds need shared memory (Docker's default is 64 MB)
+    ports:
+      - "127.0.0.1:5432:5432"                   # localhost only: for migrations and admin tools on your Mac
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d rag"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: *to-collector                                    # Step 21: output to the Collector -> Loki
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits: { memory: 4g, cpus: "4" }
+
+  qdrant:                                                     # dedicated vector database: a DERIVED index of rag-db (Step 12)
+    image: qdrant/qdrant:v1.19.2@sha256:b7b0444c4c351c970b98e90a6f89c2ee4287c65b44e52b4cb503fa5b2aa927ad   # pin by digest (Step 9 method)
+    # Keys come from secret FILES and are exported only inside the container process.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        export QDRANT__SERVICE__API_KEY="$$(cat /run/secrets/qdrant_api_key)"
+        QDRANT__SERVICE__READ_ONLY_API_KEY="$$(cat /run/secrets/qdrant_read_only_api_key)" &&
+        exec /qdrant/entrypoint.sh
+    environment:
+      QDRANT__TELEMETRY_DISABLED: "true"        # don't send usage reports (same habit as Step 1)
+      QDRANT__SERVICE__JWT_RBAC: "true"         # allow scoped tokens signed with the admin key
+      QDRANT__LOG_LEVEL: INFO
+    secrets: [qdrant_api_key, qdrant_read_only_api_key]
+    volumes:
+      - qdrant-data:/qdrant/storage
+      - qdrant-snapshots:/qdrant/snapshots
+    ports:
+      - "127.0.0.1:6333:6333"                   # REST API + web dashboard
+      - "127.0.0.1:6334:6334"                   # gRPC API
+      # 6335 (cluster-internal, unauthenticated) is deliberately NOT published
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    logging: *to-collector                                    # Step 21: output to the Collector -> Loki
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits: { memory: 2g, cpus: "2" }
+
+  opensearch:                                                 # keyword + hybrid search engine: a DERIVED index of rag-db (Step 13)
+    image: opensearchproject/opensearch:3.8.0@sha256:fafe3fc3587088674669235575aa166228c48bdb940294a8cdbbc1da75236a40   # pin by digest (Step 9 method)
+    # Admin password from a secret FILE, exported only inside the process; then hand over to the
+    # image's own entrypoint (adjust the path/args to what `docker image inspect` printed).
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - >
+        export OPENSEARCH_INITIAL_ADMIN_PASSWORD="$$(cat /run/secrets/opensearch_admin_password)" &&
+        exec /usr/share/opensearch/opensearch-docker-entrypoint.sh opensearch
+    environment:
+      discovery.type: single-node               # one node: no cluster discovery
+      bootstrap.memory_lock: "true"             # keep the heap in RAM (no swapping)
+      OPENSEARCH_JAVA_OPTS: "-Xms2g -Xmx2g"     # fixed 2 GB heap (half the container limit)
+    secrets: [opensearch_admin_password]
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+      nofile: { soft: 65536, hard: 65536 }
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    ports:
+      - "127.0.0.1:9200:9200"                   # REST API (HTTPS). 9600 (perf analyzer) not published
+    healthcheck:
+      # "up" = answers HTTPS at all (401 without credentials is fine), so no password in the healthcheck
+      test: ["CMD-SHELL", "curl -sk -o /dev/null -w '%{http_code}' https://localhost:9200 | grep -qE '200|401'"]
+      interval: 20s
+      timeout: 10s
+      retries: 15
+      start_period: 60s
+    logging: *to-collector                                    # Step 21: output to the Collector -> Loki
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits: { memory: 4g, cpus: "4" }
+
+  object-store:                                               # S3-compatible object storage for ORIGINAL files: the raw zone (Step 14)
+    image: chrislusf/seaweedfs:4.45@sha256:fc9f76fa993ad69966ffeb2f65d0318fcae39c6f8e20cf68ef7b3a5cb97769e5   # SeaweedFS 4.x, pin by digest (Step 9 method)
+    # SeaweedFS reads its users ("identities") from a JSON file. The container builds that file at
+    # start-up from the secret FILES, into a RAM-only folder, then starts the server. Nothing on disk.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        umask 077
+        cat > /run/seaweed/s3.json <<EOF
+        {"identities": [
+          {"name": "admin",
+           "credentials": [{"accessKey": "$$(cat /run/secrets/s3_admin_access_key)", "secretKey": "$$(cat /run/secrets/s3_admin_secret_key)"}],
+           "actions": ["Admin", "Read", "Write", "List", "Tagging"]},
+          {"name": "rag-ingest",
+           "credentials": [{"accessKey": "$$(cat /run/secrets/s3_ingest_access_key)", "secretKey": "$$(cat /run/secrets/s3_ingest_secret_key)"}],
+           "actions": ["Read:rag-raw-docs", "Write:rag-raw-docs", "List:rag-raw-docs", "Tagging:rag-raw-docs",
+                       "Read:rag-tmp", "Write:rag-tmp", "List:rag-tmp"]},
+          {"name": "rag-reader",
+           "credentials": [{"accessKey": "$$(cat /run/secrets/s3_reader_access_key)", "secretKey": "$$(cat /run/secrets/s3_reader_secret_key)"}],
+           "actions": ["Read:rag-raw-docs", "List:rag-raw-docs"]},
+          {"name": "langfuse",
+           "credentials": [{"accessKey": "$$(cat /run/secrets/s3_langfuse_access_key)", "secretKey": "$$(cat /run/secrets/s3_langfuse_secret_key)"}],
+           "actions": ["Read:langfuse", "Write:langfuse", "List:langfuse"]},
+          {"name": "audit-anchor",
+           "credentials": [{"accessKey": "$$(cat /run/secrets/s3_audit_anchor_access_key)", "secretKey": "$$(cat /run/secrets/s3_audit_anchor_secret_key)"}],
+           "actions": ["Read:rag-audit-archive", "Write:rag-audit-archive", "List:rag-audit-archive"]},
+          {"name": "audit-reader",
+           "credentials": [{"accessKey": "$$(cat /run/secrets/s3_audit_reader_access_key)", "secretKey": "$$(cat /run/secrets/s3_audit_reader_secret_key)"}],
+           "actions": ["Read:rag-audit-archive", "List:rag-audit-archive"]}
+        ]}
+        EOF
+        exec weed mini -dir=/data -s3.config=/run/seaweed/s3.json -master.telemetry=false
+    secrets: [s3_admin_access_key, s3_admin_secret_key, s3_ingest_access_key, s3_ingest_secret_key,
+              s3_reader_access_key, s3_reader_secret_key,
+              s3_langfuse_access_key, s3_langfuse_secret_key,   # Step 22: Langfuse's own bucket only
+              s3_audit_anchor_access_key, s3_audit_anchor_secret_key,   # Step 23: writes the audit archive
+              s3_audit_reader_access_key, s3_audit_reader_secret_key]   # Step 23: reads it (verify, auditors)
+    tmpfs:
+      - /run/seaweed:size=1m,mode=0700          # identities file lives in RAM only
+    volumes:
+      - object-store-data:/data
+    ports:
+      - "127.0.0.1:8333:8333"                   # S3 API only. Master/filer/admin UIs stay internal
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 8333 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    logging: *to-collector                                    # Step 21: output to the Collector -> Loki
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits: { memory: 1g, cpus: "2" }
+
+  valkey:                                                     # in-memory store: LLM response cache, job queues, locks (Step 15)
+    image: valkey/valkey:9.1.2-alpine@sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11   # Valkey 9.1.x, pin by digest (Step 9 method)
+    # Valkey reads its users from an ACL file. The container builds that file at start-up from the
+    # secret FILES, into a RAM-only folder (same pattern as SeaweedFS), then starts the server.
+    # The image's own entrypoint then drops from root to the unprivileged "valkey" user.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        umask 077
+        cat > /run/valkey/users.acl <<EOF
+        user default off
+        user admin on >$$(cat /run/secrets/valkey_admin_password) ~* &* +@all
+        user litellm on >$$(cat /run/secrets/valkey_litellm_password) ~* &* +@all -@dangerous
+        user rag_app on >$$(cat /run/secrets/valkey_app_password) ~rag:* &rag:* +@all -@dangerous -@admin
+        EOF
+        chown -R valkey:valkey /run/valkey
+        exec docker-entrypoint.sh valkey-server /etc/valkey/valkey.conf --aclfile /run/valkey/users.acl
+    secrets: [valkey_admin_password, valkey_litellm_password, valkey_app_password]
+    tmpfs:
+      - /run/valkey:size=1m,mode=0700           # ACL file with passwords lives in RAM only
+    volumes:
+      - ../config/valkey/valkey.conf:/etc/valkey/valkey.conf:ro
+      - valkey-data:/data
+    ports:
+      - "127.0.0.1:6379:6379"                   # localhost only (Step 3 rule)
+    healthcheck:
+      # "NOAUTH" means alive and correctly refusing anonymous access, so no password needed here
+      test: ["CMD-SHELL", "valkey-cli ping 2>&1 | grep -qE 'PONG|NOAUTH'"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    logging: *to-collector                                    # Step 21: output to the Collector -> Loki
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits: { memory: 768m, cpus: "1" }     # a bit above maxmemory for overhead
+
+  keycloak-db:                                                # Keycloak's own private database (Step 16)
+    image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24   # same pinned image as litellm-db
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD_FILE: /run/secrets/keycloak_db_password
+    secrets: [keycloak_db_password]
+    volumes:
+      - keycloak-db-data:/var/lib/postgresql/data
+    # no "ports:": only Keycloak needs it
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: *to-collector                                    # Step 21: output to the Collector -> Loki
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits: { memory: 512m, cpus: "1" }
+
+  keycloak:                                                   # identity provider: realm "rag", users, groups, tokens (Step 16)
+    image: quay.io/keycloak/keycloak:26.8.0@sha256:27b3230fbabb8c9ff3c66c864cf09dcd8a41aca82e5100679d109ef0eeb05741   # pin by digest (Step 9 method)
+    # Keycloak reads passwords from environment variables, and the realm file's ${...} placeholders are
+    # filled from them too. A tiny wrapper reads the secret FILES and exports them inside the process only.
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        export KC_BOOTSTRAP_ADMIN_PASSWORD="$$(cat /run/secrets/keycloak_admin_password)"
+        export KC_DB_PASSWORD="$$(cat /run/secrets/keycloak_db_password)"
+        export KEYCLOAK_INGESTION_SECRET="$$(cat /run/secrets/keycloak_ingestion_secret)"
+        export KEYCLOAK_PROVISIONER_SECRET="$$(cat /run/secrets/keycloak_provisioner_secret)"
+        exec /opt/keycloak/bin/kc.sh start --import-realm
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak   # no password here (KC_DB_PASSWORD); gitleaks:allow
+      KC_DB_USERNAME: keycloak
+      KC_HOSTNAME: http://localhost:8180              # the one public address; becomes the token issuer
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"         # containers may call it as http://keycloak:8080
+      KC_HTTP_ENABLED: "true"                         # plain HTTP only because it's bound to 127.0.0.1
+      KC_HEALTH_ENABLED: "true"                       # /health/* on management port 9000
+      KC_METRICS_ENABLED: "true"                      # /metrics on port 9000, for Prometheus (Step 20)
+      KC_EVENT_METRICS_USER_ENABLED: "true"           # keycloak_user_events_total{event, error, realm} (Step 20)
+      KC_CACHE: local                                 # single node; clustering comes with Kubernetes
+      KC_LOG_CONSOLE_OUTPUT: json                     # structured logs, for Loki (Step 21)
+      KC_TRACING_ENABLED: "true"                      # sign-ins and token requests as spans (Step 19)
+      KC_TRACING_ENDPOINT: http://otel-collector:4317
+      KC_BOOTSTRAP_ADMIN_USERNAME: temp-admin         # used only on the very first start
+    secrets: [keycloak_admin_password, keycloak_db_password, keycloak_ingestion_secret,
+              keycloak_provisioner_secret]
+    volumes:
+      - ../config/keycloak/realm-rag.json:/opt/keycloak/data/import/realm-rag.json:ro
+    ports:
+      - "127.0.0.1:8180:8080"                         # 9000 (health/metrics) is NOT published
+    depends_on:
+      keycloak-db: { condition: service_healthy }
+    healthcheck:
+      # the image has no curl; bash talks HTTP to the readiness endpoint directly
+      test: ["CMD", "bash", "-c", "{ printf 'HEAD /health/ready HTTP/1.0\\r\\n\\r\\n' >&0; grep -q 'HTTP/1.0 200'; } 0<>/dev/tcp/localhost/9000"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    logging: *to-collector                                    # Step 21: output to the Collector -> Loki
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits: { memory: 1536m, cpus: "2" }
+
+  opa:                                                        # policy decision point: rag-api asks, OPA decides (Step 18)
+    image: openpolicyagent/opa:1.21.1-static@sha256:4675ab04ad1627f74741d2d9c5142698c79e18b7b09f192587d31d6dba20838e   # pin by digest (Step 9 method)
+    command:
+      - run
+      - --server
+      - --addr=0.0.0.0:8181
+      - --authentication=token                # read "Authorization: Bearer ..." as the caller's identity
+      - --authorization=basic                 # ...and let system.authz decide what that identity may do
+      - --bundle
+      - /policies
+      - --ignore=*_test.rego                  # tests stay out of the running server
+      - --watch                               # dev: reload when you save a policy file
+      - --log-format=json
+      - --set=decision_logs.console=true      # every decision to stdout, as JSON
+      - --set=distributed_tracing.type=grpc   # Step 19: a span per decision, joined to the caller's trace
+      - --set=distributed_tracing.address=otel-collector:4317
+      - --set=distributed_tracing.service_name=opa
+    environment:
+      OPA_API_TOKEN: ${OPA_API_TOKEN}         # read by system.authz via opa.runtime()
+      OPA_METRICS_TOKEN: ${OPA_METRICS_TOKEN} # Step 20: Prometheus may read /metrics
+    volumes:
+      - ../../policies:/policies:ro           # policies come from Git, read-only
+    ports:
+      - "127.0.0.1:8181:8181"
+    # No healthcheck: the -static image holds only the opa binary (no shell, no curl). rag-api
+    # protects itself instead (503 when OPA doesn't answer); Prometheus scrapes /metrics (Step 20) and
+    # TargetDown fires when it stops answering.
+    user: "65532:65532"                       # OPA warns when run as root; it doesn't need it
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    logging: *to-collector                                    # Step 21: output to the Collector -> Loki
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 256m, cpus: "0.5" }
+
+  otel-collector:                                             # one pipe for traces, metrics and logs (Step 19)
+    image: otel/opentelemetry-collector-contrib:0.162.0@sha256:39923a8e431bd1f57be82411999d389fcfe40857492e4365456d97a4c1f74be6   # pin by digest (Step 9 method)
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ../config/otel-collector/config.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "127.0.0.1:4317:4317"                 # OTLP gRPC: native macOS processes and scripts can send too
+      - "127.0.0.1:4318:4318"                 # OTLP HTTP
+      - "127.0.0.1:13133:13133"               # health check
+      - "127.0.0.1:24224:24224"               # Step 21: container logs from the Docker engine
+    # No "logging:" block: the Collector can't ship its own logs to itself, so it keeps Docker's
+    # default local json-file log (`just logs otel-collector`).
+    # No healthcheck: the image holds only the Collector (no shell). Check from the host instead:
+    # curl -s localhost:13133/ returns status JSON. Senders never fail when the Collector is down;
+    # their exporters drop data and retry.
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 512m, cpus: "1" }   # memory_limiter works as a percentage of this
+
+  rag-api:                                                    # the platform's first service: verifies every Keycloak token (Step 17)
+    build:
+      context: ../..                                          # repository root
+      dockerfile: services/rag-api/Dockerfile
+    image: rag-platform/rag-api:dev
+    environment:
+      RAG_API_OIDC_ISSUER: http://localhost:8180/realms/rag   # must match the token's "iss"
+      RAG_API_OIDC_JWKS_URL: http://keycloak:8080/realms/rag/protocol/openid-connect/certs
+      RAG_API_GATEWAY_URL: http://litellm:4000/v1
+      RAG_API_DB_HOST: rag-db
+      RAG_API_OPA_URL: http://opa:8181                        # the policy decision point (Step 18)
+      OTEL_SERVICE_NAME: rag-api                              # telemetry (Step 19): standard OTEL_* variables only
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_RESOURCE_ATTRIBUTES: service.version=0.1.0
+      OTEL_TRACES_SAMPLER: parentbased_traceidratio
+      OTEL_TRACES_SAMPLER_ARG: "1.0"                          # keep every trace in dev; lower in production
+      RAG_API_LANGFUSE_BASE_URL: http://langfuse-web:3000     # Step 22: LLM traces; leave empty to switch off
+      RAG_API_LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}     # identifies the project; not secret
+      RAG_API_AUDIT_DB_HOST: rag-db                           # Step 23: the audit database, as audit_writer
+      RAG_API_PROMPT_LABEL: production                        # Step 24: which prompt versions run here; a staging stack sets: staging
+      # Step 28: database logins issued by OpenBao, kept fresh by rag-api-agent, read per connection
+      RAG_API_DB_CREDENTIALS_FILE: /run/bao/rag_db.json
+      RAG_API_AUDIT_DB_CREDENTIALS_FILE: /run/bao/audit_db.json
+      # Step 32: /v1/search through rag-core (hybrid + rerank), profile `local` of /app/rag.yaml.
+      # Roll back: RAG_API_SEARCH_BACKEND: legacy (Step 11's single SQL query)
+      RAG_API_SEARCH_BACKEND: core
+      RAG_API_RAG_PROFILE: local
+    volumes:
+      - rag-api-bao:/run/bao:ro                               # Step 28: also holds rag_api_gateway_key and rag_api_opa_token
+    secrets:
+      # Step 28: after the cut-over (just vault-cutover, then a quiet week), remove these four:
+      #   rag_api_gateway_key, rag_api_db_password, rag_api_opa_token, rag_api_audit_db_password.
+      # Until then they are the way back; where a file exists in /run/bao too, /run/bao wins.
+      - rag_api_gateway_key                                   # -> /run/secrets/rag_api_gateway_key
+      - rag_api_db_password                                   # -> /run/secrets/rag_api_db_password
+      - rag_api_opa_token                                     # -> /run/secrets/rag_api_opa_token (Step 18)
+      - rag_api_langfuse_secret_key                           # stays in SOPS for now (moves the same way later) (Step 22)
+      - rag_api_audit_db_password                             # -> /run/secrets/rag_api_audit_db_password (Step 23)
+    ports:
+      - "127.0.0.1:8000:8000"
+    # The guide sets read_only: true here. Compose refuses it together with secrets that come from
+    # environment variables ("cannot create secret ... in read-only service: `file` is the sole
+    # supported option"), and file-sourced secrets would mean plaintext on disk. So the root
+    # filesystem stays technically writable, but the app still can't modify its own files: it runs as
+    # uid 10001 and everything under /app belongs to root (checked in tests/test_rag_api.py).
+    tmpfs: [/tmp]                                             # scratch space in RAM only
+    cap_drop: [ALL]                                           # no special Linux privileges at all
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      keycloak: { condition: service_healthy }
+      rag-db:   { condition: service_healthy }
+      litellm:  { condition: service_healthy }
+      opa:      { condition: service_started }        # Step 18: no healthcheck in the static image
+      otel-collector: { condition: service_started }  # Step 19: no shell, so no healthcheck
+      rag-api-agent:  { condition: service_healthy }  # Step 28: its credentials files exist
+      valkey:   { condition: service_healthy }        # Step 33: conversation memory and the answer cache
+    logging: *to-collector                                    # Step 21: output to the Collector -> Loki
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 512m, cpus: "1" }
+
+  openbao:                                                    # secrets issued on demand, short-lived and audited (Step 28)
+    image: openbao/openbao:2.7.1@sha256:6d2b93856e3fcf7b18ad855a0b51eaba474dc8b79cf554379ea32034797d2acf   # also on quay.io/openbao/openbao
+    entrypoint: ["bao", "server", "-config=/openbao/config/server.hcl"]
+    init: true                                                # a tiny PID 1 that passes on signals (SIGHUP reopens the audit log)
+    ulimits: { core: 0 }                                      # a crash must never write memory, with secrets in it, to disk
+    ports: ["127.0.0.1:8200:8200"]                            # your Mac only: the bao CLI and the just recipes
+    volumes:
+      - ../config/openbao/server.hcl:/openbao/config/server.hcl:ro
+      - openbao-data:/openbao/file                            # raft storage; OpenBao encrypts everything it writes here
+      - openbao-logs:/openbao/logs                            # the audit log
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:                                              # 200 only when unsealed and active
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8200/v1/sys/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    deploy: { resources: { limits: { cpus: "1", memory: 512M } } }
+    restart: unless-stopped
+    logging: *to-collector
+
+  rag-api-agent:                                              # OpenBao Agent: logs in for rag-api, keeps its files fresh (Step 28)
+    image: openbao/openbao:2.7.1@sha256:6d2b93856e3fcf7b18ad855a0b51eaba474dc8b79cf554379ea32034797d2acf   # same binary, agent mode
+    entrypoint: ["bao", "agent", "-config=/openbao/config/agent.hcl"]
+    user: "10001:10001"                                       # rag-api's user: only it can read the files
+    init: true
+    ulimits: { core: 0 }
+    volumes:
+      - ../config/openbao/agent-rag-api.hcl:/openbao/config/agent.hcl:ro
+      - ../../.bao/rag-api:/openbao/bootstrap                 # role_id + single-use secret ID (deleted after reading)
+      - rag-api-bao:/openbao/out                              # in memory, shared with rag-api only
+    depends_on:
+      openbao: { condition: service_healthy }
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "test", "-s", "/openbao/out/rag_db.json"]
+      interval: 5s
+      timeout: 2s
+      retries: 12
+    deploy: { resources: { limits: { cpus: "0.25", memory: 64M } } }
+    restart: "no"                                             # a restart needs a fresh secret ID: just vault-agent-start
+    logging: *to-collector
+
+  ingestion-worker:                                           # Step 31: takes ingestion jobs from the Valkey stream
+    image: rag-platform/rag-api:dev                           # the same image: rag-core and the `rag` command are in it
+    command: ["rag", "worker", "--forever"]
+    environment:
+      RAG_PROFILE: local
+      AWS_SHARED_CREDENTIALS_FILE: /run/bao/aws_credentials   # S3_INGEST identity (Step 14), from OpenBao
+      AWS_ENDPOINT_URL_S3: http://object-store:8333
+      OTEL_SERVICE_NAME: ingestion-worker
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      # Step 32: the gateway key and the PII pseudonymisation key are no longer environment variables:
+      # the `local` profile reads them from files the agent writes (/run/bao/rag_api_gateway_key,
+      # /run/bao/pii_hmac_key), re-read on every use, until Step 37 gives the worker its own identity.
+    volumes:
+      - rag-api-bao:/run/bao:ro                               # Step 28's agent files (shared identity until Step 37)
+    depends_on:
+      rag-api-agent: { condition: service_healthy }
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    deploy: { replicas: 2, resources: { limits: { cpus: "1", memory: 1G } } }
+    restart: unless-stopped
+    logging: *to-collector
+
+  prometheus:                                                 # metrics store + rule evaluation (Step 20)
+    image: prom/prometheus:v3.13.4@sha256:87861b8cf91579109319ebc300f3f1060e6da9c05d6ae8ad15a20c879e84e32e   # 3.13 is the long-term-support line
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --storage.tsdb.retention.size=5GB                     # whichever limit is hit first
+      - --web.enable-otlp-receiver                            # accept pushes from the Collector
+      - --web.enable-remote-write-receiver                    # Step 21: Tempo's span metrics + service graph arrive here
+      - --enable-feature=exemplar-storage                     # Step 21: keep the trace ids attached to metric points
+    volumes:
+      - ../config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../config/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus-data:/prometheus
+    secrets: [opa_metrics_token, qdrant_read_only_api_key]
+    ports: ["127.0.0.1:9090:9090"]
+    extra_hosts: ["host.docker.internal:host-gateway"]        # reach TEI running natively on the Mac
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/ready"]
+      interval: 15s
+      timeout: 3s
+      retries: 10
+    # The guide sets read_only: true here. Compose refuses it together with secrets that come from
+    # environment variables (same as rag-api, Step 17), so it is left out. The image already runs as
+    # the unprivileged "nobody" user, which cannot change the program or its config files.
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    logging: *to-collector                                    # Step 21: output to the Collector -> Loki
+    restart: unless-stopped
+    deploy: { resources: { limits: { memory: 1g, cpus: "1" } } }
+
+  alertmanager:                                               # groups, de-duplicates, silences, routes alerts (Step 20)
+    image: prom/alertmanager:v0.34.1@sha256:e9733bafb1bdef9b00e25a21f8f99dc26a22224bf16641ad754d1649f4c3357a
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+      - --cluster.listen-address=                             # single instance: no clustering port
+    volumes:
+      - ../config/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager                       # silences survive restarts
+    ports: ["127.0.0.1:9093:9093"]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    logging: *to-collector                                    # Step 21: output to the Collector -> Loki
+    restart: unless-stopped
+    deploy: { resources: { limits: { memory: 128m, cpus: "0.25" } } }
+
+  grafana:                                                    # dashboards as code (Step 20): the only UI people log into
+    image: grafana/grafana:13.2.3@sha256:b28bae15e219c998fb0e0424ed724930cc61b1f61fb404d47c862f9a23f9e572
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password   # "__FILE": read from a file
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_SERVER_ROOT_URL: http://localhost:3000
+    volumes:
+      - ../config/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../config/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    secrets: [grafana_admin_password]
+    ports: ["127.0.0.1:3000:3000"]
+    depends_on:
+      prometheus: { condition: service_healthy }
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    logging: *to-collector                                    # Step 21: output to the Collector -> Loki
+    restart: unless-stopped
+    deploy: { resources: { limits: { memory: 512m, cpus: "1" } } }
+
+  postgres-exporter:                                          # turns rag-db statistics into /metrics (Step 20)
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1@sha256:ac5ec343104fae0e2d84a27bb8d69b38430a11910c5382cad85d478d2bab713e
+    environment:
+      DATA_SOURCE_URI: rag-db:5432/rag?sslmode=disable        # inside the Compose network only
+      DATA_SOURCE_USER: rag_metrics
+      DATA_SOURCE_PASS_FILE: /run/secrets/rag_db_metrics_password
+    secrets: [rag_db_metrics_password]
+    depends_on:
+      rag-db: { condition: service_healthy }
+    # read_only left out for the same Compose reason as prometheus; the image runs as "nobody".
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    logging: *to-collector                                    # Step 21: output to the Collector -> Loki
+    restart: unless-stopped
+    deploy: { resources: { limits: { memory: 128m, cpus: "0.25" } } }
+
+  tempo:                                                      # trace store: every span, 7 days (Step 21)
+    image: grafana/tempo:3.0.3@sha256:0296560ac66f8a3600d7fb3014a52c189d4d9c3549ad6ff441bf2409855d68d5
+    command: ["-target=all", "-config.file=/etc/tempo.yaml"]  # single process: every component, no Kafka
+    volumes:
+      - ../config/tempo/tempo.yaml:/etc/tempo.yaml:ro
+      - tempo-data:/var/tempo
+    ports: ["127.0.0.1:3200:3200"]                            # query API, for curl checks; Grafana uses tempo:3200
+    # OTLP gRPC (4317) is NOT published: only the Collector sends here, inside the Compose network.
+    logging: *to-collector
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    deploy: { resources: { limits: { memory: 1g, cpus: "1" } } }
+
+  loki:                                                       # log store: every container's lines, 7 days (Step 21)
+    image: grafana/loki:3.7.7@sha256:d70e4659623f3e109af669cae76fe2a5dd5be54e2298fe8aed380d982fbc2500
+    command: ["-config.file=/etc/loki/loki.yaml"]
+    volumes:
+      - ../config/loki/loki.yaml:/etc/loki/loki.yaml:ro
+      - loki-data:/loki
+    ports: ["127.0.0.1:3100:3100"]                            # no login of its own: localhost only
+    logging: *to-collector
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    deploy: { resources: { limits: { memory: 1g, cpus: "1" } } }
+
+  # --- Step 22: Langfuse, the "cockpit voice recorder" for LLM traces (content, masked, 30 days) ---
+  langfuse-db:                                                # Langfuse's own Postgres: users, projects, API keys, prompts
+    image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    environment:
+      POSTGRES_DB: langfuse
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD_FILE: /run/secrets/langfuse_db_password
+    secrets: [langfuse_db_password]
+    volumes: [langfuse-db-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse -d langfuse"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: *to-collector
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    deploy: { resources: { limits: { memory: 512m, cpus: "1" } } }
+
+  langfuse-clickhouse:                                        # analytics database: traces, observations, scores
+    image: clickhouse/clickhouse-server:25.12@sha256:8a790dd3468db22b1d4e7b18a176f378ff5ff6053b9c48dd4ea1fa71a24c5ba6   # the version Langfuse's own Compose file uses
+    user: "101:101"
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: langfuse
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD}
+    volumes:
+      - langfuse-clickhouse-data:/var/lib/clickhouse
+      - langfuse-clickhouse-logs:/var/log/clickhouse-server
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: *to-collector
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    deploy: { resources: { limits: { memory: 3g, cpus: "2" } } }
+
+  langfuse-valkey:                                            # Langfuse's job queue: noeviction, so it can't share Step 15's cache
+    image: valkey/valkey:9.1.2-alpine@sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        umask 077
+        printf 'requirepass %s\nmaxmemory-policy noeviction\nappendonly yes\ndir /data\n' \
+          "$$(cat /run/secrets/langfuse_valkey_password)" > /run/valkey/valkey.conf
+        exec valkey-server /run/valkey/valkey.conf
+    secrets: [langfuse_valkey_password]
+    tmpfs: ["/run/valkey:size=1m,mode=0700"]                  # config with the password lives in RAM only
+    volumes: [langfuse-valkey-data:/data]
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli ping 2>&1 | grep -qE 'PONG|NOAUTH'"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    logging: *to-collector
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    deploy: { resources: { limits: { memory: 512m, cpus: "0.5" } } }
+
+  langfuse-worker:                                            # turns queued raw events (in S3) into ClickHouse rows
+    image: docker.langfuse.com/langfuse/langfuse-worker:4.27.0@sha256:091a85c3c54bf5fff7cc0073a7f35a52861cc0e30d33dd05569fe3ed66b15d8d
+    environment: *langfuse-env
+    depends_on: &langfuse-deps
+      langfuse-db:         { condition: service_healthy }
+      langfuse-clickhouse: { condition: service_healthy }
+      langfuse-valkey:     { condition: service_healthy }
+      object-store:        { condition: service_healthy }
+    logging: *to-collector
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    deploy: { resources: { limits: { memory: 1g, cpus: "1" } } }
+
+  langfuse-web:                                               # UI + API, incl. the OTLP endpoint /api/public/otel
+    image: docker.langfuse.com/langfuse/langfuse:4.27.0@sha256:c9e2cab8469a5d7353e86a3252b02c52ac94ef31288ce2639ee01aabf5e4222b
+    environment:
+      <<: *langfuse-env
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET}
+      LANGFUSE_S3_MEDIA_UPLOAD_INTERNAL_ENDPOINT: http://object-store:8333   # what Langfuse itself uses
+      AUTH_DISABLE_SIGNUP: "true"                             # nobody can create their own account
+      # Headless initialisation: organisation, project, keys and first admin, created on first start
+      LANGFUSE_INIT_ORG_ID: rag-platform
+      LANGFUSE_INIT_ORG_NAME: RAG Platform
+      LANGFUSE_INIT_PROJECT_ID: rag-platform
+      LANGFUSE_INIT_PROJECT_NAME: rag-platform
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
+      LANGFUSE_INIT_USER_EMAIL: admin@example.com
+      LANGFUSE_INIT_USER_NAME: Platform Admin
+      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_ADMIN_PASSWORD}
+    depends_on: *langfuse-deps
+    ports: ["127.0.0.1:3002:3000"]                            # 3000 is Grafana's
+    logging: *to-collector
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    # The guide says 1g. Node sizes its heap from the container limit (~500 MB at 1g), and Langfuse
+    # 4.27's web start-up needs more: at 1g it crash-loops with "JavaScript heap out of memory".
+    # Measured: ~1 GB in use after start. 2g gives it headroom.
+    deploy: { resources: { limits: { memory: 2g, cpus: "1" } } }
+
+volumes:
+  litellm-db-data:                                            # keys, teams, budgets and spend logs live here
+  rag-db-data:                                                # documents, chunks and vectors (Step 11)
+  qdrant-data:                                                # collections, points and HNSW graphs (Step 12): rebuildable from rag-db
+  qdrant-snapshots:                                           # Qdrant snapshot files (Step 12)
+  opensearch-data:                                            # OpenSearch indices (Step 13): rebuildable from rag-db
+  object-store-data:                                          # original files and their versions (Step 14): NOT rebuildable, back it up
+  valkey-data:                                                # Valkey RDB snapshots + AOF log (Step 15): cache is disposable, queued jobs are not
+  keycloak-db-data:                                           # Keycloak's users, sessions, events and realm settings (Step 16): back it up
+  prometheus-data:                                            # metrics, 15 days / 5 GB (Step 20): disposable
+  alertmanager-data:                                          # silences and notification state (Step 20)
+  grafana-data:                                               # Grafana's own database (users, preferences); dashboards come from Git
+  tempo-data:                                                 # trace blocks + WAL, 7 days (Step 21): disposable
+  loki-data:                                                  # log chunks + index, 7 days (Step 21): disposable
+  langfuse-db-data:                                           # Langfuse users, projects, API keys, prompts (Step 22): back it up
+  langfuse-clickhouse-data:                                   # Langfuse traces and observations, 30 days via our retention job (Step 22)
+  langfuse-clickhouse-logs:                                   # ClickHouse server logs (Step 22)
+  langfuse-valkey-data:                                       # Langfuse job queue, append-only file (Step 22): queued jobs are not disposable
+  openbao-data:                                               # OpenBao raft storage (Step 28): encrypted; useless without 2 of the 3 unseal shares
+  openbao-logs:                                               # OpenBao audit log (Step 28): every request, secret values HMAC'd
+  rag-api-bao:                                                # tmpfs: never written to disk, gone when stopped (Step 28)
+    driver_opts: { type: tmpfs, device: tmpfs, o: "uid=10001,gid=10001,mode=0700,size=1m" }
+
+secrets:
+  litellm_master_key:
+    environment: LITELLM_MASTER_KEY             # supplied by `sops exec-env` when you run `just up`
+  tei_api_key:
+    environment: TEI_API_KEY
+  litellm_salt_key:
+    environment: LITELLM_SALT_KEY               # encrypts credentials LiteLLM stores in its DB: NEVER change it
+  litellm_db_password:
+    environment: LITELLM_DB_PASSWORD
+  rag_db_superuser_password:
+    environment: POSTGRES_PASSWORD              # the rag-db superuser (admin only, via docker compose exec)
+  rag_db_migrator_password:
+    environment: RAG_DB_MIGRATOR_PASSWORD       # rag_migrator: schema changes through dbmate
+  rag_db_app_password:
+    environment: RAG_DB_APP_PASSWORD            # rag_app: services read/write rows
+  rag_db_readonly_password:
+    environment: RAG_DB_READONLY_PASSWORD       # rag_readonly: evaluation and analytics
+  qdrant_api_key:
+    environment: QDRANT_API_KEY                 # admin: create/delete collections, write, mint tokens
+  qdrant_read_only_api_key:
+    environment: QDRANT_READ_ONLY_API_KEY       # read-only, for quick checks
+  opensearch_admin_password:
+    environment: OPENSEARCH_ADMIN_PASSWORD      # OpenSearch "admin" (Step 13): only for setup and cluster checks
+  s3_admin_access_key:
+    environment: S3_ADMIN_ACCESS_KEY            # object store "admin" (Step 14): bucket setup and admin tasks only
+  s3_admin_secret_key:
+    environment: S3_ADMIN_SECRET_KEY
+  s3_ingest_access_key:
+    environment: S3_INGEST_ACCESS_KEY           # rag-ingest: read/write rag-raw-docs and rag-tmp
+  s3_ingest_secret_key:
+    environment: S3_INGEST_SECRET_KEY
+  s3_reader_access_key:
+    environment: S3_READER_ACCESS_KEY           # rag-reader: read rag-raw-docs only
+  s3_reader_secret_key:
+    environment: S3_READER_SECRET_KEY
+  valkey_admin_password:
+    environment: VALKEY_ADMIN_PASSWORD          # Valkey "admin" (Step 15): all keys and commands, via `just kv-cli`
+  valkey_litellm_password:
+    environment: VALKEY_LITELLM_PASSWORD        # litellm: gateway response cache (all keys, no @dangerous)
+  valkey_app_password:
+    environment: VALKEY_APP_PASSWORD            # rag_app: rag:* keys only, no @dangerous / @admin
+  keycloak_admin_password:
+    environment: KEYCLOAK_ADMIN_PASSWORD        # temp-admin, first start only (Step 16): replace it with your own MFA admin
+  keycloak_db_password:
+    environment: KEYCLOAK_DB_PASSWORD           # keycloak-db
+  keycloak_ingestion_secret:
+    environment: KEYCLOAK_INGESTION_SECRET      # ingestion-worker client secret (client credentials)
+  keycloak_provisioner_secret:
+    environment: KEYCLOAK_PROVISIONER_SECRET    # rag-provisioner client secret: manages users only
+  rag_api_gateway_key:
+    environment: RAG_API_GATEWAY_KEY            # rag-api (Step 17): the Step 10 virtual key "rag-api-dev"
+  rag_api_db_password:
+    environment: RAG_DB_APP_PASSWORD            # rag-api (Step 17): the Step 11 rag_app role
+  rag_api_opa_token:
+    environment: OPA_API_TOKEN                  # rag-api (Step 18): asks OPA for decisions; OPA reads the same value
+  opa_metrics_token:
+    environment: OPA_METRICS_TOKEN              # Prometheus (Step 20): may read OPA's /metrics and nothing else
+  grafana_admin_password:
+    environment: GRAFANA_ADMIN_PASSWORD         # Grafana "admin" (Step 20)
+  rag_db_metrics_password:
+    environment: RAG_DB_METRICS_PASSWORD        # rag_metrics (Step 20): pg_monitor statistics, no table data
+  langfuse_db_password:
+    environment: LANGFUSE_DB_PASSWORD           # langfuse-db (Step 22)
+  langfuse_valkey_password:
+    environment: LANGFUSE_VALKEY_PASSWORD       # langfuse-valkey (Step 22): its own instance, noeviction
+  s3_langfuse_access_key:
+    environment: S3_LANGFUSE_ACCESS_KEY         # langfuse (Step 22): read/write/list bucket "langfuse" only
+  s3_langfuse_secret_key:
+    environment: S3_LANGFUSE_SECRET_KEY
+  rag_api_langfuse_secret_key:
+    environment: LANGFUSE_SECRET_KEY            # rag-api (Step 22): sk-lf-… authorises writes to the Langfuse project
+  audit_db_migrator_password:
+    environment: AUDIT_DB_MIGRATOR_PASSWORD     # audit_migrator (Step 23): owns the audit schema, runs its migrations
+  audit_db_writer_password:
+    environment: AUDIT_DB_WRITER_PASSWORD       # audit_writer: may ONLY call audit.append()
+  audit_db_reader_password:
+    environment: AUDIT_DB_READER_PASSWORD       # audit_reader: read + verify (anchor/verify jobs, auditors)
+  rag_api_audit_db_password:
+    environment: AUDIT_DB_WRITER_PASSWORD       # rag-api (Step 23): connects as audit_writer
+  s3_audit_anchor_access_key:
+    environment: S3_AUDIT_ANCHOR_ACCESS_KEY     # audit-anchor (Step 23): read/write/list rag-audit-archive
+  s3_audit_anchor_secret_key:
+    environment: S3_AUDIT_ANCHOR_SECRET_KEY
+  s3_audit_reader_access_key:
+    environment: S3_AUDIT_READER_ACCESS_KEY     # audit-reader (Step 23): read/list rag-audit-archive only
+  s3_audit_reader_secret_key:
+    environment: S3_AUDIT_READER_SECRET_KEY
+  vault_admin_pg_password:
+    environment: VAULT_ADMIN_PG_PASSWORD        # bootstrap only (Step 28); rotated by OpenBao, after which only it knows the password

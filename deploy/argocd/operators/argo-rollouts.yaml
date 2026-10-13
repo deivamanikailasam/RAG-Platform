@@ -1,0 +1,28 @@
+# Argo Rollouts (Step 37): canary releases. Before any application that uses a Rollout (wave -1).
+# No deletion finalizer on purpose: deleting this Application must NOT delete the controller.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argo-rollouts
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  project: platform
+  source:
+    repoURL: git@github.com:owner/rag-platform.git
+    targetRevision: main
+    path: deploy/argo-rollouts/install
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argo-rollouts
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+      - PruneLast=true
+    retry:
+      limit: 5
+      backoff: { duration: 10s, factor: 2, maxDuration: 3m }

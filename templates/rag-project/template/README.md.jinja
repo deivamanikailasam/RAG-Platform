@@ -1,0 +1,43 @@
+# {{ project_name }}
+
+{{ purpose }}
+
+Built on the RAG platform: rag-core {{ platform_version }}, `{{ architecture }}` architecture,
+search in {{ 'Postgres (pgvector + full text)' if search_engine == 'postgres' else 'Qdrant and OpenSearch' }}.
+Owned by **{{ owner }}**.
+
+## Start
+
+```bash
+uv sync                  # rag-core and this project's components
+just check               # tests, config, readiness, evaluations and the platform's doctor
+just ask "How many days of annual leave do I get?"
+```
+
+## Where things are
+
+| Path | What it is |
+|---|---|
+| `rag.yaml` | Which component fills each slot; includes the platform's profiles and says only what differs |
+| `src/{{ module }}/components.py` | This project's own components (registered through an entry point) |
+| `corpus/sample/` | Sample documents: replace them with yours |
+| `eval/questions.yaml` | Labelled questions: search, answers, abstention, access control |
+| `eval/guards.yaml` | Guardrail cases: attacks AND ordinary questions |
+| `retention.yaml` | How long indexed documents may stay; legal holds |
+| `docs/cards/system-{{ slug }}.md` | The system card (fill it in before production) |
+| `docs/risk-acceptance.md` | What is specific to this project in the platform's risk register |
+| `docs/adr/` | Decisions, starting with building on the platform |
+| `Dockerfile`, `deploy/` | The platform's image plus this project; the platform's prod overlay in `rag-{{ slug }}` |
+
+## How to change things
+
+- **Switch a component:** one line in `rag.yaml`, e.g. `reranker: none` or
+  `pipeline: {use: corrective}`. `uv run rag components` lists every option.
+- **Add your own component:** register it in `src/{{ module }}/components.py`, name it in `rag.yaml`.
+- **Use your documents:** put them in `corpus/`, list them in `eval/questions.yaml` with real
+  questions from users, and raise the thresholds in the `justfile` as the set grows.
+- **Take platform improvements:** `uvx copier update` (template) and a new `rag-core` 1.x
+  (`uv lock --upgrade-package rag-core`); both arrive as a reviewed pull request.
+
+The platform's standards, which `rag doctor` checks: `docs/standards/rag-standards.md` in the
+platform repository.

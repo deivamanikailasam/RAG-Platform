@@ -1,0 +1,44 @@
+# ---- Core CLI (Step 1) ----
+brew "git"                  # newer than Apple's bundled git
+brew "gh"                   # GitHub CLI: repos, PRs, Actions from the terminal
+brew "jq"                   # query/transform JSON (API responses, traces, configs)
+brew "yq"                   # same for YAML (Compose, Kubernetes, Helm files)
+brew "just"                 # task runner: one-word commands like `just up`, `just test`
+brew "direnv"               # loads per-project environment variables when you cd in
+brew "wget"                 # downloading models and datasets
+brew "tree"                 # inspect folder structures
+
+# ---- Python toolchain (Step 2) ----
+brew "uv"                   # Python versions, venvs, dependency locking, tool installs; replaces pip/pyenv/pipx/pip-tools
+
+# ---- Containers (Step 3) ----
+cask "orbstack"             # Linux VM + Docker engine + CLI + Compose + single-node Kubernetes (used in Step 29)
+brew "dive"                 # inspect image layers: find bloat and accidentally baked-in secrets
+
+# ---- Secrets (Step 6) ----
+brew "age"                  # modern file encryption; makes the key pair SOPS uses
+brew "sops"                 # encrypts values inside .env / YAML / JSON files, keeps names readable
+
+# ---- Embeddings & reranking (Step 8) ----
+brew "text-embeddings-inference"  # Hugging Face TEI: fast embedding/reranking server, native Metal build on Apple Silicon
+
+# ---- Database migrations (Step 11) ----
+brew "dbmate"               # simple, language-agnostic SQL migrations (up/down), single binary
+
+# ---- Object storage tools (Step 14) ----
+brew "awscli"               # AWS CLI v2: speaks S3 to any compatible store via --endpoint-url
+
+# ---- Policy as code (Step 18) ----
+brew "opa"                  # Open Policy Agent: evaluate and test Rego policies
+brew "regal"                # Rego linter and language server (editor support)
+
+# ---- Audit log tests (Step 23) ----
+brew "libpq"                # psql and pg_isready without a full Postgres server (keg-only: /opt/homebrew/opt/libpq/bin)
+
+# ---- Secrets manager (Step 28) ----
+# OpenBao's `bao` (server, agent, CLI) comes from `just tools bao`: pinned and checksum-verified
+
+# ---- Kubernetes and GitOps (Step 29) ----
+brew "kubectl"              # the Kubernetes CLI; includes kustomize (`kubectl kustomize`)
+brew "argocd"               # Argo CD CLI (optional: the web UI does the same)
+# Tests and CI use pinned kubectl / kube-apiserver / etcd from `just tools` (Kubernetes 1.36.2)

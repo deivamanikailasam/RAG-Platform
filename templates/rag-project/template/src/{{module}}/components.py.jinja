@@ -1,0 +1,46 @@
+"""{{ project_name }}'s own components (platform Step 38).
+
+Anything the platform doesn't have, added the same way the platform adds its own: a factory
+registered under a kind and a name, with validated settings. rag.yaml then switches to it by
+name, and `rag components` lists it. This example adds a glossary enricher: it appends the
+spelled-out form of your organisation's abbreviations to each chunk's indexed text, so a search
+for "work from home" finds a chunk that only says "WFH".
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import replace
+
+from pydantic import BaseModel, ConfigDict
+from rag_core import Container, register
+from rag_core.types import Chunk, Document
+
+
+class GlossaryParams(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    terms: dict[str, str] = {"WFH": "work from home", "PTO": "paid time off"}
+
+
+class GlossaryEnricher:
+    def __init__(self, terms: dict[str, str]) -> None:
+        self.terms = terms
+        alternatives = "|".join(map(re.escape, terms))
+        self.pattern = re.compile(rf"\b({alternatives})\b") if terms else None
+
+    def enrich(self, document: Document, chunks: list[Chunk]) -> list[Chunk]:
+        if self.pattern is None:
+            return chunks
+        out = []
+        for ch in chunks:
+            found = sorted({m.group(1) for m in self.pattern.finditer(ch.text)})
+            extra = " ".join(f"{t} ({self.terms[t]})" for t in found)
+            # embedded and indexed with the spelled-out terms; shown and cited as written
+            out.append(replace(ch, embed_text=f"{ch.indexed_text}\n{extra}") if extra else ch)
+        return out
+
+
+@register("enricher", "{{ slug }}-glossary", params=GlossaryParams,
+          summary="{{ project_name }}: spell out the organisation's abbreviations for search")  # fmt: skip
+def _glossary(p: GlossaryParams, c: Container) -> GlossaryEnricher:
+    return GlossaryEnricher(p.terms)

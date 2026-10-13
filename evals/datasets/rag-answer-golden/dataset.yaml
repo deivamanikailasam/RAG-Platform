@@ -1,0 +1,8 @@
+name: rag-answer-golden
+card: dataset:rag-answer-golden
+owner: rag-quality
+description: Questions with fixed documents, reference answers, refusals and injection attempts.
+versions:
+  1:
+    file: v1.jsonl
+    sha256: ea8f5913d712b253219b0e92fc92f8c03b2c99255d92f1ce5ad7bc4d8bde66fa

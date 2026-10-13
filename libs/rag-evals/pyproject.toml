@@ -1,0 +1,21 @@
+[project]
+name = "rag-evals"
+version = "0.1.0"
+description = "Evaluation harness: datasets, metrics, targets, judges, gates"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "rag-common",
+    "rag-api",                # evaluates the SAME retrieval and policy code that production runs
+    "openai>=2.0",
+    "pydantic>=2.10",
+    "pyyaml>=6.0",
+    "ruamel.yaml>=0.18",      # edits model cards without losing their comments
+]
+
+[tool.uv.sources]
+rag-common = { workspace = true }
+rag-api = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

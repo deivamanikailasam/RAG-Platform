@@ -1,0 +1,6 @@
+# Encryption rules. Files matching path_regex are encrypted for every listed age recipient.
+creation_rules:
+  - path_regex: ^secrets/.*\.enc\.(env|ya?ml|json)$
+    age: >-
+      age1REPLACE_WITH_YOUR_PUBLIC_KEY
+    # Later: add the CI runner's public key (Step 27), comma-separated, then run `sops updatekeys <file>`

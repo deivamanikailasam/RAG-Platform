@@ -1,0 +1,70 @@
+# LiteLLM gateway: role names (model_name) -> real backends on the Mac.
+# Clients only ever use the role names. Change a backend here, not in apps.
+
+model_list:
+  - model_name: qwen-quality                                  # careful answers, synthesis
+    litellm_params:
+      model: openai/mlx-community/Qwen3.8-27B-8bit            # "openai/" = OpenAI protocol; the rest is the EXACT id mlx loaded
+      api_base: http://host.docker.internal:8081/v1
+      api_key: "not-used"                                     # mlx-lm has no auth; LiteLLM requires a non-empty value
+      timeout: 600                                            # long answers on a 27B model can take minutes
+    model_info:
+      mode: chat
+      input_cost_per_token: 0.0000028                         # shadow price: $2/h ÷ (3600 × prefill tok/s), see docs/finops
+      output_cost_per_token: 0.0000278                        # shadow price: $2/h ÷ (3600 × decode tok/s)
+
+  - model_name: qwen-fast                                     # rewriting, routing, quick replies (thinking off at the server)
+    litellm_params:
+      model: openai/lmstudio-community/Qwen3.6-35B-A3B-MLX-4bit   # use YOUR exact repo id (Step 7)
+      api_base: http://host.docker.internal:8082/v1
+      api_key: "not-used"
+      timeout: 120
+    model_info:
+      mode: chat
+      input_cost_per_token: 0.0000007                         # shadow price (docs/finops/shadow-pricing.md)
+      output_cost_per_token: 0.0000069
+
+  - model_name: embedder                                      # TEI OpenAI-compatible route; served name from Step 8
+    litellm_params:
+      model: openai/qwen3-embedding-0.6b
+      api_base: http://host.docker.internal:8083/v1
+      api_key: os.environ/TEI_API_KEY
+    model_info:
+      mode: embedding
+      input_cost_per_token: 0.00000002                        # cheap, but not zero, so heavy indexing still shows up
+      output_cost_per_token: 0
+
+  - model_name: reranker                                      # TEI /rerank via LiteLLM's Hugging Face rerank provider
+    litellm_params:
+      model: huggingface/BAAI/bge-reranker-v2-m3
+      api_base: http://host.docker.internal:8084
+      api_key: os.environ/TEI_API_KEY
+    model_info:
+      mode: rerank
+
+litellm_settings:
+  drop_params: true             # silently drop OpenAI parameters a backend doesn't support, instead of erroring
+  request_timeout: 600
+  num_retries: 1                # retry the same model once on a transient error
+  allowed_fails: 3              # after 3 failures in a minute…
+  cooldown_time: 30             # …skip that backend for 30 seconds
+  fallbacks:                    # chat models back each other up
+    - qwen-fast: [qwen-quality]     # fast is down → slower but correct answers
+    - qwen-quality: [qwen-fast]     # quality is down → faster, possibly weaker answers
+  # NO fallback for embedder: another embedder = another vector space (Step 8 contract)
+  # NO fallback for reranker: the app skips reranking instead (graceful degradation)
+  cache: true                   # exact-match response cache (Step 15)
+  cache_params:
+    type: redis                 # Valkey speaks the Redis protocol; connection from REDIS_URL (secret file, wrapper)
+    ttl: 600                    # 10 minutes: long enough for reruns, short enough to stay fresh
+    namespace: "litellm.cache"
+  callbacks: ["otel"]           # OpenTelemetry spans per request, joined to the caller's trace (Step 19)
+
+callback_settings:
+  otel:
+    message_logging: false      # spans keep model, timing, tokens and cost; never the content
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  store_model_in_db: false      # models are defined ONLY in this git-reviewed file, never in the UI
+  # DATABASE_URL and LITELLM_SALT_KEY come from the environment (secret files, Step 10 wrapper)

@@ -1,0 +1,38 @@
+# Loki, single process: stores logs cheaply by indexing only a few LABELS, not the text itself.
+auth_enabled: false                             # single tenant; Loki sits on the internal network only
+
+server:
+  http_listen_port: 3100
+  log_level: info
+  log_format: json
+
+common:
+  path_prefix: /loki
+  replication_factor: 1
+  ring:
+    kvstore: { store: inmemory }
+  storage:
+    filesystem:                                 # dev: local disk. Production: object storage (S3)
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+
+schema_config:
+  configs:
+    - from: "2026-01-01"
+      store: tsdb                               # current index format
+      object_store: filesystem
+      schema: v13
+      index: { prefix: index_, period: 24h }
+
+limits_config:
+  retention_period: 168h                        # keep logs 7 days
+  allow_structured_metadata: true               # OTLP attributes kept as searchable metadata, not labels
+  max_query_lookback: 168h
+
+compactor:
+  working_directory: /loki/compactor
+  retention_enabled: true                       # actually delete old logs
+  delete_request_store: filesystem
+
+analytics:
+  reporting_enabled: false

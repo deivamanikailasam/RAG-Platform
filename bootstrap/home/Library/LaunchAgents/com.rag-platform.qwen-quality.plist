@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.rag-platform.qwen-quality</string>
+  <key>ProgramArguments</key><array>
+    <string>/opt/homebrew/bin/uv</string><string>run</string>
+    <string>--project</string><string>/Users/you/dev/rag-platform/infra/model-serving</string>
+    <string>mlx_lm.server</string>
+    <string>--model</string><string>mlx-community/Qwen3.8-27B-8bit</string>
+    <string>--host</string><string>127.0.0.1</string>
+    <string>--port</string><string>8081</string>
+    <string>--max-tokens</string><string>4096</string>
+    <string>--allowed-origins</string><string>http://localhost</string>
+    <string>--chat-template-args</string><string>{}</string>
+  </array>
+  <key>EnvironmentVariables</key><dict>
+    <key>HF_HUB_OFFLINE</key><string>1</string>
+  </dict>
+  <key>WorkingDirectory</key><string>/Users/you/dev/rag-platform</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>30</integer>
+  <key>StandardOutPath</key><string>/Users/you/Library/Logs/rag-platform/qwen-quality.log</string>
+  <key>StandardErrorPath</key><string>/Users/you/Library/Logs/rag-platform/qwen-quality.log</string>
+</dict></plist>

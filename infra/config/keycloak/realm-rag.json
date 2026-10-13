@@ -1,0 +1,122 @@
+{
+  "realm": "rag",
+  "displayName": "RAG Platform",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "editUsernameAllowed": false,
+
+  "passwordPolicy": "length(12) and maxLength(128) and notUsername and notEmail and passwordHistory(5)",
+  "bruteForceProtected": true,
+  "failureFactor": 5,
+  "waitIncrementSeconds": 60,
+  "maxFailureWaitSeconds": 900,
+  "permanentLockout": false,
+
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "revokeRefreshToken": true,
+  "refreshTokenMaxReuse": 0,
+
+  "eventsEnabled": true,
+  "eventsExpiration": 2592000,
+  "adminEventsEnabled": true,
+  "adminEventsDetailsEnabled": true,
+
+  "roles": {
+    "realm": [
+      { "name": "rag-user",    "description": "May ask questions of the RAG platform" },
+      { "name": "rag-admin",   "description": "Manages collections and platform settings" },
+      { "name": "rag-auditor", "description": "Reads audit logs, nothing else" },
+      { "name": "rag-ingest",  "description": "Machine role: may submit and process documents" }
+    ]
+  },
+  "groups": [
+    { "name": "all-staff",       "realmRoles": ["rag-user"] },
+    { "name": "engineering" },
+    { "name": "hr" },
+    { "name": "executives" },
+    { "name": "platform-admins", "realmRoles": ["rag-admin"] },
+    { "name": "auditors",        "realmRoles": ["rag-auditor"] }
+  ],
+  "defaultGroups": ["/all-staff"],
+
+  "clients": [
+    {
+      "clientId": "rag-api",
+      "name": "RAG API (audience only, never signs anyone in)",
+      "bearerOnly": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false
+    },
+    {
+      "clientId": "rag-web",
+      "name": "RAG web app",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": ["http://localhost:3000/*"],
+      "webOrigins": ["http://localhost:3000"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:3000/*"
+      },
+      "protocolMappers": [
+        { "name": "audience-rag-api", "protocol": "openid-connect", "protocolMapper": "oidc-audience-mapper",
+          "config": { "included.client.audience": "rag-api", "access.token.claim": "true", "id.token.claim": "false" } },
+        { "name": "groups", "protocol": "openid-connect", "protocolMapper": "oidc-group-membership-mapper",
+          "config": { "claim.name": "groups", "full.path": "false", "access.token.claim": "true",
+                      "id.token.claim": "true", "userinfo.token.claim": "true" } }
+      ]
+    },
+    {
+      "clientId": "rag-cli",
+      "name": "RAG command-line tool",
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "attributes": { "oauth2.device.authorization.grant.enabled": "true" },
+      "protocolMappers": [
+        { "name": "audience-rag-api", "protocol": "openid-connect", "protocolMapper": "oidc-audience-mapper",
+          "config": { "included.client.audience": "rag-api", "access.token.claim": "true", "id.token.claim": "false" } },
+        { "name": "groups", "protocol": "openid-connect", "protocolMapper": "oidc-group-membership-mapper",
+          "config": { "claim.name": "groups", "full.path": "false", "access.token.claim": "true",
+                      "id.token.claim": "true", "userinfo.token.claim": "true" } }
+      ]
+    },
+    {
+      "clientId": "ingestion-worker",
+      "name": "Ingestion worker (machine)",
+      "publicClient": false,
+      "secret": "${KEYCLOAK_INGESTION_SECRET}",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "protocolMappers": [
+        { "name": "audience-rag-api", "protocol": "openid-connect", "protocolMapper": "oidc-audience-mapper",
+          "config": { "included.client.audience": "rag-api", "access.token.claim": "true", "id.token.claim": "false" } }
+      ]
+    },
+    {
+      "clientId": "rag-provisioner",
+      "name": "User provisioning automation",
+      "publicClient": false,
+      "secret": "${KEYCLOAK_PROVISIONER_SECRET}",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false
+    }
+  ],
+  "users": [
+    { "username": "service-account-ingestion-worker", "enabled": true,
+      "serviceAccountClientId": "ingestion-worker", "realmRoles": ["rag-ingest"] },
+    { "username": "service-account-rag-provisioner", "enabled": true,
+      "serviceAccountClientId": "rag-provisioner",
+      "clientRoles": { "realm-management": ["manage-users", "view-users", "query-users", "query-groups"] } }
+  ]
+}

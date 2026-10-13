@@ -1,0 +1,55 @@
+# Service level objective (SLO) for search: 99% of searches succeed, measured over 28 days.
+# Error budget = the 1% that may fail. Alerts fire on how FAST the budget is being spent ("burn rate").
+groups:
+  - name: rag-search-slo-recordings
+    rules:
+      # Fraction of searches that failed, over several windows (recording rules = precomputed queries).
+      - record: rag:search_errors:ratio_rate5m
+        expr: |
+          sum(rate(rag_search_requests_total{outcome="error"}[5m]))
+          / sum(rate(rag_search_requests_total[5m]))
+      - record: rag:search_errors:ratio_rate30m
+        expr: |
+          sum(rate(rag_search_requests_total{outcome="error"}[30m]))
+          / sum(rate(rag_search_requests_total[30m]))
+      - record: rag:search_errors:ratio_rate1h
+        expr: |
+          sum(rate(rag_search_requests_total{outcome="error"}[1h]))
+          / sum(rate(rag_search_requests_total[1h]))
+      - record: rag:search_errors:ratio_rate6h
+        expr: |
+          sum(rate(rag_search_requests_total{outcome="error"}[6h]))
+          / sum(rate(rag_search_requests_total[6h]))
+      - record: rag:search_latency:p95_5m
+        expr: histogram_quantile(0.95, sum by (le) (rate(rag_search_duration_seconds_bucket[5m])))
+
+  - name: rag-search-slo-alerts
+    rules:
+      # Fast burn: at this rate the whole 28-day budget is gone in ~2 days. Wake someone up.
+      - alert: RagSearchErrorBudgetFastBurn
+        expr: |
+          rag:search_errors:ratio_rate1h > (14.4 * 0.01)
+          and rag:search_errors:ratio_rate5m > (14.4 * 0.01)
+        for: 2m
+        labels: { severity: critical, service: rag-api }
+        annotations:
+          summary: "Search is failing fast: {{ $value | humanizePercentage }} of searches in the last 5 min"
+          runbook: docs/runbooks/rag-search-errors.md
+      # Slow burn: budget gone in ~5 days. A ticket for working hours, not a page.
+      - alert: RagSearchErrorBudgetSlowBurn
+        expr: |
+          rag:search_errors:ratio_rate6h > (6 * 0.01)
+          and rag:search_errors:ratio_rate30m > (6 * 0.01)
+        for: 15m
+        labels: { severity: warning, service: rag-api }
+        annotations:
+          summary: "Search errors are eating the error budget ({{ $value | humanizePercentage }} over 30 min)"
+          runbook: docs/runbooks/rag-search-errors.md
+      # Latency objective: 95% of searches under 2 seconds.
+      - alert: RagSearchSlow
+        expr: rag:search_latency:p95_5m > 2
+        for: 10m
+        labels: { severity: warning, service: rag-api }
+        annotations:
+          summary: "p95 search latency is {{ $value | humanizeDuration }} (objective: under 2s)"
+          runbook: docs/runbooks/rag-search-latency.md

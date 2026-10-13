@@ -1,0 +1,26 @@
+# Disaster-recovery drill (Step 37; docs/runbooks/disaster-recovery.md). A NEW cluster restored from
+# the backups to a point in time, next to production, never over it. `just dr-drill "<timestamp>"`
+# fills in the time, applies it, waits, compares row counts with production, then deletes it.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: rag-db-drill
+  namespace: rag-data
+spec:
+  instances: 1
+  imageName: ghcr.io/owner/rag-platform/postgresql:18-minimal@sha256:<digest>
+  postgresql:
+    extensions:
+      - name: pgvector
+        image: { reference: "ghcr.io/owner/rag-platform/pgvector:0.8-18@sha256:<digest>" }
+  storage: { size: 200Gi, storageClass: fast-ssd }
+  bootstrap:
+    recovery:
+      source: rag-db
+      recoveryTarget:
+        targetTime: "2026-10-13 09:00:00+00"  # replaced by the drill; omit to restore to the latest
+  externalClusters:
+    - name: rag-db
+      plugin:
+        name: barman-cloud.cloudnative-pg.io
+        parameters: { barmanObjectName: rag-db-backups, serverName: rag-db }

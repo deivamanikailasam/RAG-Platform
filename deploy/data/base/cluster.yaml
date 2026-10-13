@@ -1,0 +1,55 @@
+# Postgres + pgvector, highly available (Step 37), run by CloudNativePG.
+#   - 3 instances in 3 zones: one primary, two streaming replicas. If the primary's node or zone
+#     dies, the operator promotes a replica (typically within a minute) and moves the rag-db-rw Service.
+#   - Synchronous commit to at least one replica: a committed write survives losing the primary.
+#   - Continuous WAL archiving + nightly base backups to object storage (Barman Cloud plugin):
+#     restore to any second inside the retention window ("point-in-time recovery").
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: rag-db
+spec:
+  description: RAG documents, chunks, vectors, manifest; audit log
+  instances: 3
+  # Postgres 18 (minimal image) mirrored into your registry and pinned by digest, like every image.
+  # pgvector comes as an extension image (Postgres 18's extension_control_path), not a custom build.
+  imageName: ghcr.io/owner/rag-platform/postgresql:18-minimal@sha256:<digest>
+  primaryUpdateStrategy: unsupervised  # minor upgrades: replicas first, then a switchover
+  postgresql:
+    extensions:
+      - name: pgvector
+        image: { reference: "ghcr.io/owner/rag-platform/pgvector:0.8-18@sha256:<digest>" }
+    synchronous:
+      method: any  # quorum: any 1 of the replicas must confirm each commit
+      number: 1
+      dataDurability: required  # if no replica can confirm, writes WAIT rather than risk loss
+    parameters:
+      shared_buffers: 2GB
+      max_connections: "200"
+      maintenance_work_mem: 1GB  # HNSW index builds (Step 11)
+      log_min_duration_statement: "2000"
+  bootstrap:
+    initdb:
+      database: rag
+      owner: rag_migrator
+      dataChecksums: true
+      postInitApplicationSQL:
+        - CREATE EXTENSION IF NOT EXISTS vector
+  enableSuperuserAccess: false
+  storage:
+    size: 200Gi
+    storageClass: fast-ssd  # your cluster's SSD class, with volume expansion enabled
+  walStorage:
+    size: 50Gi  # WAL on its own volume: a full data disk can't stop archiving
+    storageClass: fast-ssd
+  resources:
+    requests: { cpu: "2", memory: 8Gi }
+    limits: { memory: 8Gi }
+  affinity:
+    enablePodAntiAffinity: true
+    podAntiAffinityType: required  # never two instances in one zone
+    topologyKey: topology.kubernetes.io/zone
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters: { barmanObjectName: rag-db-backups }

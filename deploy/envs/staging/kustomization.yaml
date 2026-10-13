@@ -1,0 +1,39 @@
+# rag-api and the ingestion worker in staging (Step 37). Argo CD syncs exactly what this renders.
+# `just promote staging sha256:…` changes the digest below, through a pull request; the staging
+# promotion gates must pass first (deploy/envs/promotion.yaml).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: rag
+resources:
+  - ../../base/rag-api
+  - ../../base/rag-ingest
+components:
+  - ../../components/managed-deps
+  - ../../components/production
+images:
+  - name: rag-api
+    newName: ghcr.io/owner/rag-platform/rag-api  # your GitHub owner, lower case
+    digest: sha256:<digest>  # set by `just promote staging sha256:…`
+patches:
+  - target: { kind: Deployment, name: rag-api }
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata: { name: rag-api }
+      spec:
+        template:
+          spec:
+            containers:
+              - name: rag-api
+                env:
+                  - { name: RAG_ENVIRONMENT, value: staging }
+                  - { name: RAG_API_PROMPT_LABEL, value: staging }  # which prompt versions run here (Step 24)
+                  - { name: RAG_API_OIDC_ISSUER, value: "https://sso.example.com/realms/rag" }
+                  - { name: RAG_API_OIDC_JWKS_URL, value: "https://sso.example.com/realms/rag/protocol/openid-connect/certs" }
+  - target: { kind: HorizontalPodAutoscaler, name: rag-api }
+    patch: |-
+      - { op: replace, path: /spec/minReplicas, value: 2 }
+      - { op: replace, path: /spec/maxReplicas, value: 4 }
+  - target: { kind: AnalysisTemplate, name: rag-api-canary }
+    patch: |-
+      - { op: replace, path: /spec/args/3/value, value: pass }  # quiet staging: too few answers is not a failure

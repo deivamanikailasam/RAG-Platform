@@ -1,0 +1,135 @@
+# What "the canary is healthy" means (Step 37), checked while the canary runs. Prometheus queries
+# compare the canary's release with the stable one (service_version = the pod-template hash), and
+# a Job runs online evaluation on the audit log. Any failure aborts: the canary scales to zero.
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: rag-api-canary
+spec:
+  args:
+    - name: canary
+    - name: stable
+    - name: prometheus
+      value: http://prometheus.monitoring.svc:9090
+    - name: on-insufficient  # too few answers to compare: "fail" (prod) or "pass" (quiet staging)
+      value: fail
+  metrics:
+    # Answers that failed (errors) on the canary: at most 2%, whatever stable does.
+    - name: error-ratio
+      interval: 2m
+      failureLimit: 1  # one bad reading is noise; two is a signal
+      successCondition: "result[0] <= 0.02"
+      provider:
+        prometheus:
+          address: "{{args.prometheus}}"
+          query: |
+            (sum(rate(rag_answer_requests_total{outcome="error",service_version="{{args.canary}}"}[10m]))
+              / sum(rate(rag_answer_requests_total{service_version="{{args.canary}}"}[10m])))
+            or vector(0)
+    # The canary's 95th percentile answer time: at most 25% slower than stable, plus 0.5 s.
+    - name: latency-p95
+      interval: 2m
+      failureLimit: 1  # one bad reading is noise; two is a signal
+      successCondition: "result[0] <= 0"
+      provider:
+        prometheus:
+          address: "{{args.prometheus}}"
+          query: |
+            histogram_quantile(0.95, sum by (le) (rate(rag_answer_duration_seconds_bucket{service_version="{{args.canary}}"}[10m])))
+            - (1.25 * histogram_quantile(0.95, sum by (le) (rate(rag_answer_duration_seconds_bucket{service_version="{{args.stable}}"}[10m]))) + 0.5)
+            or vector(0)
+    # Guards blocking more on the canary (a prompt or model change that trips them): at most +3 points.
+    - name: blocked-vs-stable
+      interval: 2m
+      failureLimit: 1  # one bad reading is noise; two is a signal
+      successCondition: "result[0] <= 0.03"
+      provider:
+        prometheus:
+          address: "{{args.prometheus}}"
+          query: |
+            ((sum(rate(rag_answer_requests_total{outcome="blocked",service_version="{{args.canary}}"}[10m]))
+              / sum(rate(rag_answer_requests_total{service_version="{{args.canary}}"}[10m]))) or vector(0))
+            - ((sum(rate(rag_answer_requests_total{outcome="blocked",service_version="{{args.stable}}"}[10m]))
+              / sum(rate(rag_answer_requests_total{service_version="{{args.stable}}"}[10m]))) or vector(0))
+    # 'I don't know' more often on the canary (retrieval or prompt got worse): at most +5 points.
+    - name: abstained-vs-stable
+      interval: 2m
+      failureLimit: 1  # one bad reading is noise; two is a signal
+      successCondition: "result[0] <= 0.05"
+      provider:
+        prometheus:
+          address: "{{args.prometheus}}"
+          query: |
+            ((sum(rate(rag_answer_requests_total{outcome="abstained",service_version="{{args.canary}}"}[10m]))
+              / sum(rate(rag_answer_requests_total{service_version="{{args.canary}}"}[10m]))) or vector(0))
+            - ((sum(rate(rag_answer_requests_total{outcome="abstained",service_version="{{args.stable}}"}[10m]))
+              / sum(rate(rag_answer_requests_total{service_version="{{args.stable}}"}[10m]))) or vector(0))
+    # Never: an audit write failing means requests are being refused (Step 23).
+    - name: audit-failures
+      interval: 2m
+      failureLimit: 0  # not even once
+      successCondition: "result[0] == 0"
+      provider:
+        prometheus:
+          address: "{{args.prometheus}}"
+          query: |
+            sum(increase(rag_audit_write_failures_total{service_version="{{args.canary}}"}[10m])) or vector(0)
+    # The deeper check (Step 37): online evaluation from the audit log, joined to feedback by answer id.
+    # Runs once, late (after 45 min), when the canary has served enough answers to compare.
+    - name: online-eval
+      initialDelay: 45m
+      count: 1
+      failureLimit: 0
+      provider:
+        job:
+          spec:
+            backoffLimit: 0
+            activeDeadlineSeconds: 900
+            ttlSecondsAfterFinished: 86400
+            template:
+              metadata:
+                labels: { app.kubernetes.io/name: rag-ingest, app.kubernetes.io/part-of: rag-platform }
+              spec:
+                restartPolicy: Never
+                serviceAccountName: rag-ingest  # read-only audit access; nothing of rag-api's
+                automountServiceAccountToken: false
+                enableServiceLinks: false
+                securityContext:
+                  runAsNonRoot: true
+                  runAsUser: 10001
+                  runAsGroup: 10001
+                  seccompProfile: { type: RuntimeDefault }
+                initContainers:
+                  - name: openbao-agent
+                    image: openbao  # kustomize sets the same digest as everywhere else
+                    restartPolicy: Always
+                    command: ["bao", "agent", "-config=/openbao/config/agent.hcl"]
+                    securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: [ALL] } }
+                    startupProbe:
+                      exec: { command: ["test", "-s", "/openbao/out/audit_reader_dsn"] }
+                      periodSeconds: 2
+                      failureThreshold: 60
+                    resources: { requests: { cpu: 10m, memory: 32Mi }, limits: { memory: 64Mi } }
+                    volumeMounts:
+                      - { name: agent-config, mountPath: /openbao/config, readOnly: true }
+                      - { name: openbao-token, mountPath: /var/run/secrets/openbao, readOnly: true }
+                      - { name: secrets, mountPath: /openbao/out }
+                containers:
+                  - name: online-eval
+                    image: rag-api  # kustomize sets this environment's digest: the release being rolled out
+                    command: ["rag", "online-eval", "--dsn-file", "/run/bao/audit_reader_dsn", "--since-hours", "2",
+                              "--candidate", "{{args.canary}}", "--baseline", "{{args.stable}}",
+                              "--limit", "error_rate=0.02", "--on-insufficient", "{{args.on-insufficient}}"]
+                    securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: [ALL] } }
+                    resources: { requests: { cpu: 100m, memory: 256Mi }, limits: { memory: 512Mi } }
+                    volumeMounts:
+                      - { name: secrets, mountPath: /run/bao, readOnly: true }
+                volumes:
+                  - name: agent-config
+                    configMap: { name: rag-ingest-openbao-agent }  # kustomize adds the content hash
+                  - name: openbao-token
+                    projected:
+                      sources:
+                        - serviceAccountToken: { audience: openbao, expirationSeconds: 600, path: token }
+                  - name: secrets
+                    emptyDir: { medium: Memory, sizeLimit: 1Mi }

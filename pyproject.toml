@@ -1,0 +1,123 @@
+[project]
+name = "rag-platform"
+version = "0.1.0"
+description = "Workspace root for the RAG platform"
+requires-python = ">=3.12,<3.13"   # pinned to 3.12, see ADR-0003
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "boto3>=1.43.0",               # AWS SDK: type-checks and tests the s3_*.py scripts against the object store (Step 14)
+    "boto3-stubs[s3]>=1.43.0",     # type hints for boto3 S3 clients, so strict mypy can check those scripts (Step 14)
+    "fakeredis>=2.30",             # an in-process Valkey/Redis: tests the Streams job queue (Step 31)
+    "httpx>=0.28.1",               # HTTP client: kc_*.py / api_demo.py scripts (Steps 16-17) and FastAPI's test client
+    "httpx2>=2.13",                # openai 3.x's HTTP layer: the eval tests fake the gateway with it (Step 26)
+    "moto[s3]>=5.1",               # in-process S3 with object lock: tests the audit anchor/verify script (Step 23)
+    "mypy>=2.4.0",
+    "openai>=3.29.0",              # OpenAI SDK: type-checks and tests the gateway smoke test (Step 9)
+    "opensearch-py>=3.2.0",        # OpenSearch client: type-checks and tests the os_*.py scripts (Step 13)
+    "pgvector>=0.4.0",             # pgvector types for psycopg: type-checks and tests pg_demo.py (Step 11)
+    "pre-commit>=4.6.2",
+    "psycopg[binary]>=3.2.0",      # Postgres driver: type-checks and tests pg_demo.py (Step 11)
+    "pyjwt>=2.15.1",               # signs scoped Qdrant tokens: type-checks and tests qdrant_token.py (Step 12)
+    "pytest>=9.1.1",
+    "pyyaml>=6.0.3",               # tests read the Compose and gateway config files (Step 9)
+    "qdrant-client>=1.19.1",       # Qdrant client: type-checks and tests the qdrant_*.py scripts (Step 12)
+    "redis>=8.1.0",
+    "reportlab>=4.4",              # writes the sample PDFs the ingestion tests parse (Step 31)                # Redis-protocol client: type-checks and tests kv_queue_demo.py against Valkey (Step 15)
+    "ruff>=0.17.0",
+    "types-pyyaml>=6.0.12.20260906",  # type hints for pyyaml, so strict mypy can check those tests
+]                                  # shared dev tools (Step 5), locked in uv.lock
+
+[tool.uv]
+package = false                    # the root is a container for members, not a package itself
+
+[tool.uv.workspace]
+members = ["libs/*", "services/*"]  # services/* since the first service, rag-api (Step 17)
+exclude = ["infra/model-serving"]  # Apple-only MLX serving project with its own lockfile (Step 7)
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle: basic style errors and warnings
+    "F",        # pyflakes: unused imports/variables, undefined names
+    "I",        # isort: import ordering
+    "B",        # flake8-bugbear: likely bugs (mutable defaults, etc.)
+    "UP",       # pyupgrade: use modern Python syntax
+    "SIM",      # flake8-simplify: simpler equivalent code
+    "N",        # pep8-naming: naming conventions
+    "S",        # flake8-bandit: security issues (eval, hardcoded passwords, etc.)
+    "C4",       # flake8-comprehensions: cleaner list/dict comprehensions
+    "PT",       # flake8-pytest-style: consistent tests
+    "T20",      # flake8-print: no stray print() in library code (use logging)
+    "RUF",      # ruff's own rules
+]
+ignore = ["E501"]                   # line length is the formatter's job
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S101"]            # assert is normal in tests
+"scripts/**"  = ["T20"]             # scripts may print
+"examples/**" = ["T20"]             # runnable demos print what they show (Step 36)
+"libs/rag-core/src/rag_core/cli.py" = ["T20"]               # the `rag` command prints (Step 30)
+"libs/rag-core/src/rag_core/evalcli.py" = ["T20"]           # ... and so do its extension 04 commands
+"libs/rag-core/src/rag_core/testing/**" = ["S101"]          # the conformance kit asserts (Step 30)
+
+[tool.ruff.lint.isort]
+known-first-party = ["rag_common", "rag_api", "rag_evals", "rag_core"]
+
+[tool.ruff.format]
+# Markdown is prose: its code blocks quote the build guide as written, so the formatter leaves
+# them alone (Step 27: `ruff format --check .` in CI would otherwise fail on the step write-ups)
+exclude = ["*.md"]
+quote-style = "double"
+docstring-code-format = true
+
+[tool.mypy]
+python_version = "3.12"
+strict = true                       # the full set of strictness checks
+warn_unreachable = true
+pretty = true
+files = [                           # add each new library/service as it's created
+    "libs/rag-common/src",
+    "libs/rag-evals/src",            # Step 26: the evaluation harness
+    "libs/rag-core/src",             # Step 30: the RAG core
+    "libs/rag-core/tests",           # Step 30: its tests are type-checked too
+    "services/rag-api/src",          # Step 17
+    "services/rag-api/tests",        # Step 17: the attack tests are type-checked too
+    "scripts",
+    "tests",
+]
+plugins = ["pydantic.mypy"]          # so mypy understands pydantic models (Step 6)
+# Two test folders that aren't packages may not both hold a `conftest` module (mypy refuses
+# duplicate module names): rag-core's sample-document fixtures (Step 31) are left out; the tests
+# that use them are checked.
+exclude = ['^libs/rag-core/tests/conftest\.py$']
+
+[[tool.mypy.overrides]]
+module = ["tokenizers", "tokenizers.*"]   # rag-core's optional extra (Step 30): not installed by default
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Step 32: the in-process cross-encoder reranker (status "reference"; `uv add sentence-transformers`
+# in a project that wants it: not locked here, it would pull PyTorch into every install)
+module = ["sentence_transformers", "sentence_transformers.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Step 31: the heavy, optional parsers and PII engine (status "reference": not installed by default),
+# and reportlab, which writes the test PDFs and ships no type hints
+module = ["docling", "docling.*", "presidio_analyzer", "presidio_anonymizer", "reportlab", "reportlab.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# extension 02: LLMLingua prompt compression and PyLate's ColBERT (status "reference": both pull
+# PyTorch, so they are not locked here; a project that wants them installs them itself)
+module = ["llmlingua", "llmlingua.*", "pylate", "pylate.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["libs", "services", "tests"]
+addopts = "-ra --strict-markers --import-mode=importlib"

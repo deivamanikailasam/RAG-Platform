@@ -1,0 +1,33 @@
+kind: dataset
+id: company-chunks
+title: Company document chunks and vectors (the search indexes)
+status: approved
+owner: rag-platform
+role: derived
+summary: >-
+  Documents split into chunks, each with a 1024-number vector and keyword index entries. What
+  search actually reads. Rebuildable at any time from company-documents.
+inputs:
+  - dataset:company-documents
+  - model:embedder
+locations:
+  - Postgres rag.chunks (pgvector, Step 11)
+  - Qdrant alias rag_chunks (Step 12)
+  - OpenSearch alias rag-chunks (Step 13)
+provenance: >-
+  Chunked and embedded by the ingestion worker (Step 32) under the embedding contract stored
+  with each collection (Step 8/11).
+classification_max: restricted
+personal_data: true
+personal_data_notes: Whatever personal data the source documents contain, as text and as vectors.
+legal_basis: Same as company-documents (derived for the same purpose).
+retention: As long as the source document exists; rebuilt, never edited by hand.
+deletion: Removed with the source document (Step 36); a full re-index also removes leftovers.
+access: Only through rag-api and the policy; no person queries the indexes directly in production.
+known_limitations:
+  - Vectors can leak the gist of their text; treat them with the same classification as the text
+  - Three stores must stay in step; a partial re-index leaves them inconsistent
+last_reviewed: 2026-10-12
+review_every_days: 90
+approvals:
+  - {by: you, date: 2026-10-12}

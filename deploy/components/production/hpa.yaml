@@ -1,0 +1,15 @@
+# Scale rag-api with load. Answers wait on the model gateway, so CPU rises late: request rate per
+# pod (from Prometheus, via an adapter such as KEDA) is the better signal once you have one.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: rag-api
+spec:
+  scaleTargetRef: { apiVersion: argoproj.io/v1alpha1, kind: Rollout, name: rag-api }
+  minReplicas: 3  # one per zone
+  maxReplicas: 12
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: 70 } }
+  behavior:
+    scaleDown: { stabilizationWindowSeconds: 300 }  # don't flap after a burst

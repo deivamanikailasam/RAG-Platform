@@ -1,0 +1,182 @@
+# Unit tests for alert rules: fake time series in, expected alerts out.     Run: just alerts-test
+rule_files:
+  - ../rules/slo-rag-search.yml
+  - ../rules/security.yml
+  - ../rules/platform.yml
+evaluation_interval: 1m
+
+tests:
+  # 1. Healthy: 1% errors (inside the budget) -> no SLO alert.
+  - interval: 1m
+    input_series:
+      - series: 'rag_search_requests_total{outcome="ok"}'
+        values: "0+99x120"
+      - series: 'rag_search_requests_total{outcome="error"}'
+        values: "0+1x120"
+    alert_rule_test:
+      - { eval_time: 2h, alertname: RagSearchErrorBudgetFastBurn, exp_alerts: [] }
+      - { eval_time: 2h, alertname: RagSearchErrorBudgetSlowBurn, exp_alerts: [] }
+
+  # 2. Outage: 30% of searches fail for an hour -> fast burn pages.
+  - interval: 1m
+    input_series:
+      - series: 'rag_search_requests_total{outcome="ok"}'
+        values: "0+70x90"
+      - series: 'rag_search_requests_total{outcome="error"}'
+        values: "0+30x90"
+    alert_rule_test:
+      - eval_time: 75m
+        alertname: RagSearchErrorBudgetFastBurn
+        exp_alerts:
+          - exp_labels: { severity: critical, service: rag-api }
+            exp_annotations:
+              summary: "Search is failing fast: 30% of searches in the last 5 min"
+              runbook: docs/runbooks/rag-search-errors.md
+
+  # 3. A brief 4-minute blip -> the 1-hour window keeps the page quiet.
+  - interval: 1m
+    input_series:
+      - series: 'rag_search_requests_total{outcome="ok"}'
+        values: "0+100x60 6000+70x4 6280+100x30"
+      - series: 'rag_search_requests_total{outcome="error"}'
+        values: "0+0x60 0+30x4 120+0x30"
+    alert_rule_test:
+      - { eval_time: 66m, alertname: RagSearchErrorBudgetFastBurn, exp_alerts: [] }
+
+  # 4. Slow: every search takes ~3 s for 15 minutes -> latency alert.
+  - interval: 1m
+    input_series:
+      - series: 'rag_search_duration_seconds_bucket{le="1"}'
+        values: "0+0x20"
+      - series: 'rag_search_duration_seconds_bucket{le="2.5"}'
+        values: "0+0x20"
+      - series: 'rag_search_duration_seconds_bucket{le="5"}'
+        values: "0+10x20"
+      - series: 'rag_search_duration_seconds_bucket{le="+Inf"}'
+        values: "0+10x20"
+    alert_rule_test:
+      - eval_time: 18m
+        alertname: RagSearchSlow
+        exp_alerts:
+          - exp_labels: { severity: warning, service: rag-api }
+            exp_annotations:
+              summary: "p95 search latency is 4.875s (objective: under 2s)"
+              runbook: docs/runbooks/rag-search-latency.md
+
+  # 5. One document dropped by the post-check -> security alert, immediately.
+  - interval: 1m
+    input_series:
+      - series: 'rag_search_dropped_documents_total'
+        values: "0 0 0 1 1 1"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: RagPolicyQueryMismatch
+        exp_alerts:
+          - exp_labels: { severity: critical, service: rag-api }
+            exp_annotations:
+              summary: "Search returned 1 document(s) the policy then refused"
+              runbook: docs/runbooks/rag-policy-mismatch.md
+
+  # 6. A target stops answering -> TargetDown after 2 minutes, not before.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="opa", instance="opa:8181"}'
+        values: "1 1 0 0 0 0"
+    alert_rule_test:
+      - { eval_time: 3m, alertname: TargetDown, exp_alerts: [] }
+      - eval_time: 5m
+        alertname: TargetDown
+        exp_alerts:
+          - exp_labels: { severity: warning, job: opa, instance: "opa:8181" }
+            exp_annotations:
+              summary: "opa (opa:8181) has not answered for 2 minutes"
+              runbook: docs/runbooks/target-down.md
+
+  # 7. The Collector refuses spans for 6 minutes -> telemetry-loss alert (its counters have no _total).
+  - interval: 1m
+    input_series:
+      - series: 'otelcol_receiver_refused_spans{receiver="otlp"}'
+        values: "0+50x10"
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: OtelCollectorLosingData
+        exp_alerts:
+          - exp_labels: { severity: warning, service: otel-collector }
+            exp_annotations:
+              summary: "The OpenTelemetry Collector is dropping or failing to send telemetry"
+              runbook: docs/runbooks/otel-collector-losing-data.md
+
+  # 8. The audit database is unreachable for a few minutes -> page (searches are being refused).
+  - interval: 1m
+    input_series:
+      - series: 'rag_audit_write_failures_total{outcome="allowed"}'
+        values: "0 0 0 4 9 9 9 9 9 9 9 9 9 9"
+      - series: 'rag_audit_write_failures_total{outcome="denied"}'
+        values: "0x13"
+    alert_rule_test:
+      - { eval_time: 2m, alertname: RagAuditWriteFailing, exp_alerts: [] }
+      - eval_time: 5m
+        alertname: RagAuditWriteFailing
+        exp_alerts:
+          - exp_labels: { severity: critical, service: rag-api }
+            exp_annotations:
+              summary: "Audit events cannot be stored: rag-api is refusing requests until they can"
+              runbook: docs/runbooks/audit-log.md
+      - { eval_time: 13m, alertname: RagAuditWriteFailing, exp_alerts: [] }
+
+  # 9. Step 24: the Grafana "Prompt version changes" annotation query (scripts/build_dashboards.py).
+  #    rag-answer v2 replaces v1 in production at minute 10: one marker shortly after, none later.
+  - interval: 1m
+    input_series:
+      - series: 'rag_prompt_info{label="production", prompt="rag-answer", version="1", sha="5752b259f08c"}'
+        values: "1x9"
+      - series: 'rag_prompt_info{label="production", prompt="rag-answer", version="2", sha="9189878bda04"}'
+        values: "_x10 1x20"
+    promql_expr_test:
+      - expr: >-
+          count by (label, prompt, version) (rag_prompt_info)
+          unless count by (label, prompt, version) (rag_prompt_info offset 5m)
+        eval_time: 12m
+        exp_samples:
+          - labels: '{label="production", prompt="rag-answer", version="2"}'
+            value: 1
+      - expr: >-
+          count by (label, prompt, version) (rag_prompt_info)
+          unless count by (label, prompt, version) (rag_prompt_info offset 5m)
+        eval_time: 20m
+        exp_samples: []
+
+  # 10. Step 28: OpenBao sealed for more than 2 minutes -> page. After unsealing, an old series
+  #     (cluster="") can linger at 0 next to the new one at 1: max() must NOT keep alerting.
+  - interval: 1m
+    input_series:
+      - series: 'vault_core_unsealed{cluster=""}'
+        values: "1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+      - series: 'vault_core_unsealed{cluster="vault-cluster-1a2b3c"}'
+        values: "_x9 1 1 1 1 1 1"
+    alert_rule_test:
+      - { eval_time: 3m, alertname: OpenBaoSealed, exp_alerts: [] }
+      - eval_time: 5m
+        alertname: OpenBaoSealed
+        exp_alerts:
+          - exp_labels: { severity: critical, service: openbao }
+            exp_annotations:
+              summary: "OpenBao is sealed: run just vault-up before credentials expire"
+              runbook: docs/runbooks/openbao.md
+      - { eval_time: 12m, alertname: OpenBaoSealed, exp_alerts: [] }   # stale 0 series ignored
+
+  # 11. Step 28: OpenBao can't write its audit log -> page at once (it is refusing requests).
+  - interval: 1m
+    input_series:
+      - series: "vault_audit_log_request_failure"
+        values: "0 0 0 2 5 5 5 5 5 5 5 5 5 5"
+    alert_rule_test:
+      - { eval_time: 2m, alertname: OpenBaoAuditFailing, exp_alerts: [] }
+      - eval_time: 4m
+        alertname: OpenBaoAuditFailing
+        exp_alerts:
+          - exp_labels: { severity: critical, service: openbao }
+            exp_annotations:
+              summary: "OpenBao cannot write its audit log and is refusing requests"
+              runbook: docs/runbooks/openbao.md
+      - { eval_time: 13m, alertname: OpenBaoAuditFailing, exp_alerts: [] }

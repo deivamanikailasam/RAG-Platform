@@ -1,0 +1,29 @@
+# rag-api and the ingestion worker in prod (Step 37): released as canaries by Argo Rollouts.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: rag-api-prod
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"  # after the operators (Rollout CRD) and the database
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io  # deleting the Application deletes what it created
+spec:
+  project: rag
+  source:
+    repoURL: git@github.com:owner/rag-platform.git
+    targetRevision: main
+    path: deploy/envs/prod
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: rag
+  syncPolicy:
+    automated:
+      prune: true  # removed from git = removed from the cluster
+      selfHeal: true  # changed by hand in the cluster = changed back to what git says
+    syncOptions:
+      - ServerSideApply=true
+      - PruneLast=true
+    retry:
+      limit: 5
+      backoff: { duration: 10s, factor: 2, maxDuration: 3m }

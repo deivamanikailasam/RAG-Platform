@@ -1,0 +1,33 @@
+kind: model
+id: embedder
+title: Qwen3-Embedding-0.6B (embedder)
+status: approved
+owner: rag-platform
+task: embedding
+summary: >-
+  Turns text into 1024-number vectors for semantic search, served by TEI (Step 8). Every chunk in
+  every index, and every query, goes through it, under the embedding contract in models.yaml.
+licence:
+  id: apache-2.0
+  url: https://huggingface.co/Qwen/Qwen3-Embedding-0.6B
+  verified_on: 2026-10-12
+intended_use:
+  - Embedding document chunks at indexing time
+  - Embedding queries, prefixed with the registered query instruction (prompt query-instruction)
+out_of_scope:
+  - Comparing vectors from a different embedding model or contract (another vector space)
+  - Classification or clustering decisions about people
+risks:
+  - Changing the model, revision or contract silently breaks search unless everything is re-indexed
+training_data: >-
+  Built on the Qwen3 foundation models and trained on large-scale text pairs, per the publisher;
+  supports 100+ languages. Datasets not disclosed in detail.
+data_handling: Runs on the Mac (TEI); text and vectors never leave the machine.
+fallback_allowed: false            # another embedder = another vector space: never fall back
+known_limitations:
+  - Queries without the task instruction retrieve noticeably worse (publisher reports 1-5%)
+  - Input beyond the chunk limit in the contract is truncated silently by the server
+last_reviewed: 2026-10-12
+review_every_days: 180
+approvals:
+  - {by: you, date: 2026-10-12, note: "Step 8: embedding contract recorded"}

@@ -1,0 +1,8 @@
+# Everything Argo CD manages in the staging cluster (Step 37). Bootstrap: kubectl apply -f root.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../common
+  - ../../operators
+  - rag-data.yaml
+  - rag-api.yaml

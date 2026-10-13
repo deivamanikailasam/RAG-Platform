@@ -1,0 +1,27 @@
+# The database tier in staging (Step 37). prune: false: removing it from git must never delete a database.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: rag-data-staging
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: data
+  source:
+    repoURL: git@github.com:owner/rag-platform.git
+    targetRevision: main
+    path: deploy/data/envs/staging
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: rag-data
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+      - PruneLast=true
+    retry:
+      limit: 5
+      backoff: { duration: 10s, factor: 2, maxDuration: 3m }

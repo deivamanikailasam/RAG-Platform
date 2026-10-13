@@ -1,0 +1,29 @@
+[project]
+name = "rag-api"
+version = "0.1.0"
+description = "The RAG platform's public API"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "rag-common",
+    "rag-core[pdf,docx,postgres,valkey,s3]",  # Step 31: the RAG engine (ingestion now, retrieval and answers next)
+    "fastapi>=0.140",
+    "uvicorn>=0.50",
+    "pydantic-settings>=2.10",
+    "psycopg[binary]>=3.2",
+    "pgvector>=0.4",
+    "openai>=2.0",
+    "httpx>=0.28",            # talks to OPA, the policy decision point (Step 18)
+    "opentelemetry-instrumentation-fastapi>=0.66b1",
+    "opentelemetry-instrumentation-httpx>=0.66b1",
+    "opentelemetry-instrumentation-psycopg>=0.66b1",
+    "langfuse>=4.17",         # LLM traces with content, masked, on its own tracer provider (Step 22)
+    "psycopg-pool>=3.3",      # audit log writer: a small pool, tested before each loan (Step 23); 3.3: kwargs may be a function (Step 28)
+]
+
+[tool.uv.sources]
+rag-common = { workspace = true }
+rag-core = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

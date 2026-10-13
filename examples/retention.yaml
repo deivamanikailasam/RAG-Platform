@@ -1,0 +1,9 @@
+# Retention (Step 36): how long an indexed source may stay after it was last ingested.
+# The first matching rule wins. Run `rag retention --rules examples/retention.yaml` (dry run),
+# then with --apply from a scheduled job (Step 37).
+version: 1
+rules:
+  - {match: "*/tickets/*", keep_days: 365, reason: "Support tickets: 1 year (records schedule HR-12)"}
+  - {match: "*/chat-exports/*", keep_days: 90, reason: "Chat exports: 90 days (privacy notice v3)"}
+  - {match: "*annual-leave-2021*", keep_days: 30, reason: "Superseded policy: remove after replacement"}
+default_keep_days: null   # anything else is kept until its source deletes it

@@ -1,0 +1,26 @@
+kind: dataset
+id: retrieval-golden
+title: Golden retrieval cases per persona
+status: approved
+owner: rag-quality
+role: evaluation
+summary: >-
+  Questions asked AS a given persona, with the documents they should receive and the documents
+  they must never receive. Measures search quality and the access policy together (Step 26).
+inputs:
+  - dataset:company-documents
+locations:
+  - evals/datasets/retrieval-golden/ (v1.jsonl, hash pinned in dataset.yaml)
+provenance: Written by people who know the documents and the access rules (Step 18).
+classification_max: internal
+personal_data: false
+retention: Versioned in git.
+deletion: Remove the case in a new dataset version.
+access: Repository readers.
+known_limitations:
+  - Personas are synthetic; real group memberships are messier
+  - Relevance labels are binary (relevant or not)
+last_reviewed: 2026-10-12
+review_every_days: 180
+approvals:
+  - {by: you, date: 2026-10-12, note: "Step 26: v1"}

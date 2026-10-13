@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cmd-params-cm
+data:
+  # Server-side diff: Kubernetes itself computes what would change (fewer false "OutOfSync")
+  controller.diff.server.side: "true"

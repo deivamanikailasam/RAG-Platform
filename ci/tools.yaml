@@ -1,0 +1,128 @@
+# Every tool binary CI (and `just tools`) downloads: exact version, URL and SHA-256.
+# A download whose hash differs is refused before it's unpacked or run. Change versions in a PR,
+# copying hashes from the project's own checksum file; where a project publishes none (dbmate),
+# the hash is the one we computed on first download ("trust on first use": say so in the PR).
+tools:
+  opa:
+    version: 1.21.1
+    linux-amd64:
+      url: https://github.com/open-policy-agent/opa/releases/download/v1.21.1/opa_linux_amd64_static
+      sha256: 668506eb17a2eaa1fce6cc0d1f42ef85125d4ac5bda5fc74d1152d0c77145031
+    darwin-arm64:
+      url: https://github.com/open-policy-agent/opa/releases/download/v1.21.1/opa_darwin_arm64_static
+      sha256: a00a6469a0968c47c01137ed0dacaa88148be5d0eaa8524310cd371f3a98a169
+  regal:
+    version: 0.43.0
+    linux-amd64:
+      url: https://github.com/open-policy-agent/regal/releases/download/v0.43.0/regal_Linux_x86_64
+      sha256: 5e7d030064e307d54e6ffa3d85b8d9052d3d40b7afa10262c86c886f8a76559d
+    darwin-arm64:
+      url: https://github.com/open-policy-agent/regal/releases/download/v0.43.0/regal_Darwin_arm64
+      sha256: 23a6e4ef62f288c53e65d770e9325e6d8a9c35ca3f33f6ffb5943c1f381ef540
+  dbmate:
+    version: 2.36.0
+    linux-amd64:
+      url: https://github.com/amacneil/dbmate/releases/download/v2.36.0/dbmate-linux-amd64
+      sha256: 47e284b3d8cbad1ba5f090495aa05afd1bbd5f35e2ed5577aad06da74ce780ce   # trust on first use
+    darwin-arm64:
+      url: https://github.com/amacneil/dbmate/releases/download/v2.36.0/dbmate-macos-arm64
+      sha256: 86f799b694710a8cc330eb5763a5d13d3c4b19e5e895822734b9fb44e1c35891   # trust on first use
+  actionlint:
+    version: 1.7.12
+    member: actionlint
+    linux-amd64:
+      url: https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+      sha256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+    darwin-arm64:
+      url: https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_darwin_arm64.tar.gz
+      sha256: aba9ced2dee8d27fecca3dc7feb1a7f9a52caefa1eb46f3271ea66b6e0e6953f
+  gitleaks:
+    version: 8.30.1
+    member: gitleaks
+    linux-amd64:
+      url: https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+      sha256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    darwin-arm64:
+      url: https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_darwin_arm64.tar.gz
+      sha256: b40ab0ae55c505963e365f271a8d3846efbc170aa17f2607f13df610a9aeb6a5
+  trivy:
+    version: 0.75.0
+    member: trivy
+    linux-amd64:
+      url: https://github.com/aquasecurity/trivy/releases/download/v0.75.0/trivy_0.75.0_Linux-64bit.tar.gz
+      sha256: c6e65abddb348e25f10549df887045629cf28cc72453cd1c63acb717316b3f3f
+    darwin-arm64:
+      url: https://github.com/aquasecurity/trivy/releases/download/v0.75.0/trivy_0.75.0_macOS-ARM64.tar.gz
+      sha256: 4a77108cccf8e55c8d6823e1e759939a622277e66cd0daa3c1fc621ed69e4568
+  syft:
+    version: 1.54.1
+    member: syft
+    linux-amd64:
+      url: https://github.com/anchore/syft/releases/download/v1.54.1/syft_1.54.1_linux_amd64.tar.gz
+      sha256: c069905b391cc4c20a5ba65ad5c10be2a7ba074f8ea6ad203e24d14e303dad47
+    darwin-arm64:
+      url: https://github.com/anchore/syft/releases/download/v1.54.1/syft_1.54.1_darwin_arm64.tar.gz
+      sha256: b4319c3abaa87a0170ab76ee83ea2260ca34b53aecfa3ab0dd5428d2319d744f
+  cosign:
+    version: 3.1.3
+    linux-amd64:
+      url: https://github.com/sigstore/cosign/releases/download/v3.1.3/cosign-linux-amd64
+      sha256: 4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71
+    darwin-arm64:
+      url: https://github.com/sigstore/cosign/releases/download/v3.1.3/cosign-darwin-arm64
+      sha256: 5cf948c2f4dfe59687bdd0b8523709067383e03982cc543475c8a7dc70e92a76
+  bao:  # OpenBao (Step 28): server, CLI and agent in one binary. MPL-2.0.
+    version: 2.7.1
+    member: bao  # the file to take out of the archive
+    linux-amd64:
+      url: https://github.com/openbao/openbao/releases/download/v2.7.1/openbao_2.7.1_linux_amd64.tar.gz
+      sha256: 0e2f1ce10d124e03112b50dd2fbec6b78003783253bc3a91587938f39d1e2243
+    darwin-arm64:
+      url: https://github.com/openbao/openbao/releases/download/v2.7.1/openbao_2.7.1_darwin_arm64.tar.gz
+      sha256: 15625b5f69aee5bb4578b4e76e856a2141647342b0f8e5969a8875b44e0fbf91
+  kubectl:  # Step 29: from the kubernetes-sigs "envtest" bundle (Kubernetes 1.36.2, etcd 3.6.8)
+    version: 1.36.2
+    member: controller-tools/envtest/kubectl
+    linux-amd64:
+      url: https://github.com/kubernetes-sigs/controller-tools/releases/download/envtest-v1.36.2/envtest-v1.36.2-linux-amd64.tar.gz
+      sha256: 5e99f4eef3d6f9d4dd063730299f708c98da8801f2f14d8fc762cb354f30c332
+    darwin-arm64:
+      url: https://github.com/kubernetes-sigs/controller-tools/releases/download/envtest-v1.36.2/envtest-v1.36.2-darwin-arm64.tar.gz
+      sha256: f344e7c70961b100471eeea4d2555006f282a6a27bece7f42fbede77b29b886e
+  kube-apiserver:  # Step 29: same envtest bundle as kubectl (the archive holds all three)
+    version: 1.36.2
+    member: controller-tools/envtest/kube-apiserver
+    linux-amd64:
+      url: https://github.com/kubernetes-sigs/controller-tools/releases/download/envtest-v1.36.2/envtest-v1.36.2-linux-amd64.tar.gz
+      sha256: 5e99f4eef3d6f9d4dd063730299f708c98da8801f2f14d8fc762cb354f30c332
+    darwin-arm64:
+      url: https://github.com/kubernetes-sigs/controller-tools/releases/download/envtest-v1.36.2/envtest-v1.36.2-darwin-arm64.tar.gz
+      sha256: f344e7c70961b100471eeea4d2555006f282a6a27bece7f42fbede77b29b886e
+  etcd:  # Step 29: same envtest bundle as kubectl (the archive holds all three)
+    version: 1.36.2
+    member: controller-tools/envtest/etcd
+    linux-amd64:
+      url: https://github.com/kubernetes-sigs/controller-tools/releases/download/envtest-v1.36.2/envtest-v1.36.2-linux-amd64.tar.gz
+      sha256: 5e99f4eef3d6f9d4dd063730299f708c98da8801f2f14d8fc762cb354f30c332
+    darwin-arm64:
+      url: https://github.com/kubernetes-sigs/controller-tools/releases/download/envtest-v1.36.2/envtest-v1.36.2-darwin-arm64.tar.gz
+      sha256: f344e7c70961b100471eeea4d2555006f282a6a27bece7f42fbede77b29b886e
+  qdrant:  # Step 31: the real Qdrant server, for the vector-store conformance tests
+    version: 1.19.2
+    member: qdrant
+    linux-amd64:
+      url: https://github.com/qdrant/qdrant/releases/download/v1.19.2/qdrant-x86_64-unknown-linux-gnu.tar.gz
+      sha256: 34a788a09a4cb278b5c6d2af96d9a6db30c8c7e88ae3550455f7a4d425bb8d4b
+    darwin-arm64:
+      url: https://github.com/qdrant/qdrant/releases/download/v1.19.2/qdrant-aarch64-apple-darwin.tar.gz
+      sha256: d24dfd25f4584684b337dd30ee016472cd25f53fc2501f1cd058ab3d7ee0b019
+  promtool:  # Step 37: checks and unit-tests the Prometheus alert rules (same version as the image)
+    version: 3.13.4
+    linux-amd64:
+      url: https://github.com/prometheus/prometheus/releases/download/v3.13.4/prometheus-3.13.4.linux-amd64.tar.gz
+      sha256: 87f21a66f96c597a189cef8d640e8921b621fc17a9feff707c332c4f3b3ddd56
+      member: prometheus-3.13.4.linux-amd64/promtool  # the archive's folder is named per platform
+    darwin-arm64:
+      url: https://github.com/prometheus/prometheus/releases/download/v3.13.4/prometheus-3.13.4.darwin-arm64.tar.gz
+      sha256: 0714a2812b2880078eeb10244d684981905fda568b50351ad6eea29397e55996
+      member: prometheus-3.13.4.darwin-arm64/promtool

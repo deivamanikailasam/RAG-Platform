@@ -1,0 +1,12 @@
+# Retention rules this deployment applies every night (Step 37: CronJob rag-retention).
+# Same format as examples/retention.yaml (Step 36). Changing a rule is a pull request.
+version: 1
+rules:
+  - {match: "*/tickets/*", keep_days: 365, reason: "Support tickets: 1 year (records schedule HR-12)"}
+  - {match: "*/chat-exports/*", keep_days: 90, reason: "Chat exports: 90 days (privacy notice v3)"}
+  - {match: "*annual-leave-2021*", keep_days: 30, reason: "Superseded policy: remove after replacement"}
+default_keep_days: null   # anything else is kept until its source deletes it
+# Legal holds (Step 37): while a matter is open, matching sources are kept whatever the rules say,
+# and `rag erase-source` refuses without --override-hold "reason". Remove the hold when it closes.
+legal_holds:
+  - {match: "*/tickets/2025/*", matter: "LIT-2026-014 (customer dispute)", until: null}

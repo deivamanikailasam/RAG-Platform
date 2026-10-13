@@ -1,0 +1,16 @@
+# CloudNativePG (Step 37): the operator that runs Postgres in Kubernetes with streaming replicas,
+# automatic failover, backups and point-in-time recovery. Plus its Barman Cloud plugin, which ships
+# WAL and base backups to object storage. Both vendored and checked by SHA-256 (`just vendor …`).
+# The plugin needs cert-manager in the cluster (it uses certificates between operator and plugin).
+# The plugin's sidecar image (injected into each Postgres pod) is named in the upstream Secret
+# SIDECAR_IMAGE; mirror and pin it the same way when you mirror the images into your registry.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - upstream/cnpg.yaml  # v1.30.1, sha256 37237f145d8138256ea25ae830f87759255665ff08f8d552fdd8224a5ec032fb
+  - upstream/barman-cloud.yaml  # v0.15.1, sha256 8f377ff4a7d0d3f74fc64b0f7ac4f449fc38ca9e83a40107cca2f9315a9bd920
+images:
+  - name: ghcr.io/cloudnative-pg/cloudnative-pg
+    digest: sha256:<digest>  # of :1.30.1
+  - name: ghcr.io/cloudnative-pg/plugin-barman-cloud
+    digest: sha256:<digest>  # of :v0.15.1

@@ -1,0 +1,28 @@
+groups:
+  - name: platform
+    rules:
+      - alert: TargetDown
+        expr: up == 0
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.job }} ({{ $labels.instance }}) has not answered for 2 minutes"
+          runbook: docs/runbooks/target-down.md
+      # The Collector is refusing data (memory limit hit) or failing to deliver it: we're losing telemetry.
+      # The Collector's own counters have no _total suffix (0.162). Names can change between Collector
+      # versions: re-check them after every upgrade. Each term has "or vector(0)" so a missing one
+      # (e.g. no logs yet) doesn't make the whole sum empty.
+      - alert: OtelCollectorLosingData
+        expr: |
+          (sum(rate(otelcol_receiver_refused_spans[5m])) or vector(0))
+            + (sum(rate(otelcol_receiver_refused_metric_points[5m])) or vector(0))
+            + (sum(rate(otelcol_receiver_refused_log_records[5m])) or vector(0))
+            + (sum(rate(otelcol_exporter_send_failed_spans[5m])) or vector(0))
+            + (sum(rate(otelcol_exporter_send_failed_metric_points[5m])) or vector(0))
+            + (sum(rate(otelcol_exporter_send_failed_log_records[5m])) or vector(0))
+          > 0
+        for: 5m
+        labels: { severity: warning, service: otel-collector }
+        annotations:
+          summary: "The OpenTelemetry Collector is dropping or failing to send telemetry"
+          runbook: docs/runbooks/otel-collector-losing-data.md

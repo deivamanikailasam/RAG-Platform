@@ -1,0 +1,9 @@
+# What every cluster's Argo CD manages, whatever the environment (Steps 29, 37): the projects
+# (permission boundaries), Argo CD itself and the cluster-wide guard rails. Each environment's
+# folder (apps/ for local, envs/<env>/ for staging and prod) adds its own applications.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - projects.yaml
+  - argocd.yaml
+  - cluster.yaml

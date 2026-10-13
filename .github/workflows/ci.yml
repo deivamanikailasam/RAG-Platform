@@ -1,0 +1,123 @@
+# Every pull request and every push to main: the same `just` recipes you run locally (Step 27).
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  merge_group:
+
+# Least privilege: every job can read the code and nothing else, unless it asks for more.
+permissions:
+  contents: read
+
+concurrency:  # a new push to the same PR cancels the old run
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  checks:
+    name: lint, types, tests, policy, registries
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:  # throwaway database for the audit-log tests (Step 23); same image as rag-db
+        image: pgvector/pgvector:0.8.7-pg17@sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d
+        env:
+          # Real password checks: the OpenBao tests (Step 28) prove that old passwords STOP working,
+          # which "trust" authentication would hide. Throwaway value for a job-local container.
+          POSTGRES_PASSWORD: test-admin
+        ports: ["55432:5432"]
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U postgres"
+          --health-interval 2s --health-timeout 5s --health-retries 30
+    env:
+      AUDIT_TEST_ADMIN_DSN: postgres://postgres:test-admin@127.0.0.1:55432/postgres
+      # Step 31: rag-core's pgvector and Postgres full-text conformance tests, on the same Postgres
+      RAG_TEST_PGVECTOR_DSN: postgres://postgres:test-admin@127.0.0.1:55432/postgres
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false  # don't leave a token on disk for later steps to misuse
+          fetch-depth: 0              # prompts-check-main compares with main
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+        with:
+          version: "0.11.32"  # same uv as the Dockerfile
+          enable-cache: true
+      - name: Install just and the pinned tools (checksums verified)
+        run: |
+          uv tool install rust-just==1.58.0
+          uv run --frozen python scripts/ci_tools.py opa regal dbmate bao kubectl kube-apiserver etcd qdrant promtool
+          echo "$PWD/.tools/bin" >> "$GITHUB_PATH"
+      - name: PostgreSQL 17 client tools (psql for the audit bootstrap test; pg_dump/pg_restore for the backup drill)
+        # Ubuntu 24.04 ships the version 16 client, and pg_dump refuses to dump a newer server, so the
+        # client must match the service container above (Postgres 17): take it from the PostgreSQL apt repo.
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+      - run: just ci-static
+      - run: just ci-test
+      - run: just ci-config
+      - run: just policy-check
+
+  supply-chain:
+    name: secrets, workflows, dependencies, licences
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0  # gitleaks scans the whole history, not just the last commit
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+        with:
+          version: "0.11.32"
+          enable-cache: true
+      - name: Install just and the pinned tools (checksums verified)
+        run: |
+          uv tool install rust-just==1.58.0
+          uv run --frozen python scripts/ci_tools.py gitleaks actionlint trivy kubectl
+          echo "$PWD/.tools/bin" >> "$GITHUB_PATH"
+      - run: uv sync --locked --all-packages
+      - run: just ci-supply-chain
+        env:
+          GH_TOKEN: ${{ github.token }}  # lets zizmor check pinned SHAs really belong to each action
+
+  image:
+    name: build and scan the rag-api image
+    needs: [checks]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+        with:
+          version: "0.11.32"
+      - name: Install the pinned scanners (checksums verified)
+        run: |
+          uv run --no-project --with pyyaml python scripts/ci_tools.py trivy syft
+          echo "$PWD/.tools/bin" >> "$GITHUB_PATH"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
+        with:
+          context: .
+          file: services/rag-api/Dockerfile
+          tags: rag-api:ci
+          load: true   # into the local Docker, for scanning; nothing is pushed from a PR
+          push: false
+      - name: Scan for vulnerabilities (fail on fixable HIGH/CRITICAL)
+        run: trivy image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed rag-api:ci
+      - name: Software bill of materials (SBOM)
+        run: syft scan rag-api:ci -o cyclonedx-json=rag-api.cdx.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: rag-api-sbom
+          path: rag-api.cdx.json
+          retention-days: 30

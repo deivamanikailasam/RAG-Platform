@@ -1,0 +1,10 @@
+# The database's own namespace (Step 37). Kept apart from rag: the operator's instance pods need a
+# Kubernetes API token (to elect a primary), which rag's admission policy forbids on purpose.
+# Pod Security "restricted" still applies: CloudNativePG runs non-root, read-only, no privileges.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rag-data
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.36

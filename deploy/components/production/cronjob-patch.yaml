@@ -1,0 +1,4 @@
+# Every scheduled job uses the production profile too (JSON patch: CronJob containers by position).
+- op: replace
+  path: /spec/jobTemplate/spec/template/spec/containers/0/env/1
+  value: { name: RAG_PROFILE, value: production }

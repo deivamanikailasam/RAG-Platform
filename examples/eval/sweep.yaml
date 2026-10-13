@@ -1,0 +1,10 @@
+# Ablation grid for `rag eval-sweep` (extension 04): every combination of these settings is built
+# on the chosen profile, evaluated on the same questions, and ranked.
+#   uv run rag eval-sweep examples/eval/handbook.yaml --profile offline --grid examples/eval/sweep.yaml --rank-by ndcg
+# A key is a slot (the value replaces the component; `none` switches it off) or slot.setting.
+grid:
+  chunker.max_tokens: [200, 400]
+  fusion: [rrf, {use: weighted, weights: {dense: 0.5, sparse: 0.5}}]
+  reranker: [none, {use: term-overlap, top_n: 30}]
+fixed:
+  retriever: hybrid

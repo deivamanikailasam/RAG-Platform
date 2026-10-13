@@ -1,0 +1,22 @@
+# rag-api on Kubernetes (Step 29): the same image and settings as in Compose (Step 17), plus an
+# OpenBao Agent "native sidecar" that logs in with the pod's own Kubernetes identity (no secret ID).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+labels:
+  - pairs:
+      app.kubernetes.io/name: rag-api
+      app.kubernetes.io/part-of: rag-platform
+    includeSelectors: true
+resources:
+  - serviceaccount.yaml
+  - deployment.yaml
+  - service.yaml
+  - pdb.yaml
+  - networkpolicy.yaml
+configMapGenerator:
+  - name: rag-api-openbao-agent
+    files: [agent.hcl=openbao-agent.hcl]  # a content hash is added to the name: a change rolls the pods
+images:  # "rag-api" is set per environment (envs/*): which build runs where is the overlay's job
+  - name: openbao
+    newName: quay.io/openbao/openbao
+    digest: sha256:<digest>  # of quay.io/openbao/openbao:2.7.1 (Step 9 method)

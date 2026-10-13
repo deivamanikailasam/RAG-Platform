@@ -1,0 +1,18 @@
+# The ONE thing you apply by hand (just k8s-bootstrap). Everything else is in apps/, and Argo CD
+# creates it from git: the "app of apps" pattern.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+spec:
+  project: platform
+  source:
+    repoURL: git@github.com:owner/rag-platform.git
+    targetRevision: main
+    path: deploy/argocd/apps
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
