@@ -14,10 +14,13 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | ACL (access control list, Valkey) | Per-user rules for which keys (`~pattern`), pub/sub channels (`&pattern`) and commands (`+@category`, `-@category`) a user may use; `user default off` disables anonymous access. | 15 |
 | Action (GitHub) | A reusable workflow step published by someone else (`actions/checkout`): third-party code that runs inside your job with its token, so it is pinned by commit SHA. | 27 |
 | Active parameters | In a Mixture of Experts model, the parameters actually used for each token (about 3B in Qwen3.6-35B-A3B, the "A3B"); they set the speed. | 7 |
+| Adaptive RAG, query routing | Choosing a strategy per question (no retrieval for small talk, one search, or several for a compound question) instead of spending the same effort on every question; the `adaptive` architecture. | 35 |
 | Admin events (Keycloak) | Keycloak's record of every administrative change (user created, group membership added, lockout cleared), with the full details when enabled; audit evidence for "who changed what". | 16 |
 | Admission control | Checks the Kubernetes API server runs on every object (after authentication and authorization, before storing it); mutating admission fills defaults, validating admission refuses what breaks the rules. | 29 |
 | ADR (Architecture Decision Record) | A short Markdown file recording one significant decision: context, decision, alternatives and consequences. | 4 |
+| Advanced / modular RAG | Naive RAG plus improvements before retrieval (query rewriting), during it (hybrid search, fusion) and after it (reranking, filtering), built from swappable modules; the `standard` architecture. | 35 |
 | age | A small, modern encryption tool with short keys (`age1…`); makes the key pair SOPS uses. A simpler, safer replacement for GPG. | 6 |
+| Agentic RAG, ReAct | A model decides, step by step, which tool to use next (here: which search), reasoning from what it has found so far; ReAct (reason + act) is the common prompting pattern for it. The `agentic` architecture. | 35 |
 | Alert rule | A PromQL condition Prometheus checks every evaluation; when it has stayed true for the rule's `for` duration, the alert fires and goes to Alertmanager with its labels (e.g. `severity`) and annotations (summary, runbook). | 20 |
 | Alertmanager | The service that receives firing alerts from Prometheus and decides what to do with them: group, de-duplicate, silence, inhibit and route each to the right receiver (a page, a ticket, a chat channel). | 20 |
 | `alg: none` | A token header claiming the token is unsigned. Some old libraries accepted such tokens as valid, a famous vulnerability; our verifier never does. | 17 |
@@ -121,6 +124,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Context compression | Keeping only the sentences of a chunk that matter for the question, so more sources fit in the budget. | 33 |
 | Context packing | Choosing which retrieved chunks fit the token budget and in what order, and numbering them as `<doc id="n">` blocks. | 33 |
 | Context propagation | Passing the trace id from one service to the next (in the `traceparent` HTTP header) so their spans join one trace. | 19 |
+| Context recall | The share of the right documents that actually reached the model; what architectures change, and the first column of `rag eval-answers`. | 35 |
 | Context window | The maximum number of tokens (prompt + answer) a model can handle at once. | 7 |
 | Contextual retrieval | Having an LLM write one or two sentences placing each chunk in its document, and embedding them with the chunk (Anthropic, 2024); fewer failed retrievals for one LLM call per chunk. | 31 |
 | Contract | The agreed list of methods a kind of component must have ("a vector store can upsert, delete, search with access rules, and count"); in rag-core, a Protocol. | 30 |
@@ -129,6 +133,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Conventional Commits | A commit-message format `type(scope)!: description` (e.g. `feat(gateway): …`) readable by people and tools. | 4 |
 | Conversation memory | The earlier turns of a chat, kept per person and session (and forgotten after a TTL) so follow-up questions make sense. | 33 |
 | Cooldown | Temporarily skipping a backend that keeps failing (LiteLLM: 30 s after 3 failures in a minute), so requests stop piling onto it. | 10 |
+| Corrective RAG (CRAG) | Grading each retrieved chunk and using only relevant ones; searching differently, or abstaining, if none are. The `corrective` architecture. | 35 |
 | CORS | Browser rules for which websites may call a server from inside a web page; too open (`*`) and any site you visit could call your local model. | 7 |
 | Cosine similarity | A score for how closely two vectors point the same way: near 1 = very similar meaning, near 0 = unrelated. For unit-length vectors it equals the dot product. | 8 |
 | Counter (metric) | A number that only goes up, such as requests served; dashboards turn it into a rate. | 19 |
@@ -229,6 +234,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Golden dataset | Test cases with known good answers (or expected documents), written and checked by people, versioned and pinned by hash. | 26 |
 | Graceful degradation | Continuing with reduced quality or features instead of failing completely, e.g. skipping reranking and flagging the answer when the reranker is down. | 10 |
 | Grant / flow | A standard recipe for getting a token: authorization code + PKCE (web apps), device flow (CLIs), client credentials (machines). The password grant (ROPC) is switched off. | 16 |
+| GraphRAG (local and global search) | Using a knowledge graph to find related information: local search follows the entities near the question (built in here as `graph`); global search summarises whole communities of entities to answer "what are the main themes?". | 35 |
 | Groundedness | Whether each claim in an answer is supported by the sources the model was given; checked here lexically (content words and exact numbers must appear in the sources). | 34 |
 | Group (Keycloak) | A set of users who are "with" each other (department, team). It decides what you may SEE: its name goes into the token's `groups` claim and matches documents' `acl_groups`. | 16 |
 | Grouping (alerts) | Alertmanager combining related alerts (same `alertname` and `service` here) into one notification instead of one per time series. | 20 |
@@ -283,6 +289,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Key rotation | The identity provider switching to a new signing key; APIs must pick up the new key automatically (a JWKS re-fetch on an unknown `kid`) while old tokens expire. | 17 |
 | Keyless signing | Signing with a minutes-long certificate tied to the CI job's identity (via OIDC and Sigstore) instead of a long-lived private key, so there's no key to steal or rotate. | 27 |
 | `kid` (key id) | A label in a JWT's header naming which of the identity provider's keys signed it, so the verifier knows which public key to check with. | 17 |
+| Knowledge graph, entity | A map of named things (systems, policies, error codes, teams) and how they are connected; each named thing is an entity. | 35 |
 | kubelet | The agent on each node that starts containers, runs probes and writes service account tokens into pods. | 29 |
 | Kustomize (base, overlay, component) | Plain Kubernetes YAML plus declared changes: a base, per-environment overlays, and reusable components; built into `kubectl`. | 29 |
 | KV cache | The model's working memory of everything read so far; grows with prompt and answer length and is a big part of memory use. | 7 |
@@ -342,10 +349,12 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Model revision | The exact git commit (40-character SHA) of a model repository on Hugging Face; the same name isn't always the same model. | 7 |
 | Monorepo | One repository holding all services, libraries, infrastructure and docs. | 4 |
 | MRR (mean reciprocal rank) | On average over queries, 1 / position of the first relevant result: 1.0 means the right document always comes first. | 26 |
+| Multi-hop question | A question that needs two or more facts found in different places, in sequence ("which systems did the 2024 incident touch, and who owns them?"). | 35 |
 | Multi-query | An LLM writes several paraphrases of the question; each is searched and the lists are fused. Better recall for questions worded unlike the documents, at the cost of more searches. | 32 |
 | Multi-stage build | A Dockerfile with several `FROM` stages: one with build tools makes the result, the final small image copies only that result (here the finished `.venv`). | 17 |
 | Multitenancy / tenant | Serving many customers or departments from one system / one such customer, whose data must stay separate. | 12 |
 | Multi-window alert | A burn-rate alert that requires both a long window (1 h or 6 h: a real trend) and a short one (5 min or 30 min: still happening) to be over the threshold, so blips don't page and alerts clear quickly after recovery. | 20 |
+| Naive RAG | Embed the question, take the top k most similar chunks, answer: the textbook baseline that other designs are measured against. | 35 |
 | Named vectors | Several vectors stored per point under different names, e.g. `dense` and `sparse`. | 12 |
 | Named volume | Docker-managed storage inside the VM that survives container deletion; use it for database data. | 3 |
 | Namespace (Kubernetes) | A folder for objects, with its own rules, quotas and permissions. | 29 |
@@ -454,6 +463,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Query rewriting | Turning the question into a better search query; for a follow-up ("how do I fix it?"), rewriting it as a standalone question using the conversation. | 32 |
 | Query transformation | Changing what is searched for before retrieval: expanding acronyms, rewriting, paraphrasing, imagining an answer, splitting or generalising the question. | 32 |
 | `rate()` / `increase()` | PromQL functions for counters: `rate` is the per-second speed over a window, `increase` the total growth over it. Both handle counter resets when a process restarts; neither can see a counter's first appearance as growth. | 20 |
+| RAG architecture | The overall design of how a RAG system gathers context and checks its answer (naive, advanced, corrective, agentic…); here, the component in the `pipeline` slot. | 35 |
 | Rate limit (RPM / TPM) | How many requests per minute / tokens per minute a key may use; going over returns 429 Too Many Requests. | 10 |
 | Raw zone (bronze) | The part of a data platform holding immutable original data, from which everything else can be rebuilt. | 14 |
 | RBAC (role-based access control) | Deciding what each user, key or token may read or write by the role or permissions it carries. | 12 |
@@ -532,6 +542,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | SecretStr | A pydantic type that prints as `**********`; the real value needs a deliberate `.get_secret_value()`. | 6 |
 | `SECURITY DEFINER` | A Postgres function that runs with the rights of its owner, not its caller; lets rag-api append audit events without any rights on the table. | 23 |
 | Security plugin | OpenSearch's built-in TLS, users, roles and permissions; never disable it. | 13 |
+| Self-reflective RAG (Self-RAG) | The system critiques its own answer against the sources and retrieves more and regenerates if it falls short; the `self-reflective` architecture. | 35 |
 | Semantic chunking | Cutting a text where the topic changes, found where the embeddings of neighbouring sentences stop being similar. | 31 |
 | Semantic conventions | Agreed attribute names (`http.request.method`, `gen_ai.request.model`) so every tool understands the data. | 19 |
 | Semantic Versioning | MAJOR.MINOR.PATCH version numbers: breaking change → major, `feat` → minor, `fix` → patch. | 4 |
@@ -571,6 +582,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Sparse vector | A vector that's mostly zeros, stored as (position, value) pairs; used for keyword-like retrieval (SPLADE, BM25-style). | 12 |
 | SPDX licence id | The standard short name for a licence (`apache-2.0`, `mit`), so tools can compare them. | 25 |
 | Speculative decoding | A small draft model guesses a few tokens ahead and the big model checks them in one pass, speeding up decoding (`--draft-model`). | 7 |
+| SQLite authorizer | A callback SQLite runs for every action a statement wants to take (read a table, write, attach a database…); here it allows only reading the tables the person may see. | 35 |
 | Squash merge | Merging a PR so all its small commits become one clean commit on `main`. | 4 |
 | src layout | Putting a package's code under `src/<name>/` so tests import the installed package, not the raw folder. | 4 |
 | SSDLC | Secure Software Development Lifecycle: building security checks (static analysis, secret scanning) into every change. | 5 |
@@ -604,6 +616,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Test case | One question in a golden dataset, with what a good result must (and must not) contain. | 26 |
 | Text layer | The text stored inside a digital PDF; a scanned PDF is only pictures of pages and has none, so it needs OCR. | 31 |
 | text vs keyword field | `text` is analysed for full-text search; `keyword` is stored exactly, for filters and IDs. | 13 |
+| Text-to-SQL | A model writing a database query from a question; the `sql` architecture, where the result becomes a cited source. | 35 |
 | Thinking mode | Qwen models' optional hidden reasoning before the answer; better on hard questions, slower and more tokens (`enable_thinking`). | 7 |
 | Threshold | The minimum or maximum a metric must reach for a run to pass the gate, e.g. `recall@5: {min: 0.9}` or `leaked_docs: {max: 0}`. | 26 |
 | Throughput | How much work a server finishes per second, e.g. chunks embedded per second. | 8 |
