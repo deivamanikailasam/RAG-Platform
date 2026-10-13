@@ -570,3 +570,11 @@ def test_check_value_types() -> None:
                  (MetaField(type="integer"), True), (MetaField(type="keyword", values=["a"]), "b")]:  # fmt: skip
         with pytest.raises((ValueError, TypeError)):
             check_value(f, v)
+
+
+def test_section_retriever_is_a_one_word_switch() -> None:
+    """`RAG__RETRIEVER__USE=section` keeps the profile's hybrid settings (candidates, parallel)."""
+    c = offline(retriever={"use": "section", "candidates": 12, "parallel": False})
+    r = c.get("retriever")
+    assert r.inner.p.candidates == 12
+    assert r.inner.p.parallel is False

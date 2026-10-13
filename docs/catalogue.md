@@ -133,7 +133,7 @@
 | `hybrid` | vector + keyword search, merged by the fusion slot (default rrf) | `candidates` (30), `parallel` (True) | live |
 | `keyword` | keyword search (keyword_index) | `candidates` (30), `parallel` (True) | live |
 | `router` | route each question to a named collection/profile/retriever (keyword rules, or an LLM) | `routes`, `default` (None), `mode` ('rules'), `llm_slot` ('llm'), `multi` (False) | live |
-| `section` | "section 4.2" or a heading title in the question: that exact section first, then the usual results | `inner` (None), `scan` (10), `max_tokens` (2000), `max_chunks` (80), `require_cue` (True) | live |
+| `section` | "section 4.2" or a heading title in the question: that exact section first, then the usual results | `inner` (None), `scan` (10), `max_tokens` (2000), `max_chunks` (80), `require_cue` (True), `candidates` (30), `parallel` (True) | live |
 
 ## fusion: Combining result lists (Step 32)
 

@@ -604,6 +604,9 @@ class SectionParams(_Strict):
     max_tokens: int = Field(2000, ge=50)  # the section as one candidate, within this budget
     max_chunks: int = Field(80, ge=1, le=500)
     require_cue: bool = True  # a heading title only counts when the question says "section", …
+    # for the default inner retriever, so `retriever: {use: section}` replaces `hybrid` in one word
+    candidates: int = Field(30, ge=1, le=500)
+    parallel: bool = True
 
 
 class SectionRetriever:
@@ -691,5 +694,5 @@ def _section(p: SectionParams, c: Container) -> SectionRetriever:
 
         dense, sparse = c.has("vector_store"), c.has("keyword_index")
         cls = HybridRetriever if dense and sparse else DenseRetriever if dense else KeywordRetriever
-        inner = cls(c, RetrieverParams())
+        inner = cls(c, RetrieverParams(candidates=p.candidates, parallel=p.parallel))
     return SectionRetriever(c, p, inner)
