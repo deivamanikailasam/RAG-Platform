@@ -1,0 +1,49 @@
+# Replace the example hostnames with yours. docs/architecture/cloud-mapping.md lists the managed
+# equivalents per cloud (RDS/Cloud SQL/Azure Database for Postgres, ElastiCache/Memorystore, …).
+apiVersion: v1
+kind: Service
+metadata:
+  name: rag-db  # CloudNativePG's read-write service in rag-data (deploy/data), or a managed Postgres
+spec:
+  type: ExternalName
+  externalName: rag-db-rw.rag-data.svc.cluster.local
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: litellm  # the model gateway, run by the platform team for every AI application
+spec:
+  type: ExternalName
+  externalName: litellm.ai-gateway.svc.cluster.local
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: opa
+spec:
+  type: ExternalName
+  externalName: opa.policy.svc.cluster.local
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openbao
+spec:
+  type: ExternalName
+  externalName: openbao.openbao.svc.cluster.local
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak  # or your company's identity provider: only the issuer and JWKS URL matter
+spec:
+  type: ExternalName
+  externalName: sso.example.com
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+spec:
+  type: ExternalName
+  externalName: otel-collector.observability.svc.cluster.local

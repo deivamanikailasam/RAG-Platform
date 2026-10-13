@@ -357,7 +357,11 @@ def test_argocd_installs_and_accepts_our_applications(api: ApiServer) -> None:
         "root",
     ]
     projects = api.get("appprojects", "-n", "argocd")["items"]
-    assert sorted(p["metadata"]["name"] for p in projects) == ["platform", "rag"]
+    assert sorted(p["metadata"]["name"] for p in projects) == [
+        "data",
+        "platform",
+        "rag",
+    ]  # data: Step 37
     # an Application with a typo in its spec is refused by the CRD's schema, not discovered later
     bad = {"apiVersion": "argoproj.io/v1alpha1", "kind": "Application",
            "metadata": {"name": "typo", "namespace": "argocd"},

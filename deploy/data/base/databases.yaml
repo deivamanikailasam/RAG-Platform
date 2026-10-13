@@ -1,0 +1,12 @@
+# The audit log's database (Step 23) in the same cluster, owned by its own migrator role. The roles
+# (rag_app, rag_readonly, audit_writer, audit_reader, the vault_admin_* logins) are created by the
+# same init scripts as locally (infra/config/rag-db/init), run once as a Job by the platform team.
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: rag-db-audit
+spec:
+  cluster: { name: rag-db }
+  name: audit
+  owner: audit_migrator
+  databaseReclaimPolicy: retain  # deleting this object never drops the audit log

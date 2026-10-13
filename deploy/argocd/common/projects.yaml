@@ -8,17 +8,21 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "-2"
 spec:
-  description: Argo CD itself and the cluster-wide guard rails. Changes need a platform review.
+  description: Argo CD itself, the operators and the cluster-wide guard rails. Changes need a platform review.
   sourceRepos: [git@github.com:owner/rag-platform.git]
   destinations:
     - { server: https://kubernetes.default.svc, namespace: argocd }
     - { server: https://kubernetes.default.svc, namespace: rag }  # quota and limits live there
+    - { server: https://kubernetes.default.svc, namespace: argo-rollouts }  # Step 37: the operators
+    - { server: https://kubernetes.default.svc, namespace: cnpg-system }
   clusterResourceWhitelist:
     - { group: "", kind: Namespace }
     - { group: admissionregistration.k8s.io, kind: ValidatingAdmissionPolicy }
     - { group: admissionregistration.k8s.io, kind: ValidatingAdmissionPolicyBinding }
-    - { group: apiextensions.k8s.io, kind: CustomResourceDefinition }  # Argo CD's own
-    - { group: rbac.authorization.k8s.io, kind: ClusterRole }  # Argo CD's own
+    - { group: admissionregistration.k8s.io, kind: MutatingWebhookConfiguration }  # CloudNativePG's
+    - { group: admissionregistration.k8s.io, kind: ValidatingWebhookConfiguration }
+    - { group: apiextensions.k8s.io, kind: CustomResourceDefinition }  # Argo CD's and the operators'
+    - { group: rbac.authorization.k8s.io, kind: ClusterRole }  # Argo CD's and the operators'
     - { group: rbac.authorization.k8s.io, kind: ClusterRoleBinding }
 ---
 apiVersion: argoproj.io/v1alpha1
@@ -41,3 +45,26 @@ spec:
   # Sync only in a window you choose? Uncomment. Manual syncs stay possible for emergencies.
   # syncWindows:
   #   - { kind: allow, schedule: "0 8 * * 1-5", duration: 10h, applications: ["*"], manualSync: true }
+---
+# Step 37: the database tier. Its own project, so the application can never touch it, and a
+# database can only be created or changed through a reviewed change to deploy/data.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: data
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+spec:
+  description: Postgres clusters and their backups (CloudNativePG). Changes need a DBA review.
+  sourceRepos: [git@github.com:owner/rag-platform.git]
+  destinations:
+    - { server: https://kubernetes.default.svc, namespace: rag-data }
+  clusterResourceWhitelist:
+    - { group: "", kind: Namespace }
+  namespaceResourceWhitelist:
+    - { group: postgresql.cnpg.io, kind: Cluster }
+    - { group: postgresql.cnpg.io, kind: Database }
+    - { group: postgresql.cnpg.io, kind: ScheduledBackup }
+    - { group: barmancloud.cnpg.io, kind: ObjectStore }
+    - { group: networking.k8s.io, kind: NetworkPolicy }

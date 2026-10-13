@@ -22,6 +22,8 @@ build/
 data/
 # ...but documentation ABOUT the data stores (Step 14) is not data
 !docs/data/
+# ...and the database tier's MANIFESTS (Step 37: CloudNativePG cluster, backups) are code
+!deploy/data/
 models/
 *.gguf
 *.safetensors

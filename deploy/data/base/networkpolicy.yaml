@@ -1,0 +1,20 @@
+# Who may reach the database (Step 37): rag's pods, the operator, and the instances themselves
+# (replication). Nothing else, from anywhere.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rag-db
+spec:
+  podSelector:
+    matchLabels: { cnpg.io/cluster: rag-db }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: rag } }
+      ports: [{ port: 5432 }]
+    - from:
+        - podSelector: { matchLabels: { cnpg.io/cluster: rag-db } }  # replicas streaming from the primary
+      ports: [{ port: 5432 }]
+    - from:
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: cnpg-system } }
+      ports: [{ port: 8000 }]  # the operator asks each instance for its status

@@ -18,8 +18,9 @@ repos:
       - id: check-case-conflict       # File.txt vs file.txt (breaks on Linux)
       - id: check-added-large-files   # block files bigger than 1 MB
         args: [--maxkb=1024]
-        # Step 29: Argo CD's release manifest (~1.9 MB), vendored on purpose and pinned by SHA-256
-        exclude: ^deploy/argocd/install/upstream/install\.yaml$
+        # Step 29: Argo CD's release manifest (~1.9 MB), vendored on purpose and pinned by SHA-256.
+        # Step 37: likewise Argo Rollouts (~3 MB) and CloudNativePG (~1.3 MB), mostly their CRDs.
+        exclude: ^deploy/(argocd|argo-rollouts)/install/upstream/install\.yaml$|^deploy/cnpg/install/upstream/cnpg\.yaml$
       - id: detect-private-key        # -----BEGIN ... PRIVATE KEY-----
       - id: no-commit-to-branch       # never commit directly on main
         args: [--branch, main]

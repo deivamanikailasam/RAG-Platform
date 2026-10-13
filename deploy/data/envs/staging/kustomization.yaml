@@ -1,0 +1,19 @@
+# Staging's database: two instances (one replica), smaller, synchronous only when it can be.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+patches:
+  - target: { kind: Cluster, name: rag-db }
+    patch: |-
+      - { op: replace, path: /spec/instances, value: 2 }
+      - { op: replace, path: /spec/postgresql/synchronous/dataDurability, value: preferred }
+      - { op: replace, path: /spec/storage/size, value: 50Gi }
+      - { op: replace, path: /spec/walStorage/size, value: 20Gi }
+      - { op: replace, path: /spec/resources, value: { requests: { cpu: 500m, memory: 2Gi }, limits: { memory: 2Gi } } }
+      - { op: replace, path: /spec/postgresql/parameters/shared_buffers, value: 512MB }
+      - { op: replace, path: /spec/affinity/podAntiAffinityType, value: preferred }
+  - target: { kind: ObjectStore, name: rag-db-backups }
+    patch: |-
+      - { op: replace, path: /spec/configuration/destinationPath, value: "s3://example-rag-db-backups/staging/rag-db/" }
+      - { op: replace, path: /spec/retentionPolicy, value: 7d }

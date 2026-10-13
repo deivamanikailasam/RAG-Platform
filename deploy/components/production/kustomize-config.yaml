@@ -1,0 +1,8 @@
+# Teach kustomize where an AnalysisTemplate's Job refers to a ConfigMap, so the generated name
+# (with its content hash) is filled in there too, like it is in Deployments and CronJobs.
+nameReference:
+  - kind: ConfigMap
+    version: v1
+    fieldSpecs:
+      - kind: AnalysisTemplate
+        path: spec/metrics/provider/job/spec/template/spec/volumes/configMap/name

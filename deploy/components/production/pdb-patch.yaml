@@ -1,0 +1,8 @@
+# With 3+ pods, a drain may take one at a time, never more.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: rag-api
+spec:
+  minAvailable: null
+  maxUnavailable: 1

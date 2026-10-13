@@ -1,0 +1,13 @@
+# The ingestion worker in a real environment: two replicas, the production profile.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag-ingest
+spec:
+  replicas: 2
+  template:
+    spec:
+      containers:
+        - name: worker
+          env:
+            - { name: RAG_PROFILE, value: production }

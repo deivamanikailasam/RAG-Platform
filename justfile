@@ -548,7 +548,9 @@ k8s-render path="envs/local":
 # Render everything and test it against a real API server (part of CI)
 k8s-check:
     for p in cluster base/rag-api envs/local argocd/install argocd/apps; do kubectl kustomize deploy/$p > /dev/null && echo "renders: $p"; done
-    uv run pytest -q tests/test_k8s.py tests/test_promote.py tests/test_k8s_secrets.py
+    # Step 37: staging and prod, the worker, the operators, the database tier, each cluster's Argo CD
+    for p in base/rag-ingest envs/staging envs/prod argo-rollouts/install cnpg/install data/envs/staging data/envs/prod argocd/envs/staging argocd/envs/prod; do kubectl kustomize deploy/$p > /dev/null && echo "renders: $p"; done
+    uv run pytest -q tests/test_k8s.py tests/test_promote.py tests/test_k8s_secrets.py tests/test_environments.py
 
 # What would change in the cluster if this were applied now (read-only)
 k8s-diff path="envs/local":
@@ -559,7 +561,7 @@ k8s-bootstrap:
     kubectl kustomize deploy/argocd/install | {{kube}} apply --server-side --field-manager=argocd-controller -f -
     {{kube}} -n argocd rollout status deploy/argocd-server --timeout=5m
     just k8s-repo-secret
-    {{kube}} apply --server-side --field-manager=argocd-controller -f deploy/argocd/apps/projects.yaml
+    {{kube}} apply --server-side --field-manager=argocd-controller -f deploy/argocd/common/projects.yaml
     {{kube}} apply --server-side --field-manager=argocd-controller -f deploy/argocd/root.yaml
     @echo "Argo CD is syncing. Watch: just k8s-status        UI: just argocd-ui"
 
@@ -634,5 +636,28 @@ k8s-scan:
     #!/usr/bin/env bash
     set -euo pipefail
     out="$(mktemp -d)"; trap 'rm -rf "$out"' EXIT
-    for p in cluster envs/local; do kubectl kustomize "deploy/$p" > "$out/$(echo $p | tr / -).yaml"; done
+    for p in cluster envs/local envs/staging envs/prod data/envs/prod; do kubectl kustomize "deploy/$p" > "$out/$(echo $p | tr / -).yaml"; done  # staging/prod: Step 37
     trivy config --exit-code 1 --severity HIGH,CRITICAL,MEDIUM --ignorefile .trivyignore.yaml "$out"
+
+# ---- Production (Step 37) ----
+
+# Restore production's backups into a NEW cluster at a point in time, compare, delete (monthly)
+dr-drill target="":
+    uv run python scripts/dr_drill.py run {{ if target != "" { quote(target) } else { "" } }}
+
+# Upgrade a vendored operator: fetch, record the hash in its kustomization, review the diff in a PR
+vendor what version:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{what}}" in
+      argo-rollouts) url="https://github.com/argoproj/argo-rollouts/releases/download/{{version}}/install.yaml"; file=deploy/argo-rollouts/install/upstream/install.yaml ;;
+      cnpg) v="{{version}}"; url="https://github.com/cloudnative-pg/cloudnative-pg/releases/download/$v/cnpg-${v#v}.yaml"; file=deploy/cnpg/install/upstream/cnpg.yaml ;;
+      barman-cloud) url="https://github.com/cloudnative-pg/plugin-barman-cloud/releases/download/{{version}}/manifest.yaml"; file=deploy/cnpg/install/upstream/barman-cloud.yaml ;;
+      *) echo "unknown: {{what}} (argo-rollouts | cnpg | barman-cloud)"; exit 1 ;;
+    esac
+    curl -sSLf -o "$file" "$url"
+    sha="$(shasum -a 256 "$file" | cut -d' ' -f1)"
+    kust="$(dirname "$(dirname "$file")")/kustomization.yaml"
+    name="$(basename "$file")"
+    sed -i.bak -E "/$name/ s|# v[0-9.]+, sha256 [0-9a-f]{64}|# {{version}}, sha256 $sha|" "$kust" && rm "$kust.bak"
+    echo "updated $file ($sha): update the image digests in $kust too, then run just k8s-check"

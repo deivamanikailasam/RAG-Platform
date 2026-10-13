@@ -1,7 +1,7 @@
+# Everything Argo CD manages on your Mac's cluster (Step 29). Bootstrap: kubectl apply -f ../root.yaml
+# The pieces every cluster shares live in ../common since Step 37.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - projects.yaml
-  - argocd.yaml
-  - cluster.yaml
+  - ../common
   - rag-api-local.yaml

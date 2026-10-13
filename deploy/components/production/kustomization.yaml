@@ -1,0 +1,23 @@
+# What makes an environment "production-shaped" (Step 37), added to staging and prod alike:
+# canary releases with automatic analysis (Argo Rollouts), autoscaling, spreading over zones,
+# disruption budgets, and the release id on every metric and audit event.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+configurations:
+  - kustomize-config.yaml
+resources:
+  - rollout.yaml
+  - analysis-template.yaml
+  - hpa.yaml
+patches:
+  - path: deployment-patch.yaml
+  - path: pdb-patch.yaml
+  - path: ingest-patch.yaml
+  - target: { kind: NetworkPolicy, name: rag-api }
+    path: networkpolicy-patch.yaml
+  - target: { kind: CronJob }
+    path: cronjob-patch.yaml
+images:  # the online-evaluation Job's sidecar: same OpenBao build as everywhere else
+  - name: openbao
+    newName: quay.io/openbao/openbao
+    digest: sha256:<digest>  # of quay.io/openbao/openbao:2.7.1

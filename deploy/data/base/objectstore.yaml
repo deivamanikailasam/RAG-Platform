@@ -1,0 +1,18 @@
+# Where backups go (Step 37): a bucket with versioning and Object Lock (Step 14), ideally in another
+# region from the cluster. Credentials come from the cloud's workload identity, not a key in a Secret.
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: rag-db-backups
+spec:
+  retentionPolicy: "30d"  # base backups + WAL kept for 30 days = the point-in-time window
+  configuration:
+    destinationPath: s3://example-rag-db-backups/rag-db/
+    s3Credentials:
+      inheritFromIAMRole: true  # AWS IRSA / EKS Pod Identity; GCS: googleCredentials.gkeEnvironment
+    wal:
+      compression: zstd
+      maxParallel: 4
+    data:
+      compression: lz4  # base backups: zstd isn't offered here (the schema test caught it)
+      jobs: 2

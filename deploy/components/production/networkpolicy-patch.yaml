@@ -1,0 +1,5 @@
+# In staging/prod the identity provider is reached over HTTPS (sso.example.com:443), not Keycloak's
+# local port: allow 443 out for the token-signing keys (JWKS). Everything else stays as in the base.
+- op: add
+  path: /spec/egress/-
+  value: { ports: [{ port: 443 }] }

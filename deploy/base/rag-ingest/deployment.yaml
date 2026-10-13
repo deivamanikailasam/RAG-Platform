@@ -1,0 +1,70 @@
+# The ingestion worker (Steps 31, 37): takes jobs from the queue (`rag enqueue`, source webhooks,
+# change data capture) and runs the ingestion pipeline. Scale it on queue length, not on CPU.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag-ingest
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels: {}
+  template:
+    spec:
+      serviceAccountName: rag-ingest
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile: { type: RuntimeDefault }
+      initContainers:
+        - name: openbao-agent
+          image: openbao
+          restartPolicy: Always  # native sidecar; in a Job it stops when the main container ends
+          command: ["bao", "agent", "-config=/openbao/config/agent.hcl"]
+          securityContext: &locked-down
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          startupProbe:
+            exec: { command: ["test", "-s", "/openbao/out/rag_db.json"] }
+            periodSeconds: 2
+            failureThreshold: 60
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 64Mi }
+          volumeMounts:
+            - { name: agent-config, mountPath: /openbao/config, readOnly: true }
+            - { name: openbao-token, mountPath: /var/run/secrets/openbao, readOnly: true }
+            - { name: secrets, mountPath: /openbao/out }
+      containers:
+        - name: worker
+          image: rag-api  # the same image: it contains the `rag` command (rag-core)
+          command: ["rag", "worker", "--forever"]
+          env:
+            - { name: RAG_CONFIG, value: /app/rag.yaml }
+            - { name: RAG_PROFILE, value: local }  # overlays set "production"
+            - { name: AWS_SHARED_CREDENTIALS_FILE, value: /run/bao/aws_credentials }
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://otel-collector:4317" }
+            - { name: OTEL_SERVICE_NAME, value: rag-ingest }
+          securityContext: *locked-down
+          resources:
+            requests: { cpu: 250m, memory: 384Mi }
+            limits: { memory: 1Gi }  # parsing large PDFs is the memory peak
+          volumeMounts:
+            - { name: secrets, mountPath: /run/bao, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: agent-config
+          configMap: { name: rag-ingest-openbao-agent }
+        - name: openbao-token
+          projected:
+            sources:
+              - serviceAccountToken: { audience: openbao, expirationSeconds: 600, path: token }
+        - name: secrets
+          emptyDir: { medium: Memory, sizeLimit: 1Mi }
+        - name: tmp
+          emptyDir: { sizeLimit: 512Mi }

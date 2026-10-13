@@ -1,0 +1,19 @@
+# The ONE thing you apply by hand in the prod cluster (Step 37), once Argo CD is installed:
+#   kubectl apply -f deploy/argocd/envs/prod/root.yaml
+# Everything else is in this folder, and Argo CD creates it from git ("app of apps").
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+spec:
+  project: platform
+  source:
+    repoURL: git@github.com:owner/rag-platform.git
+    targetRevision: main
+    path: deploy/argocd/envs/prod
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }

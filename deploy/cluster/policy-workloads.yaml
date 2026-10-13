@@ -17,9 +17,17 @@ spec:
         apiVersions: [v1]
         operations: [CREATE, UPDATE]
         resources: [deployments, statefulsets, daemonsets]
+      # Step 37: scheduled jobs too. A CronJob slipped through these rules until now.
+      - apiGroups: [batch]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [jobs, cronjobs]
   variables:
     - name: spec
-      expression: "object.kind == 'Pod' ? object.spec : object.spec.template.spec"
+      expression: >-
+        object.kind == 'Pod' ? object.spec :
+        object.kind == 'CronJob' ? object.spec.jobTemplate.spec.template.spec :
+        object.spec.template.spec
     - name: containers
       expression: >-
         variables.spec.containers

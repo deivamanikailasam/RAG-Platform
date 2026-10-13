@@ -1,0 +1,7 @@
+# The operators every staging and prod cluster runs (Step 37): Argo Rollouts and CloudNativePG.
+# Local (OrbStack) doesn't need them: it has no canaries and its Postgres runs in Compose.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - argo-rollouts.yaml
+  - cnpg.yaml

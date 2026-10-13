@@ -1,0 +1,8 @@
+# Prod's database (Step 37): the base as it is. Three instances in three zones, synchronous commit
+# that never loses a committed write, 30 days of point-in-time recovery.
+# After a region loss, rebuild with `bootstrap: recovery` from the backup bucket instead of initdb
+# (docs/runbooks/disaster-recovery.md), through a pull request here.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base

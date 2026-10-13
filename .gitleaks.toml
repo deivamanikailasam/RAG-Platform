@@ -3,5 +3,11 @@
 useDefault = true
 
 [allowlist]
-description = "SOPS-encrypted files"
-paths = ['''^secrets/.*\.enc\.(env|ya?ml|json)$''']
+description = "SOPS-encrypted files; vendored upstream manifests checked by SHA-256"
+paths = [
+  '''^secrets/.*\.enc\.(env|ya?ml|json)$''',
+  # Step 37: the Barman Cloud plugin's release manifest, vendored byte-for-byte and pinned by its
+  # SHA-256 (tests/test_environments.py). Its one Secret holds the sidecar IMAGE NAME (base64 of
+  # "ghcr.io/cloudnative-pg/plugin-barman-cloud-sidecar:v0.15.1"), not a credential.
+  '''^deploy/cnpg/install/upstream/barman-cloud\.yaml$''',
+]

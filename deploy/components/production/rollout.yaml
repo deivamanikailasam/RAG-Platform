@@ -1,0 +1,40 @@
+# A canary release (Step 37). A new digest in git starts it: 10% of pods run the new release while
+# the analysis compares it with the stable one; each step waits, and any failed check rolls back
+# automatically (scale the canary to 0, keep stable). Without a traffic router (service mesh or
+# Gateway API plugin), the split follows the pod count: 1 of 10 pods ~ 10% of requests.
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: rag-api
+spec:
+  replicas: 3  # the HPA takes over from here
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels: { app.kubernetes.io/name: rag-api, app.kubernetes.io/part-of: rag-platform }
+  workloadRef:  # the pod template stays in the Deployment (and in its admission checks)
+    apiVersion: apps/v1
+    kind: Deployment
+    name: rag-api
+    scaleDown: progressively
+  strategy:
+    canary:
+      maxSurge: "25%"
+      maxUnavailable: 0
+      canaryMetadata: { labels: { rag-platform/track: canary } }
+      stableMetadata: { labels: { rag-platform/track: stable } }
+      analysis:  # runs in the background from step 1 to the end; a failure aborts the rollout
+        templates: [{ templateName: rag-api-canary }]
+        startingStep: 1
+        args:
+          - name: canary
+            valueFrom: { podTemplateHashValue: Latest }
+          - name: stable
+            valueFrom: { podTemplateHashValue: Stable }
+      steps:
+        - setWeight: 10
+        - pause: { duration: 15m }  # enough traffic for the rates to mean something
+        - setWeight: 25
+        - pause: { duration: 15m }
+        - setWeight: 50
+        - pause: { duration: 30m }
+        - setWeight: 100

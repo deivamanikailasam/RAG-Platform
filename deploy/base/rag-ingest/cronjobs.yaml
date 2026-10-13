@@ -1,0 +1,166 @@
+# Nightly retention (Steps 36-37): removes what outlived its rule. The report goes to the logs
+# and the audit trail; legal holds always win. Dry-run it first: `kubectl create job --from=…` without --apply.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: rag-retention
+spec:
+  schedule: "17 2 * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid  # never two at once: the second waits for the next slot
+  startingDeadlineSeconds: 3600  # missed by more than an hour (cluster down): skip, alert instead
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5  # kept for `kubectl logs`; RagScheduledJobFailed alerts on them
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 3600
+      ttlSecondsAfterFinished: 604800
+      template:
+        spec:
+          restartPolicy: Never
+          serviceAccountName: rag-ingest
+          automountServiceAccountToken: false
+          enableServiceLinks: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            fsGroup: 10001
+            seccompProfile: { type: RuntimeDefault }
+          initContainers:
+            - name: openbao-agent
+              image: openbao
+              restartPolicy: Always
+              command: ["bao", "agent", "-config=/openbao/config/agent.hcl"]
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: [ALL] }
+              startupProbe:
+                exec: { command: ["test", "-s", "/openbao/out/rag_db.json"] }
+                periodSeconds: 2
+                failureThreshold: 60
+              resources:
+                requests: { cpu: 10m, memory: 32Mi }
+                limits: { memory: 64Mi }
+              volumeMounts:
+                - { name: agent-config, mountPath: /openbao/config, readOnly: true }
+                - { name: openbao-token, mountPath: /var/run/secrets/openbao, readOnly: true }
+                - { name: secrets, mountPath: /openbao/out }
+          containers:
+            - name: retention
+              image: rag-api
+              command: ["rag", "retention", "--rules", "/etc/rag/retention.yaml", "--apply", "--json"]
+              env:
+                - { name: RAG_CONFIG, value: /app/rag.yaml }
+                - { name: RAG_PROFILE, value: local }
+                - { name: AWS_SHARED_CREDENTIALS_FILE, value: /run/bao/aws_credentials }
+                - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://otel-collector:4317" }
+                - { name: OTEL_SERVICE_NAME, value: rag-retention }
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: [ALL] }
+              resources:
+                requests: { cpu: 100m, memory: 256Mi }
+                limits: { memory: 512Mi }
+              volumeMounts:
+                - { name: secrets, mountPath: /run/bao, readOnly: true }
+                - { name: tmp, mountPath: /tmp }
+                - { name: rules, mountPath: /etc/rag, readOnly: true }
+          volumes:
+            - name: agent-config
+              configMap: { name: rag-ingest-openbao-agent }
+            - name: openbao-token
+              projected:
+                sources:
+                  - serviceAccountToken: { audience: openbao, expirationSeconds: 600, path: token }
+            - name: secrets
+              emptyDir: { medium: Memory, sizeLimit: 1Mi }
+            - name: tmp
+              emptyDir: { sizeLimit: 128Mi }
+            - name: rules
+              configMap: { name: rag-retention-rules }
+---
+# Hourly online evaluation (Step 37): answer quality per release from the audit log and feedback.
+# Its numbers go to the logs; the canary analysis reads the same signals from Prometheus.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: rag-online-eval
+spec:
+  schedule: "7 * * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid  # never two at once: the second waits for the next slot
+  startingDeadlineSeconds: 3600  # missed by more than an hour (cluster down): skip, alert instead
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5  # kept for `kubectl logs`; RagScheduledJobFailed alerts on them
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 900
+      ttlSecondsAfterFinished: 604800
+      template:
+        spec:
+          restartPolicy: Never
+          serviceAccountName: rag-ingest
+          automountServiceAccountToken: false
+          enableServiceLinks: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            fsGroup: 10001
+            seccompProfile: { type: RuntimeDefault }
+          initContainers:
+            - name: openbao-agent
+              image: openbao
+              restartPolicy: Always
+              command: ["bao", "agent", "-config=/openbao/config/agent.hcl"]
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: [ALL] }
+              startupProbe:
+                exec: { command: ["test", "-s", "/openbao/out/rag_db.json"] }
+                periodSeconds: 2
+                failureThreshold: 60
+              resources:
+                requests: { cpu: 10m, memory: 32Mi }
+                limits: { memory: 64Mi }
+              volumeMounts:
+                - { name: agent-config, mountPath: /openbao/config, readOnly: true }
+                - { name: openbao-token, mountPath: /var/run/secrets/openbao, readOnly: true }
+                - { name: secrets, mountPath: /openbao/out }
+          containers:
+            - name: online-eval
+              image: rag-api
+              command: ["rag", "online-eval", "--dsn-file", "/run/bao/audit_reader_dsn", "--since-hours", "24", "--queue", "/tmp/review.jsonl"]
+              env:
+                - { name: RAG_CONFIG, value: /app/rag.yaml }
+                - { name: RAG_PROFILE, value: local }
+                - { name: AWS_SHARED_CREDENTIALS_FILE, value: /run/bao/aws_credentials }
+                - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://otel-collector:4317" }
+                - { name: OTEL_SERVICE_NAME, value: rag-online-eval }
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: [ALL] }
+              resources:
+                requests: { cpu: 100m, memory: 256Mi }
+                limits: { memory: 512Mi }
+              volumeMounts:
+                - { name: secrets, mountPath: /run/bao, readOnly: true }
+                - { name: tmp, mountPath: /tmp }
+          volumes:
+            - name: agent-config
+              configMap: { name: rag-ingest-openbao-agent }
+            - name: openbao-token
+              projected:
+                sources:
+                  - serviceAccountToken: { audience: openbao, expirationSeconds: 600, path: token }
+            - name: secrets
+              emptyDir: { medium: Memory, sizeLimit: 1Mi }
+            - name: tmp
+              emptyDir: { sizeLimit: 128Mi }

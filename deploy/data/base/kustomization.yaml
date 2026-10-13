@@ -1,0 +1,12 @@
+# The database tier (Step 37): a highly available Postgres + pgvector cluster run by CloudNativePG,
+# its backups, and who may reach it. Its own namespace and its own Argo CD project ("data").
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: rag-data
+resources:
+  - namespace.yaml
+  - networkpolicy.yaml
+  - cluster.yaml
+  - objectstore.yaml
+  - scheduled-backup.yaml
+  - databases.yaml

@@ -1,0 +1,9 @@
+# The Argo Rollouts controller's own namespace (Step 37). Its pod meets "restricted" upstream;
+# enforce "baseline" and warn on more, as for Argo CD (Step 29).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argo-rollouts
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted

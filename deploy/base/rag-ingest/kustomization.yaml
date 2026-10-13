@@ -1,0 +1,22 @@
+# The ingestion worker and the scheduled lifecycle jobs (Step 37), with their own identity.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+labels:
+  - pairs:
+      app.kubernetes.io/name: rag-ingest
+      app.kubernetes.io/part-of: rag-platform
+    includeSelectors: true
+resources:
+  - serviceaccount.yaml
+  - deployment.yaml
+  - cronjobs.yaml
+  - networkpolicy.yaml
+configMapGenerator:
+  - name: rag-ingest-openbao-agent
+    files: [agent.hcl=openbao-agent.hcl]
+  - name: rag-retention-rules
+    files: [retention.yaml]
+images:
+  - name: openbao
+    newName: quay.io/openbao/openbao
+    digest: sha256:<digest>  # of quay.io/openbao/openbao:2.7.1, as for rag-api
