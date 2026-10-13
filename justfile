@@ -61,7 +61,7 @@ test:
 hooks:
     uv run pre-commit run --all-files
 
-# Everything CI will run (Step 27 calls exactly this)
+# Every local gate in one go (needs Homebrew); CI runs the `ci-*` recipes below (Step 27)
 check:
     brew bundle check --file=bootstrap/Brewfile
     uv sync --locked --all-packages
@@ -346,3 +346,61 @@ cards *args:
 # just evals run retrieval | run answer --prompt rag-answer --label staging [--judge] | gate <run> | …
 evals *args:
     sops exec-env secrets/dev.enc.env 'uv run python scripts/evals.py {{args}}'
+
+# ---- CI (Step 27): the same recipes run on your Mac and in GitHub Actions ----
+
+# Pinned tool binaries, checksum-verified, into .tools/bin (add it to PATH)
+[positional-arguments]
+tools *names:
+    uv run python scripts/ci_tools.py "$@"
+
+# Everything a pull request must pass (the image job runs separately: it needs Docker)
+ci: ci-static ci-test ci-config policy-check ci-supply-chain
+
+# Lockfile, lint, format, types
+ci-static:
+    uv sync --locked --all-packages
+    uv run ruff check .
+    uv run ruff format --check .
+    uv run mypy
+
+# All tests. In CI a Postgres service is running, so the audit database tests run too.
+ci-test:
+    uv run pytest -q
+
+# Prompts, cards, dashboards and alert rules: the "configuration as code" checks
+ci-config:
+    just prompts lint
+    just prompts-check-main
+    just cards lint
+    just cards docs --check
+    just dashboards-check
+    just alerts-test
+
+# Secrets, workflows, dependencies, licences, Dockerfile
+ci-supply-chain:
+    gitleaks git --no-banner --redact .
+    actionlint
+    uvx zizmor==1.30.1 --min-severity medium .github/workflows    # online audits when GH_TOKEN is set (CI)
+    uv export --quiet --frozen --all-packages --all-groups --no-emit-workspace --format requirements-txt -o .tools/requirements.txt
+    uvx pip-audit==2.10.1 --disable-pip --requirement .tools/requirements.txt --progress-spinner off
+    uv run python scripts/licences.py
+    trivy config --exit-code 1 --severity HIGH,CRITICAL services/rag-api/Dockerfile
+
+# Licence of every installed dependency against ci/licence-policy.yaml (-v lists them all)
+[positional-arguments]
+licences *args:
+    uv run python scripts/licences.py "$@"
+
+# Build the image locally and scan it like CI does (needs Docker)
+image-scan:
+    docker build -f services/rag-api/Dockerfile -t rag-api:local .
+    trivy image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed rag-api:local
+    syft scan rag-api:local -o cyclonedx-json=.tools/rag-api.cdx.json
+
+# Check a published image's signature and provenance before deploying it (Step 29 automates this)
+image-verify digest:
+    cosign verify "ghcr.io/$(gh repo view --json nameWithOwner -q .nameWithOwner | tr '[:upper:]' '[:lower:]')/rag-api@{{digest}}" \
+      --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+      --certificate-identity-regexp "^https://github.com/$(gh repo view --json nameWithOwner -q .nameWithOwner)/.github/workflows/release.yml@refs/heads/main$" > /dev/null && echo "signature OK"
+    gh attestation verify "oci://ghcr.io/$(gh repo view --json nameWithOwner -q .nameWithOwner | tr '[:upper:]' '[:lower:]')/rag-api@{{digest}}" --repo "$(gh repo view --json nameWithOwner -q .nameWithOwner)"

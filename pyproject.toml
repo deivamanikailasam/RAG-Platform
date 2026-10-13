@@ -63,6 +63,9 @@ ignore = ["E501"]                   # line length is the formatter's job
 known-first-party = ["rag_common", "rag_api", "rag_evals"]
 
 [tool.ruff.format]
+# Markdown is prose: its code blocks quote the build guide as written, so the formatter leaves
+# them alone (Step 27: `ruff format --check .` in CI would otherwise fail on the step write-ups)
+exclude = ["*.md"]
 quote-style = "double"
 docstring-code-format = true
 
