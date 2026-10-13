@@ -189,7 +189,7 @@ flowchart TD
   sends an `error` event, never a half answer marked `done`.
 - **Abstention and citations** are deliberate product behaviour: see
   [ADR-0033](../adr/0033-answer-with-checked-citations-and-abstention.md) and the
-  [handbook](../concepts/rag-handbook.md#12-citations-and-abstention).
+  [handbook](../concepts/rag-handbook.md#13-citations-and-abstention).
 - **What's recorded.** The audit log stores ids, counts, outcomes, guard verdicts, prompt and model
   versions and the release; Langfuse stores the masked text for debugging under its own retention;
   Tempo stores timings (no text). See [quality-and-operations.md](../guides/quality-and-operations.md#4-audit-and-governance).
