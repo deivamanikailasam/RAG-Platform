@@ -1,6 +1,8 @@
 {
     "action_roles": {
         "search": "rag-user",
+        "answer": "rag-user",
+        "feedback": "rag-user",
         "admin:ping": "rag-admin",
         "collections:manage": "rag-admin",
         "audit:read": "rag-auditor",

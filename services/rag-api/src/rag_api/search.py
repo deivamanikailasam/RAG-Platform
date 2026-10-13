@@ -150,7 +150,7 @@ class CoreSearch:
         trace.get_current_span().set_attribute("rag.search.texts", len(result.texts))
         best: dict[int, Candidate] = {}
         for h in result.hits:
-            doc_id = _document_id(h.chunk)
+            doc_id = document_id(h.chunk)
             if doc_id in best:
                 continue  # hits are best-first: the first chunk of a document carries its score
             a = h.chunk.access
@@ -162,7 +162,7 @@ class CoreSearch:
         return list(best.values())[:k]
 
 
-def _document_id(chunk: Any) -> int:
+def document_id(chunk: Any) -> int:
     """Step 11's numeric id when the store has one (Postgres); a stable number otherwise."""
     value = chunk.metadata.get("document_id")
     if isinstance(value, int):

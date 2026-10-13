@@ -73,9 +73,16 @@ def test_bad_token_challenge_names_invalid_token(down_client: TestClient) -> Non
     assert r.headers["WWW-Authenticate"] == 'Bearer realm="rag-api"'
 
 
-def test_openapi_lists_the_four_endpoints() -> None:
+def test_openapi_lists_the_endpoints() -> None:
     paths = set(TestClient(app).get("/openapi.json").json()["paths"])
-    assert paths == {"/healthz", "/v1/me", "/v1/search", "/v1/admin/ping"}
+    assert paths == {
+        "/healthz",
+        "/v1/me",
+        "/v1/search",
+        "/v1/admin/ping",
+        "/v1/answer",
+        "/v1/feedback",
+    }  # Step 33 added /v1/answer and /v1/feedback
 
 
 def test_search_request_has_no_groups_field() -> None:

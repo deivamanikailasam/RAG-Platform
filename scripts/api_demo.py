@@ -53,6 +53,24 @@ def main() -> None:
     call("person", "POST", "/v1/search", person, json=question)
     call("person (not an admin)", "GET", "/v1/admin/ping", person)
 
+    # Step 33: an answer, a follow-up in the same session, a streamed answer, feedback
+    ask = {"question": "How many days a week can I work from home?", "session_id": "demo-1"}
+    r = httpx.post(
+        API + "/v1/answer", json=ask, headers={"Authorization": f"Bearer {person}"}, timeout=120
+    )
+    print(f"{'person':34} POST /v1/answer        -> {r.status_code}  {r.text[:300]}")
+    call("person (follow-up)", "POST", "/v1/answer", person,
+         json={"question": "Is there an allowance for it?", "session_id": "demo-1"})  # fmt: skip
+    with httpx.stream("POST", API + "/v1/answer", headers={"Authorization": f"Bearer {person}"}, timeout=120,
+                      json={"question": "What does VPN error E-1107 mean?", "stream": True}) as s:  # fmt: skip
+        print(f"{'person (stream)':34} POST /v1/answer        -> {s.status_code}")
+        for line in s.iter_lines():
+            if line:
+                print("        " + line[:120])
+    if r.status_code == 200:
+        call("person (feedback)", "POST", "/v1/feedback", person,
+             json={"answer_id": r.json()["answer_id"], "rating": "up"})  # fmt: skip
+
     machine = machine_token()
     call("machine", "GET", "/v1/me", machine)
     call("machine (no rag-user role)", "POST", "/v1/search", machine, json=question)

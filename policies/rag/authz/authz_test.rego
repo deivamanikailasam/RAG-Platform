@@ -47,6 +47,19 @@ test_machine_may_ingest_but_not_search if {
 	not authz.allow with input as {"principal": worker, "action": "search"}
 }
 
+# Step 33: answers and feedback, for people with rag-user; answers use the search filter
+test_user_may_answer_and_rate if {
+	authz.allow with input as {"principal": alice, "action": "answer"}
+	authz.allow with input as {"principal": alice, "action": "feedback"}
+}
+
+test_machine_may_not_answer if not authz.allow with input as {"principal": worker, "action": "answer"}
+
+test_answer_uses_the_search_filter if {
+	expected := {"groups": ["all-staff", "engineering"], "classifications": ["internal", "public"]}
+	authz.decision.filter == expected with input as {"principal": alice, "action": "answer"}
+}
+
 test_unknown_action_denied if not authz.allow with input as {"principal": dave, "action": "delete-everything"}
 
 test_missing_action_denied if not authz.allow with input as {"principal": dave}

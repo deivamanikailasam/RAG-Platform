@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import time
-from collections.abc import AsyncIterator, Callable
+import uuid
+from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal, cast
 
 from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from opentelemetry import metrics, trace
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
@@ -28,12 +31,19 @@ from rag_api.audit import (
     current_trace_id,
 )
 from rag_api.llmtrace import LlmTracer, build_llm_tracer
-from rag_api.policy import Decision, OpaClient, PolicyEngine, PolicyUnavailable
-from rag_api.search import CoreSearch, Hit, PgSearch, SearchBackend
+from rag_api.policy import Decision, DocumentRef, OpaClient, PolicyEngine, PolicyUnavailable
+from rag_api.search import CoreSearch, Hit, PgSearch, SearchBackend, document_id
 from rag_api.settings import Settings
 from rag_common.auth import AuthError, KeyServiceUnavailable, OIDCSettings, Principal, TokenVerifier
 from rag_common.prompts import PromptError, Registry
 from rag_common.telemetry import setup_logging, setup_telemetry
+from rag_core import config as rag_config
+from rag_core.answer import AnswerPipeline
+from rag_core.components.generation import PackedContext
+from rag_core.registry import Container
+from rag_core.search import SearchPipeline
+from rag_core.types import Answer, Classification, ScoredChunk
+from rag_core.types import Principal as CorePrincipal
 
 log = logging.getLogger("rag_api")
 tracer = trace.get_tracer("rag_api")
@@ -66,6 +76,20 @@ AUDIT_FAILURES = meter.create_counter(
     description="Audit events that could not be stored (should be 0)",
 )
 
+# Answers (Step 33): outcomes, time to the first byte of the response, and user feedback
+ANSWERS = meter.create_counter(
+    "rag.answer.requests", unit="{request}", description="Answers by outcome"
+)
+ANSWER_TIME = meter.create_histogram(
+    "rag.answer.duration",
+    unit="s",
+    description="Answer time: whole answers, or until the stream starts (time to first token)",
+    explicit_bucket_boundaries_advisory=SEARCH_BUCKETS,
+)
+FEEDBACK = meter.create_counter(
+    "rag.answer.feedback", unit="{rating}", description="Thumbs up/down by reason"
+)
+
 REQUIRED_PROMPTS = ("query-instruction",)  # prompts this service can't run without
 
 
@@ -94,6 +118,8 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     for outcome in ("ok", "error"):
         SEARCHES.add(0, {"outcome": outcome})
     DROPPED.add(0)
+    for outcome in ("answered", "abstained", "blocked", "error"):
+        ANSWERS.add(0, {"outcome": outcome})
     for outcome in ("allowed", "denied"):
         AUDIT_FAILURES.add(0, {"outcome": outcome})
     # Load and check the prompt registry now: a broken or edited prompt stops the start-up,
@@ -151,11 +177,28 @@ def get_prompt_label() -> str:
 
 
 @lru_cache
+def get_core() -> Container:
+    """rag-core's components for this deployment (rag.yaml + profile), built once, shared by
+    search and answers (Steps 32-33)."""
+    s = get_settings()
+    return rag_config.load(s.rag_config, s.rag_profile)
+
+
+@lru_cache
 def get_search() -> SearchBackend:
     s = get_settings()
     if s.search_backend == "core":
-        return CoreSearch(s)  # rag-core pipeline from rag.yaml (Step 32)
+        return CoreSearch(s, SearchPipeline(get_core()))  # rag-core pipeline (Step 32)
     return PgSearch(s, get_prompts())
+
+
+@lru_cache
+def get_answerer() -> AnswerPipeline:
+    return AnswerPipeline(get_core())
+
+
+def get_tenant() -> str:
+    return get_settings().tenant
 
 
 @lru_cache
@@ -404,3 +447,166 @@ def admin_ping(
 ) -> dict[str, str]:
     record_or_refuse(audit, audit_event(auth.principal, "admin:ping", "allowed", "rag-api"))
     return {"status": "ok", "admin": auth.principal.username}
+
+
+# ---------------------------------------------------------------- answers (Step 33)
+
+
+class AnswerRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=2000)
+    # A conversation: earlier turns are remembered per person AND session (Step 33)
+    session_id: str | None = Field(default=None, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    stream: bool = False
+
+
+class CitationOut(BaseModel):
+    n: int  # the [doc n] in the text
+    document_id: int
+    title: str
+
+
+class AnswerOut(BaseModel):
+    answer_id: str  # send it back with /v1/feedback; it is also the trace id (Steps 19-23)
+    text: str
+    abstained: bool
+    blocked: str | None
+    citations: list[CitationOut]
+
+
+def _answer_id() -> str:
+    return current_trace_id() or uuid.uuid4().hex
+
+
+def _citations(a: Answer, context_ids: dict[str, int]) -> list[CitationOut]:
+    return [
+        CitationOut(n=c.marker, document_id=context_ids.get(c.chunk_id, -1), title=c.title)
+        for c in a.citations
+    ]
+
+
+def _outcome(a: Answer) -> str:
+    return "blocked" if a.blocked else "abstained" if a.abstained else "answered"
+
+
+@app.post("/v1/answer", response_model=None)
+def answer(
+    req: AnswerRequest,
+    auth: Annotated[Authorized, Depends(authorize("answer"))],
+    answerer: Annotated[AnswerPipeline, Depends(get_answerer)],
+    policy: Annotated[PolicyEngine, Depends(get_policy)],
+    audit: Annotated[AuditLog, Depends(get_audit)],
+    tenant: Annotated[str, Depends(get_tenant)],
+) -> AnswerOut | StreamingResponse:
+    """Retrieve (as this person), answer with citations, record it. Same token, policy and audit
+    rules as /v1/search; the question and answer text are never written to the audit log."""
+    p, f = auth.principal, auth.decision.filter
+    # OPA only returns known classification names
+    levels = cast(tuple[Classification, ...], tuple(sorted(f.classifications)))
+    who = CorePrincipal(p.subject, tuple(sorted(f.groups)), levels, tenant)
+    started, answer_id = time.perf_counter(), _answer_id()
+    context_ids: dict[str, int] = {}
+
+    def post_check(hits: list[ScoredChunk]) -> list[ScoredChunk]:
+        """OPA re-checks every document before it can reach the model (as /v1/search does)."""
+        if not f.classifications:
+            return []  # fail closed: no clearance, no documents
+        refs = {document_id(h.chunk): DocumentRef(document_id(h.chunk), h.chunk.access.classification,
+                                                  h.chunk.access.groups) for h in hits}  # fmt: skip
+        try:
+            allowed = policy.readable(p, list(refs.values()))
+        except PolicyUnavailable as e:
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE, "Policy engine unavailable"
+            ) from e
+        if dropped := [i for i in refs if i not in allowed]:
+            DROPPED.add(len(dropped))
+            log.error("query/policy mismatch: dropped documents %s for sub=%s", dropped, p.subject)
+        return [h for h in hits if document_id(h.chunk) in allowed]
+
+    def record(
+        context: PackedContext | None, early: Answer | None, final: Answer | None = None
+    ) -> None:
+        """Before anything is handed out: who, which documents went to the model, which prompt."""
+        if context is not None:
+            context_ids.update({h.chunk.id: document_id(h.chunk) for h in context.chunks})
+        a = final or early
+        record_or_refuse(audit, audit_event(
+            p, "answer", "allowed", "documents", answer_id=answer_id,
+            context_ids=sorted(set(context_ids.values())),
+            cited_ids=sorted({context_ids.get(c.chunk_id, -1) for c in a.citations}) if a else None,
+            result=_outcome(a) if a else "streaming", cache=(a.trace.get("cache") if a else None),
+            prompts=[str(getattr(answerer.generator, "prompt_ref", "?"))],
+            model=str(getattr(answerer.generator, "model", "?")), question_chars=len(req.question),
+            session=req.session_id is not None, usage=dict(a.usage) if a else {},
+        ))  # fmt: skip
+
+    if not req.stream:
+        seen: dict[str, PackedContext | None] = {}
+        try:
+            a = answerer.answer(req.question, who, session_id=req.session_id, post_check=post_check,
+                                before_generation=lambda ctx, early: seen.update(ctx=ctx))  # fmt: skip
+            record(seen.get("ctx"), None, final=a)  # recorded BEFORE the answer is returned
+        except HTTPException:
+            ANSWERS.add(1, {"outcome": "error"})
+            raise
+        ANSWERS.add(1, {"outcome": _outcome(a)})
+        ANSWER_TIME.record(time.perf_counter() - started, {"stream": False})
+        return AnswerOut(answer_id=answer_id, text=a.text, abstained=a.abstained, blocked=a.blocked,
+                         citations=_citations(a, context_ids))  # fmt: skip
+
+    events = answerer.stream(req.question, who, session_id=req.session_id, post_check=post_check,
+                             before_generation=lambda ctx, early: record(ctx, early))  # fmt: skip
+    try:
+        # search, OPA post-check and the audit record happen HERE: errors are real HTTP errors
+        first = next(events)
+    except HTTPException:
+        ANSWERS.add(1, {"outcome": "error"})
+        raise
+    ANSWER_TIME.record(time.perf_counter() - started, {"stream": True})
+
+    def sse() -> Iterator[str]:
+        def frame(kind: str, data: object) -> str:
+            return f"event: {kind}\ndata: {json.dumps(data)}\n\n"
+
+        yield frame("meta", {"answer_id": answer_id, **first.data})
+        try:
+            for ev in events:
+                if ev.kind == "delta":
+                    yield frame("delta", {"text": ev.data})
+                elif ev.kind == "done":
+                    a: Answer = ev.data
+                    ANSWERS.add(1, {"outcome": _outcome(a)})
+                    yield frame("done", AnswerOut(answer_id=answer_id, text=a.text, abstained=a.abstained,
+                                                  blocked=a.blocked, citations=_citations(a, context_ids)).model_dump())  # fmt: skip
+        # the model failed mid-answer: tell the client, never a half answer as "done"
+        except Exception:
+            ANSWERS.add(1, {"outcome": "error"})
+            log.exception("answer stream failed")
+            yield frame(
+                "error", {"answer_id": answer_id, "message": "The answer could not be completed."}
+            )
+
+    return StreamingResponse(sse(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})  # fmt: skip
+
+
+class FeedbackRequest(BaseModel):
+    answer_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    rating: Literal["up", "down"]
+    # A fixed list, not free text: free text would collect personal data into the audit log
+    reason: Literal["wrong", "incomplete", "outdated", "not_relevant", "unsafe", "other"] | None = (
+        None
+    )
+
+
+@app.post("/v1/feedback", status_code=status.HTTP_202_ACCEPTED)
+def feedback(
+    req: FeedbackRequest,
+    auth: Annotated[Authorized, Depends(authorize("feedback"))],
+    audit: Annotated[AuditLog, Depends(get_audit)],
+) -> dict[str, str]:
+    """Thumbs up/down on an answer: the raw material for Step 37's online evaluation."""
+    record_or_refuse(audit, audit_event(auth.principal, "feedback", "allowed", f"answer:{req.answer_id}",
+                                        rating=req.rating, reason=req.reason))  # fmt: skip
+    FEEDBACK.add(1, {"rating": req.rating, "reason": req.reason or "none"})
+    return {"status": "recorded"}
