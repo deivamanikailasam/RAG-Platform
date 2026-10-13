@@ -379,6 +379,7 @@ ci-config:
     just search-eval
     just guard-eval
     just answer-eval
+    just compliance-check
 
 # rag.yaml: every profile names real components with valid settings (Step 30), no services needed
 rag-config-check:
@@ -491,6 +492,16 @@ vault-agent-start:
     uv run python scripts/vault_setup.py secret-id rag-api > .bao/rag-api/secret_id
     {{compose}} up -d --force-recreate --wait rag-api-agent
     {{compose}} up -d rag-api
+
+# ---- Risk register (Step 36): threats -> controls -> evidence -> framework references ----
+# Validate the register (every evidence file and test exists) and that the generated docs are current
+compliance-check:
+    uv run python scripts/compliance.py check
+    uv run python scripts/compliance.py docs --check
+
+# Re-render docs/security/threat-model.md and docs/compliance/controls.md from the register
+compliance-docs:
+    uv run python scripts/compliance.py docs
 
 # OpenBao policies in canonical format (part of ci-config)
 vault-check:
