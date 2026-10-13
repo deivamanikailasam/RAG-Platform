@@ -29,17 +29,21 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | ANN (approximate nearest neighbour) | Finding nearly the closest vectors very fast, instead of exactly the closest by checking every one. | 11 |
 | Annotation (Grafana) | A marker drawn on Grafana graphs at the moment something happened, such as a new prompt version going live, so you can see whether quality or latency changed then. | 24 |
 | Append-only | Rows may be added, never changed or removed; enforced here by a trigger that refuses `UPDATE`, `DELETE` and `TRUNCATE`, even for the table's owner. | 23 |
+| AppRole (role ID, secret ID) | OpenBao's login method for machines: the role ID says which role (like a username, not secret); the secret ID is the password. rag-api's agent gets its secret ID wrapped and single-use. | 28 |
 | arm64 / aarch64 vs amd64 / x86_64 | Processor families; Apple Silicon is arm64, amd64-only images need slower emulation. | 3 |
 | Asymmetric retrieval | Embedding questions and documents differently (queries get a task instruction, documents don't), because a short question and a long passage are different kinds of text. | 8 |
 | At-least-once delivery | Every job is delivered at least once, but may be delivered twice after a crash (the worker finished but died before acknowledging). | 15 |
 | Attestation | A signed statement about an artefact, attached to its digest: for example its build provenance (which repo, commit, workflow and runner built it) or its SBOM. | 27 |
 | Attributes (span) | Key–value facts recorded on a span, e.g. `rag.candidates = 5`; facts about the request, never its content. | 19 |
 | Audience (`aud`) | The claim saying who a token is meant for (here `rag-api`). An API must reject tokens meant for someone else. | 16 |
+| Audit device (OpenBao) | Where OpenBao records every request and response, one JSON line each, with secret values replaced by HMACs. Declared in server.hcl; if no audit device can write, OpenBao refuses to answer. | 28 |
 | Audit log | A permanent, minimal record of security-relevant actions (who, what, when, result), kept for years and protected from tampering. Not for debugging. | 23 |
+| Auth method | How a client proves who it is to OpenBao (AppRole, userpass, OIDC, Kubernetes…). Success gives a token with policies attached. | 28 |
 | Authentication vs authorisation | Who are you? (sign-in) versus what may you do? (permissions). Keycloak does the first and carries the facts (groups, roles) for the second. | 16 |
 | Authorisation policy | The written rules that say who may do which action and see which things; here `policies/rag/authz/authz.rego` plus its `data.json`. | 18 |
 | Authorization code + PKCE | The sign-in flow for web apps: the browser gets a one-time code and swaps it for tokens, proving with a random "code verifier" (PKCE) that it is the same app that started the sign-in. | 16 |
 | Authorization header | The HTTP request header that carries credentials; for APIs it is `Authorization: Bearer <access token>`. | 17 |
+| Auto-auth | The OpenBao Agent feature that logs in by itself (here with AppRole), renews its token and logs in again when the token reaches its maximum age. | 28 |
 | Auto-fix | A check that changes files to fix the problem itself; you review the change and `git add` it again. | 5 |
 | Baseline (evaluation) | The summary of the last accepted evaluation run, committed in `evals/baselines/`; a new run mustn't fall below it by more than a small tolerance. | 26 |
 | Break-glass | Emergency super-powers (here the database superuser), used rarely, deliberately and visibly. | 23 |
@@ -54,6 +58,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Bootstrap (temporary) admin | The first Keycloak administrator created at start-up from environment variables (`temp-admin`), only to create a real, MFA-protected admin and then be deleted. | 16 |
 | Branch | A separate line of work (a draft) where you change things without touching `main`. | 4 |
 | Branch protection / ruleset | GitHub settings that block direct pushes to `main` and require PRs, checks and signed commits. | 4 |
+| Break-glass (OpenBao) | The documented emergency path when the admin login is lost: `bao operator generate-root` with 2 of the 3 key shares, used once, then revoked and recorded. | 28 |
 | Brewfile | A plain text file listing Homebrew formulas and casks; `brew bundle` installs everything in it. | 1 |
 | Brute-force protection | Temporarily locking an account after several wrong passwords (here 5), with a wait that grows from 60 seconds to 15 minutes. | 16 |
 | Bucket / key / object (S3) | A top-level container in object storage / the object's name, which can look like a path but is just a string (`raw/remote.pdf`) / the bytes plus metadata. | 14 |
@@ -107,6 +112,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Data filtering / partial evaluation (OPA) | OPA evaluating a policy with some facts still unknown and turning the rest into a filter, even a SQL `WHERE` clause, that a database can apply. | 18 |
 | Data key | The random key SOPS creates per file to lock every value; it is itself locked once per recipient. | 6 |
 | Data retention | How long data is kept before it is deleted; for Langfuse traces, 30 days, enforced by our own nightly job because automatic retention is an Enterprise feature when self-hosted. | 22 |
+| Database secrets engine | The OpenBao plug-in that creates a database user on request (CREATE ROLE … VALID UNTIL …) and drops it when the lease ends. | 28 |
 | Dataset card / datasheet | A short document about a dataset: provenance, every location, personal data and legal basis, retention, deletion route, access, gaps. | 25 |
 | Dead-letter queue (DLQ) | Where jobs go after failing too many times (here: 3 deliveries), so they stop retrying forever and a human can inspect them. | 15 |
 | Decision log | OPA's record of every decision (input, result, path, time, `decision_id`), written as JSON; the audit evidence for "who was allowed what, and why". | 18 |
@@ -136,6 +142,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Downstream | Everything that depends on a component, directly or through others; what an impact analysis lists. | 25 |
 | Drift | When the dependency list (`pyproject.toml`) and the lockfile (`uv.lock`) no longer match; `uv sync --locked` catches it. | 2 |
 | Dual logging | Docker keeping a local copy of a container's recent output even when a remote logging driver (like `fluentd`) ships it elsewhere, so `docker compose logs` keeps working. | 21 |
+| Dynamic secret | A secret created on request, for one client, with an expiry. It didn't exist before you asked, and it is gone after its lease ends. | 28 |
 | EditorConfig | A small `.editorconfig` file telling every editor the same formatting basics (indentation, line endings). | 4 |
 | Embedding / vector | A fixed-length list of numbers representing a text's meaning: a point in meaning space. | 8 |
 | Embedding contract | Everything that defines how vectors were made (model + revision, dimensions, query instruction, normalisation, pooling, chunk limit); change any part and the index must be rebuilt. | 8 |
@@ -184,6 +191,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Healthcheck | A command Compose runs inside a container every few seconds to ask "are you working?"; failures mark it unhealthy. | 9 |
 | Histogram (metric) | A metric that records a distribution of values (e.g. latencies), from which p50/p95/p99 are computed. | 19 |
 | `histogram_quantile` | The PromQL function that estimates a percentile (e.g. p95) from histogram buckets; it can only be as precise as the bucket edges allow. | 20 |
+| HMAC (keyed hash) | A one-way fingerprint of a value made with a secret key. OpenBao's audit log stores HMACs instead of secret values; `sys/audit-hash` computes one so you can search the log for a value you hold. | 28 |
 | HNSW | Hierarchical Navigable Small World: a layered graph index for fast approximate vector search, tuned by `m`, `ef_construction` and `hnsw.ef_search`. | 11 |
 | Homebrew | The standard package manager ("app store for developer tools") on macOS. | 1 |
 | host.docker.internal | The address a container uses to reach programs running on the host Mac itself. | 3 |
@@ -219,9 +227,11 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Keyless signing | Signing with a minutes-long certificate tied to the CI job's identity (via OIDC and Sigstore) instead of a long-lived private key, so there's no key to steal or rotate. | 27 |
 | `kid` (key id) | A label in a JWT's header naming which of the identity provider's keys signed it, so the verifier knows which public key to check with. | 17 |
 | KV cache | The model's working memory of everything read so far; grows with prompt and answer length and is a big part of memory use. | 7 |
+| KV v2 | OpenBao's key/value secrets engine, version 2: stores fixed secrets (here the gateway key and OPA token) with a version history. Data lives under `secret/data/…`, versions under `secret/metadata/…`. | 28 |
 | Label (metric) | A key=value pair that identifies one slice of a metric, e.g. `outcome="error"`, `job="opa"`, `service_version="0.1.0"`. Every distinct label combination is its own time series. | 20 |
 | Label (prompt) | A movable pointer from an environment to a prompt version ("production uses version 1, staging uses version 2"), kept in `prompts/labels.yaml`. | 24 |
 | launchd | macOS's built-in service manager: starts programs at login and restarts them if they crash (agents live in `~/Library/LaunchAgents/`). | 7 |
+| Lease | The ID and time to live that come with every dynamic secret. It can be renewed up to the max TTL or revoked early; when it ends, the secret is destroyed (for a database login: sessions ended, user dropped). | 28 |
 | Least privilege | Giving each identity only the access it needs and nothing more. | 10 |
 | Legal basis (GDPR) | The reason that makes processing personal data lawful (contract, legal obligation, legitimate interest…); required on every dataset card with personal data. | 25 |
 | Legal hold | An indefinite object lock with no date, applied during investigations, until someone explicitly removes it. | 14 |
@@ -287,6 +297,8 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Opaque token | A token that is just a random reference, not a readable JWT; only the identity provider can say what it means, via introspection. | 17 |
 | Open core | A free (here MIT-licensed) core product plus paid Enterprise features; Langfuse's model. | 22 |
 | OpenAI-compatible API | The same request and response format as OpenAI's API, so any tool that speaks "OpenAI" can call a local model. | 7 |
+| OpenBao | The open-source (MPL-2.0) fork of HashiCorp Vault, run under the Linux Foundation; same API, policies and concepts, binary called `bao`. Our secrets manager. | 28 |
+| OpenBao Agent | A helper process next to an application (here the rag-api-agent sidecar): logs in (auto-auth), renews, and writes secrets into files (templates) so the application never talks to OpenBao. | 28 |
 | OpenFGA | A CNCF relationship-based (ReBAC) authorisation engine modelled on Google's Zanzibar: "shared with", folder inheritance, team membership. Planned for the permission-aware RAG project. | 18 |
 | OpenLineage | An open standard for lineage events emitted by pipelines ("job X read A, wrote B"); Marquez is its reference server. Lineage observed, not declared. | 25 |
 | OpenSSF Scorecard | An automated score of a repository's security practices (pinning, branch protection, reviews…); a quick external check for public repositories. | 27 |
@@ -314,6 +326,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Placeholder | A slot like `{{question}}` in a prompt template that is filled in for each request; every one must be declared in `variables`. | 24 |
 | Plaintext | Readable, unencrypted text. | 6 |
 | Point | One item stored in Qdrant: an ID, one or more vectors, and a payload. Here, one chunk. | 12 |
+| Policy (OpenBao) | A list of paths and what a token may do with them (read, create, update, delete, list, sudo). Anything not listed is denied. | 28 |
 | Policy as code | Access rules written in a real language, versioned in Git, reviewed by pull request and tested like code. | 18 |
 | Policy engine | A service whose only job is to evaluate authorisation rules against facts and answer yes/no plus details; here OPA. | 18 |
 | Polyrepo | One repository per service or library. | 4 |
@@ -371,10 +384,12 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Relational database / table / row / column | Data stored in tables; each row is a record (one chunk), each column a field (its text, its vector). | 11 |
 | Remote / origin | A copy of the repository on a server (GitHub); `origin` is its default nickname. | 4 |
 | Remote write | The Prometheus protocol for pushing samples into a Prometheus server (enabled with `--web.enable-remote-write-receiver`); Tempo uses it to deliver span metrics and the service graph. | 21 |
+| Renew (lease) | Extending a lease before it expires, up to its max TTL. For our database logins a renewal also moves the Postgres VALID UNTIL forward. | 28 |
 | Repository | The project's filing cabinet: all files plus their full history of changes (git). | 4 |
 | Required action | Something a user must do at their next sign-in: change a temporary password, set up MFA (`CONFIGURE_TOTP`), verify an email. | 16 |
 | Rescoring | After a fast search on compressed vectors, re-ranking the top candidates using the original vectors to recover accuracy. | 12 |
 | Resource (OpenTelemetry) | Facts about the process sending telemetry (`service.name`, version, environment), attached to every span and metric. | 19 |
+| Response wrapping | OpenBao hands out a secret inside a single-use envelope (a wrapping token with a short TTL). If someone opened it first, the real recipient's unwrap fails, so the theft is noticed. | 28 |
 | Restart policy | The rule Docker uses to restart a container that stops or crashes (`restart: unless-stopped`). | 9 |
 | Retention | How long a store keeps data before deleting it: 7 days for traces (Tempo `block_retention`) and logs (Loki `retention_period` plus `compactor.retention_enabled`). | 21 |
 | Retrieve-then-rerank | The two-stage search pattern: a fast embedder finds ~50 candidates, then a slow, precise reranker picks the best few for the LLM. | 8 |
@@ -382,9 +397,12 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Reverse proxy | A server that sits in front of other servers, receives every request, applies rules and forwards it. | 9 |
 | Review interval | How often a card must be re-read and re-confirmed (e.g. every 90 or 180 days); overdue reviews warn and fail the weekly strict run. | 25 |
 | Revocation | Making an old secret stop working, e.g. deleting an API token. | 6 |
+| Revoke (lease) | Ending a lease early. For a database login: end its sessions and drop the user, immediately (`bao lease revoke`). | 28 |
 | RFC 3161 timestamp | A signed statement from a timestamping authority that some hash existed at a given time. | 23 |
 | Role / privilege (database) | A database identity / what it's allowed to do (connect, read, write, create tables). | 11 |
 | Role mapping | The link in OpenSearch's security plugin that gives a user (or backend role) the permissions of a role. | 13 |
+| Root token | An all-powerful OpenBao login created at initialisation. Used once for setup, then revoked; a new one needs 2 key shares (break-glass). | 28 |
+| rotate-root | OpenBao changes the password of its own database admin login to a random value, so no person knows it any more. | 28 |
 | Rotation | Replacing a secret with a new value on a schedule, or immediately after a suspected leak. | 6 |
 | Routing | Choosing which real backend (deployment) answers a request for a given model alias. | 9 |
 | Routing (alerts) | Alertmanager's tree of matchers that sends each alert to a receiver: here `severity="critical"` goes to `platform-team-urgent` (page), everything else to `platform-team` (ticket). | 20 |
@@ -400,12 +418,15 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Score (LLM evaluation) | A judgement attached to a trace: thumbs up/down, a 0–1 rating, or an evaluator's verdict. | 22 |
 | Score normalisation | Rescaling scores from different methods to the same range (min-max: best = 1, worst = 0) before combining them. | 13 |
 | Scrape | Prometheus fetching a target's `/metrics` page on a schedule (every 15 s here), optionally with a bearer token read from a secret file. | 20 |
+| Seal / unseal | OpenBao's data on disk is encrypted. After every start it is sealed (can't read its own data) until enough key shares are entered to rebuild the unseal key in memory. | 28 |
 | Search engine | A system built to find documents by their words (and now vectors) fast, with relevance ranking; e.g. OpenSearch, Elasticsearch. | 13 |
 | Search pipeline | Processing steps OpenSearch applies around a search, e.g. normalising and combining scores for hybrid search (`rag-hybrid`). | 13 |
 | Search-path hijacking | Tricking a privileged database function into calling an attacker's look-alike object; prevented by fixing the function's `search_path` (with `pg_temp` last). | 23 |
 | Secret | Any value that grants access: a password, API key, token, private key or encryption key. | 6 |
 | Secret file / /run/secrets | A secret delivered to a container as a small in-memory file, the standard Docker and Kubernetes pattern. | 6 |
 | Secret scanner | A check (e.g. gitleaks, detect-private-key) that looks for keys, tokens and passwords before they are committed. | 5 |
+| Secrets engine | An OpenBao plug-in that produces secrets: KV v2 stores fixed values, the database engine creates logins. | 28 |
+| Secrets manager | A server whose job is to store secrets and hand them out to the right clients, with an audit trail; here OpenBao. | 28 |
 | SecretStr | A pydantic type that prints as `**********`; the real value needs a deliberate `.get_secret_value()`. | 6 |
 | `SECURITY DEFINER` | A Postgres function that runs with the rights of its owner, not its caller; lets rag-api append audit events without any rights on the table. | 23 |
 | Security plugin | OpenSearch's built-in TLS, users, roles and permissions; never disable it. | 13 |
@@ -416,6 +437,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Session / user / tags | Ways to group LLM traces: a conversation, a (pseudonymous) person, free-form labels. | 22 |
 | SHA-256 | A hash function producing a 32-byte fingerprint: the same input always gives the same output, one changed bit changes it completely, and it can't be reversed or collided in practice. | 23 |
 | Shadow price | An internal, notional price for something with no bill (your own GPU time), so usage can be compared and budgeted; here $2/hour ÷ tokens per second. | 10 |
+| Shamir's secret sharing | Splitting a key into N shares so that any K of them rebuild it and fewer reveal nothing. OpenBao's unseal key: 3 shares, any 2. | 28 |
 | Shard / replica | The pieces an index is split into / copies of them for safety; one node uses 1 shard and 0 replicas. | 13 |
 | shared_buffers | Postgres's own memory cache for table and index pages, typically about 25% of the memory it may use. | 11 |
 | Shell / zsh | The program inside Terminal that reads and runs your commands; zsh is the macOS default. | 1 |
@@ -464,6 +486,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Telemetry | Usage information a program sends to its makers; switched off on purpose (Qdrant here, Homebrew analytics in Step 1). | 12 |
 | Telemetry (observability) | The data a system reports about itself (traces, metrics, logs) for its own operators; not to be confused with usage data sent to a vendor. | 19 |
 | Term frequency (tf) | How often a query word appears in a document; more helps in BM25, with diminishing returns. | 13 |
+| Template (OpenBao Agent) | An agent setting that renders a secret into a file (path, permissions, format), and re-renders it when the secret changes, writing aside and renaming so readers never see half a file. | 28 |
 | Tempo | Grafana's trace store: keeps every span cheaply in blocks, finds traces by id or TraceQL, and can generate metrics from them. | 21 |
 | Test case | One question in a golden dataset, with what a good result must (and must not) contain. | 26 |
 | text vs keyword field | `text` is analysed for full-text search; `keyword` is stored exactly, for filters and IDs. | 13 |
@@ -472,6 +495,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Throughput | How much work a server finishes per second, e.g. chunks embedded per second. | 8 |
 | Time series | One metric with one exact set of labels, sampled over time, e.g. `rag_search_requests_total{outcome="ok"}`. | 20 |
 | Token | The unit a model reads and writes: roughly ¾ of an English word. | 7 |
+| Token (OpenBao) | What a successful OpenBao login returns: a credential with policies and a TTL, sent as `X-Vault-Token` on every request. Not the same as a model's token. | 28 |
 | Token filter | An analyzer step that changes the token stream: lowercase, synonyms, stemming. | 13 |
 | Token introspection (RFC 7662) | Asking the identity provider "is this token still valid?" on every request: instant revocation, at the cost of a network call each time. | 17 |
 | Token revocation | Cancelling a token before it expires. With local validation it only takes full effect when the (5-minute) access token expires. | 17 |
@@ -490,6 +514,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Trunk-based development | `main` (the trunk) is always working; every change goes through a short-lived branch and a PR. | 4 |
 | Trust on first use (TOFU) | Recording a hash from your first download when the publisher provides none (dbmate here), and refusing anything different later; weaker than a published checksum. | 27 |
 | TTFT (time to first token) | How long you wait before the first word appears; mostly set by prefill and prompt length. | 7 |
+| TTL (default, max; OpenBao) | How long a lease or token lives: the default TTL when issued (1 h for our logins) and the max TTL it can be renewed up to (24 h for rag-api). | 28 |
 | TTL (time to live) | An expiry time on a key; it disappears automatically afterwards. Every cache entry gets one. | 15 |
 | Type checker | A tool (e.g. `mypy`) that reads type hints and checks they are used consistently, catching wrong-kind-of-value bugs before running. | 5 |
 | Type hint | A label saying what kind of value a variable or function expects or returns, e.g. `def chunk(text: str) -> list[str]`. | 5 |
@@ -497,6 +522,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Upstream | Everything a component was built from, directly or indirectly (`just cards lineage`). | 25 |
 | uv | Astral's all-in-one Python tool: interpreters, virtual environments, locking and tool installs. | 2 |
 | Valkey | The open-source (BSD), Redis-compatible in-memory store maintained under the Linux Foundation, forked from Redis in 2024 after Redis's licence change. | 15 |
+| Vault (HashiCorp) | The best-known secrets manager. Its licence changed to BUSL-1.1 in 2023 (not open source); we say "Vault" for the idea and use OpenBao, its open-source fork. | 28 |
 | Version (prompt) | One frozen edition of a prompt, a file `prompts/<name>/v<N>.yaml`; `rag-answer@2` always means the same text. | 24 |
 | Versioning / version ID | Keeping every overwrite of an object as a separate version, each with its own ID, so nothing is silently lost. | 14 |
 | Virtual environment | A private folder of packages (`.venv`) for one project, tied to one interpreter. | 2 |
