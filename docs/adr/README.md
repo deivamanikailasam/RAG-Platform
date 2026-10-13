@@ -28,5 +28,6 @@
 | [0024](0024-manage-prompts-as-versioned-files-in-a-registry.md) | Manage prompts as versioned files in a registry | Accepted |
 | [0025](0025-document-models-datasets-and-systems-as-checked-cards-with-lineage.md) | Document models, datasets and systems as checked cards with lineage | Accepted |
 | [0026](0026-evaluate-retrieval-and-prompts-offline-with-versioned-datasets-and-gates.md) | Evaluate retrieval and prompts offline with versioned datasets and gates | Accepted |
+| [0027](0027-run-ci-with-pinned-tools-and-publish-signed-attested-images.md) | Run CI with pinned tools and publish signed, attested images | Accepted |
 
 New ADR: `just adr "Short title"`, then fill it in and add a row here.
