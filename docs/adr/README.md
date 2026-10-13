@@ -39,5 +39,6 @@
 | [0035](0035-rag-architectures-as-switchable-pipelines.md) | RAG architectures as switchable pipelines sharing every control | Accepted |
 | [0036](0036-lifecycle-tenant-isolation-and-a-risk-register-as-code.md) | Lifecycle operations, tenant RLS, restore drills and a risk register as code | Accepted |
 | [0037](0037-production-environments-canaries-and-recovery.md) | Production environments with gated promotion, canary releases, HA Postgres and online evaluation | Accepted |
+| [0038](0038-a-reuse-kit-for-rag-projects.md) | A reuse kit: versioned rag-core, packaged profiles, standards as code, a project template | Accepted |
 
 New ADR: `just adr "Short title"`, then fill it in and add a row here.
