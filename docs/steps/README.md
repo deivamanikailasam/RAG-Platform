@@ -37,3 +37,4 @@ Phases: **A** Workstation · **B** Model serving · **C** Data stores · **D** I
 | 23 | A tamper-evident audit log | F · Audit & governance | [step-23-tamper-evident-audit-log.md](step-23-tamper-evident-audit-log.md) |
 | 24 | A prompt registry | F · Audit & governance | [step-24-prompt-registry.md](step-24-prompt-registry.md) |
 | 25 | Model, dataset and system cards, and lineage | F · Audit & governance | [step-25-cards-and-lineage.md](step-25-cards-and-lineage.md) |
+| 26 | An evaluation harness | G · Quality & delivery | [step-26-evaluation-harness.md](step-26-evaluation-harness.md) |

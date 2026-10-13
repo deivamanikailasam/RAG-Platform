@@ -39,6 +39,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Authorization code + PKCE | The sign-in flow for web apps: the browser gets a one-time code and swaps it for tokens, proving with a random "code verifier" (PKCE) that it is the same app that started the sign-in. | 16 |
 | Authorization header | The HTTP request header that carries credentials; for APIs it is `Authorization: Bearer <access token>`. | 17 |
 | Auto-fix | A check that changes files to fix the problem itself; you review the change and `git add` it again. | 5 |
+| Baseline (evaluation) | The summary of the last accepted evaluation run, committed in `evals/baselines/`; a new run mustn't fall below it by more than a small tolerance. | 26 |
 | Break-glass | Emergency super-powers (here the database superuser), used rarely, deliberately and visibly. | 23 |
 | B-tree | The default Postgres index, for exact values and ranges (an ID, a date); like a sorted phone book. | 11 |
 | Batch | Several texts sent together and embedded in one GPU pass; much faster per text than one at a time. | 8 |
@@ -116,6 +117,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Dependency injection (FastAPI) | FastAPI runs helper functions ("get the caller", "require this role") before an endpoint and passes their results in; tests swap them for fakes with `dependency_overrides`. | 17 |
 | Deployment (LiteLLM) | One real backend behind a model alias; an alias can have several, for load-balancing or failover. | 9 |
 | Derived index | A copy organised for fast lookup, always rebuildable from the source of truth. | 12 |
+| Deterministic check | A rule a program can check exactly, such as "cites document 2" or "contains no 'PWNED'": cheap, repeatable and explainable, so these form the evaluation gate. | 26 |
 | Dev dependency | A package needed only while developing (e.g. pytest), not when the app runs in production. | 2 |
 | Device flow | The sign-in flow for terminals and TVs: the app shows a link and a short code, you approve in a browser (with password and MFA), and the app receives tokens without ever seeing your password. | 16 |
 | Dimensions (of an embedding) | How many numbers an embedding vector has (Qwen3-Embedding-0.6B: up to 1,024); more can hold more nuance but costs storage and search time. | 8 |
@@ -135,6 +137,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Envelope encryption | Values are locked with a random data key, and the data key is locked separately for each recipient, so adding a person never means re-encrypting every value by hand. | 6 |
 | Environment variable | A named value handed to a program when it starts (`DB_PASSWORD=…`); fine for settings, easy to leak for secrets. | 6 |
 | Error budget | The amount of failure an SLO allows: with 99% of searches succeeding over 28 days, 1% may fail. Budget left: ship features; budget burning: prioritise reliability. | 20 |
+| Evaluation (eval) | Running a system on test cases and scoring the results. | 26 |
 | Eviction / maxmemory policy | What a memory-capped store deletes when it is full. `volatile-lru` removes the least-recently-used keys that have a TTL; `allkeys-lru` may remove any key, including queued jobs. | 15 |
 | Exemplar | A sample trace id attached to one metric data point, so a dot on a graph links straight to a real request's trace. | 21 |
 | EXPLAIN | Asks Postgres how it will run a query, e.g. whether it uses an index; `EXPLAIN ANALYZE` also runs it and shows real timings. | 11 |
@@ -143,6 +146,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Extension (Postgres) | An add-on that teaches Postgres new tricks; `vector` (pgvector) adds vector types and indexes. | 11 |
 | Fail closed | When unsure, deny: no groups in the token means no documents, not all documents; an unreachable key service means 503, not "let it through". | 17 |
 | Fail open | The opposite of fail closed: when something breaks or a fact is missing, let the request through. Never acceptable for security; an undefined Rego value can cause it silently. | 18 |
+| Faithfulness | Every claim in an answer is supported by the documents it was given (nothing invented). | 26 |
 | Fallback | Sending a request to a different model when the first one fails; fine between chat models, never between embedders (different vector spaces). | 10 |
 | False positive | A check flags something that is actually fine; silence it narrowly, with a comment explaining why. | 5 |
 | FinOps | The practice of making technology spend visible, attributed to teams, and managed against budgets; AI FinOps applies it to model usage. | 10 |
@@ -150,6 +154,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Formatter | A tool (e.g. `ruff format`) that rewrites code layout into one consistent style without changing what it does. | 5 |
 | Formula | A Homebrew package that is a command-line tool. | 1 |
 | Full-text search / tsvector | Postgres's built-in keyword search: words normalised to stems (a `tsvector`) and indexed with GIN. | 11 |
+| Gate (quality gate) | Pass/fail rules a run must meet before a change ships: thresholds in `evals/gates.yaml`, the prompt's own `min_score`, and no regression against the baseline. | 26 |
 | Gateway (AI / LLM gateway) | A server in front of all model servers: every request passes through it for authentication, allow-listing, routing, limits and logging. | 9 |
 | GenAI semantic conventions | The emerging standard `gen_ai.*` attribute names for model calls (operation, model, token usage), so LLM tools and vendor dashboards understand each other. | 19 |
 | Generation (LLM observability) | An observation for one LLM call: prompt, completion, model, tokens and cost (recorded from Step 33). | 22 |
@@ -158,6 +163,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Git hook | A script git runs automatically at a set moment: before a commit, after the message is written, before a push. | 5 |
 | .gitattributes | Rules for how git treats file types (line endings, binary files, generated files). | 4 |
 | .gitignore | A "do not pack" list of files git must never track (secrets, `.venv`, data, models). | 4 |
+| Golden dataset | Test cases with known good answers (or expected documents), written and checked by people, versioned and pinned by hash. | 26 |
 | Graceful degradation | Continuing with reduced quality or features instead of failing completely, e.g. skipping reranking and flagging the answer when the reranker is down. | 10 |
 | Grant / flow | A standard recipe for getting a token: authorization code + PKCE (web apps), device flow (CLIs), client credentials (machines). The password grant (ROPC) is switched off. | 16 |
 | Group (Keycloak) | A set of users who are "with" each other (department, team). It decides what you may SEE: its name goes into the token's `groups` claim and matches documents' `acl_groups`. | 16 |
@@ -216,6 +222,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Linter / static analysis | A tool (e.g. `ruff check`) that reads code without running it and flags likely bugs and risky patterns, each as a coded rule like `B006`. | 5 |
 | Liveness / readiness | Two health questions: "is the process alive?" (restart it if not) and "can it serve traffic yet?". | 9 |
 | LLM observability | Recording what an AI system was asked, what it looked up and what it answered, to debug and improve it (Langfuse here). | 22 |
+| LLM-as-judge | A model grading another model's answer against a reference. Useful, but biased (prefers longer answers and its own style) and fallible, so here it only advises. | 26 |
 | localhost / 127.0.0.1 | "This machine only": a port bound here is reachable only from your own Mac. | 3 |
 | Lock file (prompts) | `prompts/prompts.lock.json`: the SHA-256 of every released prompt version; entries may be added, never changed or removed. | 24 |
 | Lockfile | A file recording the exact version and hash of every package in the full dependency tree (`uv.lock`). | 2 |
@@ -249,11 +256,13 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Model inventory | A reviewed list of which exact models a platform serves: repo, revision, licence, port, role and who approved it (`infra/model-serving/models.yaml`). | 7 |
 | Model revision | The exact git commit (40-character SHA) of a model repository on Hugging Face; the same name isn't always the same model. | 7 |
 | Monorepo | One repository holding all services, libraries, infrastructure and docs. | 4 |
+| MRR (mean reciprocal rank) | On average over queries, 1 / position of the first relevant result: 1.0 means the right document always comes first. | 26 |
 | Multi-stage build | A Dockerfile with several `FROM` stages: one with build tools makes the result, the final small image copies only that result (here the finished `.venv`). | 17 |
 | Multitenancy / tenant | Serving many customers or departments from one system / one such customer, whose data must stay separate. | 12 |
 | Multi-window alert | A burn-rate alert that requires both a long window (1 h or 6 h: a real trend) and a short one (5 min or 30 min: still happening) to be over the threshold, so blips don't page and alerts clear quickly after recovery. | 20 |
 | Named vectors | Several vectors stored per point under different names, e.g. `dense` and `sparse`. | 12 |
 | Named volume | Docker-managed storage inside the VM that survives container deletion; use it for database data. | 3 |
+| nDCG (normalised discounted cumulative gain) | A score from 0 to 1 that rewards relevant documents near the top of a ranked list; 1.0 is the perfect order. | 26 |
 | Network interface | A way your machine connects to networks: Wi-Fi, Ethernet, or localhost. | 3 |
 | no-new-privileges | A container security option that stops any process inside it gaining extra privileges, e.g. through setuid programs. | 9 |
 | --no-verify | A git flag that skips local hooks; the reason CI must repeat the same checks. | 5 |
@@ -287,6 +296,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | PEP | Python Enhancement Proposal: an official Python standard (e.g. PEP 621 `pyproject.toml`, PEP 735 dependency groups, PEP 668 protected system Pythons). | 2 |
 | PEP (Policy Enforcement Point) | The component that asks for a decision and obeys it, never deciding itself; here rag-api. (Not to be confused with a Python Enhancement Proposal.) | 18 |
 | Persistence: RDB / AOF | How an in-memory store survives restarts. RDB: periodic snapshots to disk. AOF (append-only file): a log of every write, replayed at start-up; `appendfsync everysec` loses at most about 1 s. | 15 |
+| Persona (evaluation) | A synthetic person (name, groups) an evaluation runs as, so the real access rules apply; never a real person's account. | 26 |
 | pg_dump | Postgres's logical backup tool: writes a database's structure and data to a file that `pg_restore` can load again. | 11 |
 | Pipeline (Collector) | One signal's path through the Collector: receivers → processors (in order) → exporters. | 19 |
 | Placeholder | A slot like `{{question}}` in a prompt template that is filled in for each request; every one must be declared in `variables`. | 24 |
@@ -299,6 +309,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Port | A numbered "door" through which a program accepts network connections, e.g. 5432 for Postgres. | 3 |
 | pre-commit (the tool) | A framework that installs and runs git hooks from one file, `.pre-commit-config.yaml`. | 5 |
 | Pre-filter vs post-filter | Restricting a search inside the query (pre-filter, using the filter the policy computed) vs checking the results afterwards (post-filter); we do both, so leaks are impossible and results stay full. | 18 |
+| precision@k | The share of the top k results that is relevant. "How much noise reaches the prompt?" | 26 |
 | Prefill | The first phase of generation: the model reads every prompt token in one parallel pass; limited by compute, it sets TTFT. | 7 |
 | Presigned URL | A link with a built-in signature and expiry that grants temporary access to one object (or one version) without the opener needing credentials. | 14 |
 | Primary key / foreign key | A row's unique ID / a column pointing to another table's row (a chunk → its document). | 11 |
@@ -307,6 +318,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Promotion / rollback | Moving a prompt label to a newer version / back to an older one: a one-number change in `labels.yaml`, reviewed as a pull request. | 24 |
 | Prompt | The text given to a model: instructions plus the material to work on. | 24 |
 | Prompt cache | Reusing the KV cache of a prompt start sent before (e.g. the same system prompt), which makes TTFT much faster. | 7 |
+| Prompt injection (as a test) | An evaluation case that deliberately attacks the prompt, through a hostile document or question, and passes only if the answer ignores the attack (e.g. never says "PWNED"). | 26 |
 | Prompt injection (direct, indirect) | Text that tries to make the model follow its instructions instead of yours. Direct: typed by the user. Indirect: hidden in a retrieved document or web page. | 24 |
 | Prompt registry | One place where all prompts live, with versions, owners, history and labels; here the `prompts/` folder plus `rag_common.prompts`. | 24 |
 | Prompt template | A prompt with placeholders that get filled in for each request. | 24 |
@@ -314,6 +326,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | PromQL | Prometheus's query language: select series by name and labels, then compute with functions like `rate()`, `increase()`, `sum by (…)` and `histogram_quantile`. | 20 |
 | Protocol mapper | A Keycloak rule that puts an extra fact into tokens, such as the `groups` claim or an extra audience. | 16 |
 | Provenance | Where something came from, and how it was made. | 25 |
+| Provenance (evaluation run) | The record of exactly what an evaluation measured: dataset version and SHA-256, target, prompt and model, judge, git commit and time. | 26 |
 | Provider prefix | The part of a LiteLLM `model` before the first `/` (e.g. `openai/`): which API protocol to speak to the backend. | 9 |
 | Provisioning (Grafana) | Grafana reading its data sources and dashboards from files at start-up, so they are code in Git rather than settings clicked into its database. | 20 |
 | Pseudonymous id | A stable identifier (like a token's `sub`) that points to a person without naming them; the name is looked up elsewhere, under its own access rules. | 23 |
@@ -327,6 +340,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Rate limit (RPM / TPM) | How many requests per minute / tokens per minute a key may use; going over returns 429 Too Many Requests. | 10 |
 | Raw zone (bronze) | The part of a data platform holding immutable original data, from which everything else can be rebuilt. | 14 |
 | RBAC (role-based access control) | Deciding what each user, key or token may read or write by the role or permissions it carries. | 12 |
+| recall@k | The share of the relevant documents found in the top k results. "Did we find what matters?" | 26 |
 | Recording rule | A PromQL query Prometheus pre-computes on every evaluation and stores under a new name (e.g. `rag:search_errors:ratio_rate1h`), so dashboards and alerts stay fast and consistent. | 20 |
 | Re-indexing | Re-embedding every stored document because the embedding contract changed; planned like a migration. | 8 |
 | Read-only filesystem (container) | Starting a container so it can't write to its own files (`read_only: true`), with a small RAM `tmpfs` for scratch space; here code ownership by root gives the same protection because Compose can't combine it with environment-sourced secrets. | 17 |
@@ -338,8 +352,10 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Recipient | Someone (or a machine) whose public key can open a SOPS file: you, CI, a teammate. | 6 |
 | Redaction | Masking a value that looks like a secret (`****`) so the record survives but the secret doesn't; the Collector's safety net for JWTs, keys and emails. | 19 |
 | Refresh token | A longer-lived token an app swaps for new access tokens without signing in again; here it is one-time use and dies at logout. | 16 |
+| Refusal accuracy | How often the system says "I don't know…" when the documents really don't contain the answer. | 26 |
 | Regal | The linter and editor language server for Rego: catches bugs and style problems in policies; part of `just policy-check`. | 18 |
 | Rego | OPA's policy language: you write rules that become true or produce values, and OPA evaluates them against `input` and `data`. | 18 |
+| Regression | A change that makes a metric worse. | 26 |
 | Relational database / table / row / column | Data stored in tables; each row is a record (one chunk), each column a field (its text, its vector). | 11 |
 | Remote / origin | A copy of the repository on a server (GitHub); `origin` is its default nickname. | 4 |
 | Remote write | The Prometheus protocol for pushing samples into a Prometheus server (enabled with `--web.enable-remote-write-receiver`); Tempo uses it to deliver span metrics and the service graph. | 21 |
@@ -398,6 +414,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Single source of truth | Each fact lives in exactly one file; other places check it rather than copy it. | 25 |
 | Single-pass rendering | Filling placeholders once: text that was inserted is never scanned again, so a user typing `{{context}}` can't pull in other values. | 24 |
 | SLI / SLO / SLA | Service level Indicator (what you measure, e.g. the share of searches that succeed) / Objective (your internal target, 99% over 28 days) / Agreement (the contractual promise to customers, set looser than the SLO). | 20 |
+| Smoke test vs benchmark | A handful of cases that catch obvious breakage, vs hundreds that measure quality reliably. Eight cases is a smoke test: one case moves the score by 12.5 points. | 26 |
 | Snapshot | A point-in-time backup file of a collection. | 12 |
 | SOPS | "Secrets OPerationS": encrypts the values in YAML, JSON or `.env` files while leaving the names readable. | 6 |
 | Source of truth | The one authoritative store that decides what exists and who may see it; every other copy is derived from it. | 12 |
@@ -423,14 +440,17 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | System card | A short document about an application built from models and data: purpose, users, human oversight, risk assessment. | 25 |
 | Table lock | A lock on a whole table; `LOCK TABLE … IN EXCLUSIVE MODE` lets only one writer append at a time (so the chain can't fork) while readers carry on. | 23 |
 | Tamper-evident vs tamper-proof | Evident: changes can't be hidden. Proof: changes are impossible. Nothing digital is tamper-proof against its own administrators; evident is the honest goal. | 23 |
+| Target (system under test) | The thing an evaluation runs against: here, retrieval-with-policy as a persona, or one prompt version on one model. | 26 |
 | Team (LiteLLM) | A group of virtual keys sharing a budget and a model list, e.g. a department or product. | 10 |
 | TEI (Text Embeddings Inference) | Hugging Face's Rust server for embedding and reranking models, with batching, API keys and metrics; runs natively with Metal on Apple Silicon. | 8 |
 | Telemetry | Usage information a program sends to its makers; switched off on purpose (Qdrant here, Homebrew analytics in Step 1). | 12 |
 | Telemetry (observability) | The data a system reports about itself (traces, metrics, logs) for its own operators; not to be confused with usage data sent to a vendor. | 19 |
 | Term frequency (tf) | How often a query word appears in a document; more helps in BM25, with diminishing returns. | 13 |
 | Tempo | Grafana's trace store: keeps every span cheaply in blocks, finds traces by id or TraceQL, and can generate metrics from them. | 21 |
+| Test case | One question in a golden dataset, with what a good result must (and must not) contain. | 26 |
 | text vs keyword field | `text` is analysed for full-text search; `keyword` is stored exactly, for filters and IDs. | 13 |
 | Thinking mode | Qwen models' optional hidden reasoning before the answer; better on hard questions, slower and more tokens (`enable_thinking`). | 7 |
+| Threshold | The minimum or maximum a metric must reach for a run to pass the gate, e.g. `recall@5: {min: 0.9}` or `leaked_docs: {max: 0}`. | 26 |
 | Throughput | How much work a server finishes per second, e.g. chunks embedded per second. | 8 |
 | Time series | One metric with one exact set of labels, sampled over time, e.g. `rag_search_requests_total{outcome="ok"}`. | 20 |
 | Token | The unit a model reads and writes: roughly ¾ of an English word. | 7 |
