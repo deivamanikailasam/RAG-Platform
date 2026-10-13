@@ -6,14 +6,15 @@
 
 Order of work, and why:
    memory   → the conversation so far, so follow-ups make sense
-   guards   → input checks (Step 34) before anything is spent
+   guards   → input checks (Step 34) before anything is spent: a block returns a fixed message
    cache    → same question, same access, same index and prompt: reuse
    search   → Step 32's pipeline (+ the caller's own post-check, e.g. OPA in rag-api)
+   guards   → context checks (Step 34): documents that give orders are dropped
    abstain  → nothing relevant found: say so, without calling a model
    context  → numbered <doc> blocks within a token budget
    generate → the registered prompt, the answer model; streamed or whole
    cite     → keep only citations that point at a document that was shown
-   guards   → output checks (Step 34)
+   guards   → output checks (Step 34): groundedness, personal data, secrets, toxicity
    remember, cache, return (with a trace of everything above)
 """
 
@@ -39,6 +40,7 @@ from rag_core.components.generation import (
     check_citations,
     is_abstention,
 )
+from rag_core.components.guards import GeneratedAnswer
 from rag_core.registry import Container
 from rag_core.search import SearchPipeline
 from rag_core.types import Answer, Principal, Query, ScoredChunk, Turn
@@ -84,9 +86,10 @@ class AnswerPipeline:
 
     # ------------------------------------------------------------------ guards (Step 34)
 
-    def _guard(self, stage: str, query: Query, payload: Any) -> tuple[Any, str | None, list[str]]:
-        """Run the guards for one stage. Returns (payload, block reason or None, flags)."""
-        flags: list[str] = []
+    def _guard(self, stage: str, query: Query, payload: Any, trace_data: dict[str, Any],
+               usage: Mapping[str, int] | None = None) -> tuple[Any, Answer | None]:  # fmt: skip
+        """Run one stage's guards. Returns the (possibly redacted) payload, or a blocked Answer.
+        Every verdict that isn't "allow" goes into the trace: guard, stage, action, reasons."""
         for g in self.guards:
             if g.stage != stage:
                 continue
@@ -95,13 +98,28 @@ class AnswerPipeline:
             ) as span:
                 v = g.check(query, payload)
                 span.set_attribute("rag.guard.action", v.action)
+            if v.action == "allow":
+                continue
+            trace_data.setdefault("guards", []).append(
+                {"guard": g.name, "stage": stage, "action": v.action, "reasons": list(v.reasons)}
+            )
             if v.action == "block":
-                return payload, "; ".join(v.reasons) or g.name, flags
+                reason = "; ".join(v.reasons) or g.name
+                # the person sees a fixed, helpful message; the reason goes to the trace and audit only
+                message = v.replacement if isinstance(v.replacement, str) else self.p.blocked_text
+                return payload, Answer(
+                    text=message, blocked=reason, usage=dict(usage or {}), trace=trace_data
+                )
             if v.action == "redact" and v.replacement is not None:
-                payload = v.replacement
-            if v.action in ("redact", "flag"):
-                flags += [f"{g.name}: {r}" for r in v.reasons] or [g.name]
-        return payload, None, flags
+                # output guards may hand back just the corrected Answer: keep its sources with it
+                if isinstance(payload, GeneratedAnswer) and isinstance(v.replacement, Answer):
+                    payload = replace(payload, answer=v.replacement)
+                else:
+                    payload = v.replacement
+            trace_data.setdefault("flags", []).extend(
+                [f"{g.name}: {r}" for r in v.reasons] or [g.name]
+            )
+        return payload, None
 
     # ------------------------------------------------------------------ the steps
 
@@ -117,10 +135,10 @@ class AnswerPipeline:
             )
         query = Query(question, principal, filters or {}, history, k=self.p.search_k)
 
-        text, blocked, flags = self._guard("input", query, question)
-        trace_data["flags"] = flags
-        if blocked:
-            return query, Answer(text="", blocked=blocked, trace=trace_data), None
+        trace_data.setdefault("flags", [])
+        text, blocked = self._guard("input", query, question, trace_data)
+        if blocked is not None:
+            return query, blocked, None
         query = replace(query, text=text)
 
         key = None
@@ -144,10 +162,9 @@ class AnswerPipeline:
             hits = post_check(hits)
             trace_data["post_check_dropped"] = before - len(hits)
 
-        hits, blocked, flags = self._guard("context", query, hits)
-        trace_data["flags"] += flags
-        if blocked:
-            return query, Answer(text="", blocked=blocked, trace=trace_data), None
+        hits, blocked = self._guard("context", query, hits, trace_data)
+        if blocked is not None:
+            return query, blocked, None
         if not hits and self.p.abstain_without_hits:
             trace_data["abstained_reason"] = "no relevant documents"
             return query, Answer(text=self.p.abstain_text, abstained=True, trace=trace_data), None
@@ -172,11 +189,13 @@ class AnswerPipeline:
                 text, abstained = self.p.abstain_text, True
         answer = Answer(text=text, citations=() if abstained else checked.citations, abstained=abstained,
                         usage=dict(usage), trace=trace_data)  # fmt: skip
-        out, blocked, flags = self._guard("output", query, answer)
-        trace_data["flags"] += flags
-        if blocked:
-            return Answer(text="", blocked=blocked, usage=dict(usage), trace=trace_data)
-        answer = out if isinstance(out, Answer) else answer
+        # output guards see the answer AND the documents it was given (groundedness needs both)
+        out, blocked = self._guard(
+            "output", query, GeneratedAnswer(answer, context.chunks), trace_data, usage
+        )
+        if blocked is not None:
+            return blocked
+        answer = out.answer if isinstance(out, GeneratedAnswer) else answer
         self._remember(query, answer, session_id, trace_data)
         return answer
 
@@ -265,7 +284,13 @@ class AnswerPipeline:
         yield Event("meta", {"documents": [{"n": i, "document": h.chunk.document_uri, "title": h.chunk.metadata.get("title", "")}
                                            for i, h in enumerate(context.chunks, 1)]})  # fmt: skip
         usage: dict[str, int] = {}
-        parts: list[str] = []
+        if self.p.stream == "checked":  # generate fully, check, then send: never unchecked text
+            parts = list(self.generator.stream(query, context, usage))
+            done = self._finish(query, "".join(parts), usage, context, session_id, trace_data)
+            yield Event("delta", done.text)
+            yield Event("done", done)
+            return
+        parts = []
         for delta in self.generator.stream(query, context, usage):
             parts.append(delta)
             yield Event("delta", delta)

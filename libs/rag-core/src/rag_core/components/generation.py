@@ -334,6 +334,10 @@ class AnswerParams(_Strict):
     history_turns: int = Field(
         default=6, ge=0
     )  # earlier turns given to search (rewrite) and memory
+    blocked_text: str = "I can't help with that request."  # what a person sees when a guard blocks
+    # live: words are sent as generated, output guards check the final text ("done" replaces it);
+    # checked: nothing is sent until output guards have passed (slower to start, never unchecked)
+    stream: Literal["live", "checked"] = "live"
 
 
 @register("pipeline", "standard", params=AnswerParams,
