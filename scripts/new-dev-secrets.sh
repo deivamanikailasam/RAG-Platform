@@ -90,6 +90,13 @@ RAG_API_VALKEY_URL=redis://rag_app:${valkey_app}@valkey:6379/0
 RAG_PII_HMAC_KEY=$(openssl rand -hex 32)
 EOF
 
+# --- OpenBao (Step 28): rag-api's OPA token under the name `just vault-put rag-api ... opa_token=RAG_API_OPA_TOKEN`
+#     reads. It MUST equal OPA_API_TOKEN (OPA's system.authz compares the two), so it is copied, not generated ---
+opa_token=$(grep '^OPA_API_TOKEN=' "$out" | cut -d= -f2)
+cat >> "$out" <<EOF
+RAG_API_OPA_TOKEN=${opa_token}
+EOF
+
 # --- Backups (Step 36): the dump runs as the table owner (row-level security doesn't apply to it);
 #     the restore drill needs an admin login to create and drop a scratch database ---
 migrator=$(grep '^RAG_DB_MIGRATOR_PASSWORD=' "$out" | cut -d= -f2)

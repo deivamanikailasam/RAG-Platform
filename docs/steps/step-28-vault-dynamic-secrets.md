@@ -459,6 +459,13 @@ ok: 2 approles
 ok: admin login
 ```
 
+> **TIP**
+> `vault-put` takes `key=ENV_VAR` pairs and reads each value from your SOPS env, never from the
+> command line. `RAG_API_OPA_TOKEN` is written by `scripts/new-dev-secrets.sh` as a copy of
+> `OPA_API_TOKEN` (OPA checks rag-api's token against that value, so they must match);
+> `RAG_API_GATEWAY_KEY` is the virtual key you created in Step 10. A missing variable is named and
+> nothing is written.
+
 A person who needs to look at the data gets a read-only login that expires on its own:
 
 ```bash

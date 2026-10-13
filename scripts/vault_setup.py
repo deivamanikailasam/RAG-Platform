@@ -358,7 +358,12 @@ def main(argv: list[str]) -> int:
                 print("ok:", item)
         elif a.cmd == "put":
             # values come from environment variables (your SOPS env), never from the command line
-            values = {k: os.environ[v] for k, v in (pair.split("=", 1) for pair in a.pairs)}
+            pairs = [pair.split("=", 1) for pair in a.pairs]
+            if missing := [v for _, v in pairs if v not in os.environ]:
+                raise KeyError(
+                    f"not in your SOPS env (add with `just secrets-edit`): {', '.join(missing)}"
+                )
+            values = {k: os.environ[v] for k, v in pairs}
             print(
                 f"secret/{a.path}: version {put_secret(bao, a.path, values)} "
                 f"({', '.join(sorted(values))})"

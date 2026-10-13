@@ -720,3 +720,54 @@ def test_the_ingestion_worker_has_its_own_identity(k8s_trusted: Env, cluster: Ap
         400,
         403,
     )
+
+
+# --- `just vault-put` reads every value from the SOPS env (review fix) ---------------------------
+
+
+def test_vault_put_names_the_missing_variables(monkeypatch: pytest.MonkeyPatch,
+                                               capsys: pytest.CaptureFixture[str]) -> None:  # fmt: skip
+    monkeypatch.setenv("BAO_TOKEN", "unused")  # never reaches the server: the check comes first
+    monkeypatch.setenv("SET_ONE", "v")
+    monkeypatch.delenv("NOT_SET_ANYWHERE", raising=False)
+    assert vs.main(["put", "rag-api", "a=SET_ONE", "b=NOT_SET_ANYWHERE"]) == 1
+    err = capsys.readouterr().err
+    assert "NOT_SET_ANYWHERE" in err
+    assert "SET_ONE" not in err
+
+
+def test_generator_holds_every_variable_the_documented_vault_put_reads(tmp_path: Path) -> None:
+    """Run the REAL generator (with a stand-in `sops` that only marks the file encrypted) and check
+    that `just vault-put rag-api gateway_key=… opa_token=RAG_API_OPA_TOKEN …` finds its values."""
+    if not shutil.which("openssl"):
+        pytest.skip("needs openssl")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    if not shutil.which("uuidgen"):  # macOS has it; minimal Linux images may not
+        (bin_dir / "uuidgen").write_text(
+            f"#!/bin/sh\nexec {sys.executable} -c 'import uuid; print(uuid.uuid4())'\n"
+        )
+        (bin_dir / "uuidgen").chmod(0o755)
+    fake_sops = bin_dir / "sops"
+    fake_sops.write_text('#!/usr/bin/env bash\necho "sops_mac=test" >> "${@: -1}"\n')
+    fake_sops.chmod(0o755)
+    env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"}
+    subprocess.run(["bash", str(ROOT / "scripts/new-dev-secrets.sh")], cwd=tmp_path, env=env,  # noqa: S603, S607
+                   check=True, capture_output=True)  # fmt: skip
+    values = dict(
+        line.split("=", 1)
+        for line in (tmp_path / "secrets/dev.enc.env").read_text().splitlines()
+        if "=" in line and not line.startswith("#")
+    )
+    # the same value OPA checks against (system.authz compares it with OPA_API_TOKEN)
+    assert values["RAG_API_OPA_TOKEN"] == values["OPA_API_TOKEN"] != ""
+    # generated values the guide's vault-put lines name (RAG_API_GATEWAY_KEY is a virtual key added by hand)
+    for var in (
+        "RAG_API_VALKEY_URL",
+        "S3_INGEST_ACCESS_KEY",
+        "S3_INGEST_SECRET_KEY",
+        "RAG_PII_HMAC_KEY",
+    ):
+        assert values[var], var
+    example = (ROOT / ".env.example").read_text()
+    assert "\nRAG_API_OPA_TOKEN=" in example

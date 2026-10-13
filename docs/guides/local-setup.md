@@ -506,16 +506,17 @@ Store what rag-api's agent will write for rag-api and the worker. A KV write **r
 secret, so always put every value:
 
 ```bash
-just vault-put rag-api gateway_key=RAG_API_GATEWAY_KEY opa_token=OPA_API_TOKEN \
+just vault-put rag-api gateway_key=RAG_API_GATEWAY_KEY opa_token=RAG_API_OPA_TOKEN \
   valkey_url=RAG_API_VALKEY_URL s3_access_key=S3_INGEST_ACCESS_KEY s3_secret_key=S3_INGEST_SECRET_KEY \
   pii_hmac_key=RAG_PII_HMAC_KEY
 ```
 
-> **NOTE · `opa_token=OPA_API_TOKEN`**
-> The step write-ups print `opa_token=RAG_API_OPA_TOKEN`. `vault-put` reads each value from the
-> environment variable you name, and the generated secrets file holds the OPA token as
-> `OPA_API_TOKEN` (the same value Compose already gives rag-api as `rag_api_opa_token`). Either name
-> works if it exists in your SOPS file; `OPA_API_TOKEN` exists without editing anything.
+> **TIP · where `RAG_API_OPA_TOKEN` comes from**
+> `vault-put` reads each value from the environment variable you name. `just secrets-init` (scripts/new-dev-secrets.sh) writes
+> `RAG_API_OPA_TOKEN` as a copy of `OPA_API_TOKEN`: OPA compares the token rag-api presents with its
+> own `OPA_API_TOKEN`, so the two must be equal. A secrets file made before this was added lacks the
+> name: add `RAG_API_OPA_TOKEN=<the OPA_API_TOKEN value>` with `just secrets-edit`. If a variable is
+> missing, `vault-put` names it and writes nothing.
 
 **Check Stage I:**
 

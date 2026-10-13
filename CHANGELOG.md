@@ -50,3 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Appendix A as `docs/reference.md`: every file, setting and command of the 38 steps, mapped to this repository's paths.
 - Appendices B and C and the introduction checked against the repository (`docs/coverage-audit.md`): 70 missing glossary terms added, the catalogue confirmed (94 components in 24 kinds), every scope-table component and folder-map entry located; the Brewfile, reference crontab and two migration names aligned with Appendix A.
 - Handbook documentation in plain English: a documentation map (`docs/README.md`); a detailed from-zero local setup guide (`docs/guides/local-setup.md`) and a laptop-to-production promotion guide with the pre-production checklist (`docs/guides/production-promotion.md`); the architecture and system design overview with every ADR summarised (`docs/architecture/overview.md`); the RAG handbook of techniques and how to switch them (`docs/concepts/rag-handbook.md`); the quality, observability, security and governance guide (`docs/guides/quality-and-operations.md`); a guide to starting a new RAG project on the reuse kit (`docs/guides/new-rag-project.md`); `CONTRIBUTING.md` and `SECURITY.md`; the root README links to them.
+
+### Fixed
+
+- `just vault-put rag-api … opa_token=RAG_API_OPA_TOKEN` works as the steps print it: the secrets generator writes `RAG_API_OPA_TOKEN` (a copy of `OPA_API_TOKEN`), `.env.example` documents it, and `vault-put` names any missing variable instead of failing with a bare KeyError.
