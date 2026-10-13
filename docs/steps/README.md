@@ -43,3 +43,4 @@ Phases: **A** Workstation · **B** Model serving · **C** Data stores · **D** I
 | 29 | Kubernetes and GitOps with Argo CD | G · Quality & delivery | [step-29-kubernetes-gitops-argo-cd.md](step-29-kubernetes-gitops-argo-cd.md) |
 | 30 | The RAG core: contracts and switchable components | H · RAG core | [step-30-rag-core-contracts-and-components.md](step-30-rag-core-contracts-and-components.md) |
 | 31 | Ingestion: from any document to searchable chunks | H · RAG core | [step-31-ingestion-pipeline.md](step-31-ingestion-pipeline.md) |
+| 32 | Retrieval and ranking: finding the right chunks | H · RAG core | [step-32-retrieval-and-ranking.md](step-32-retrieval-and-ranking.md) |

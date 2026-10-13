@@ -135,6 +135,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Data retention | How long data is kept before it is deleted; for Langfuse traces, 30 days, enforced by our own nightly job because automatic retention is an Enterprise feature when self-hosted. | 22 |
 | Database secrets engine | The OpenBao plug-in that creates a database user on request (CREATE ROLE … VALID UNTIL …) and drops it when the lease ends. | 28 |
 | Dataset card / datasheet | A short document about a dataset: provenance, every location, personal data and legal basis, retention, deletion route, access, gaps. | 25 |
+| DBSF (distribution-based score fusion) | A way to merge ranked lists by first scaling each list by its own spread (its mean plus or minus three standard deviations), so one extreme score doesn't squash the rest; the method Qdrant uses. | 32 |
 | Dead-letter queue (DLQ) | Where jobs go after failing too many times (here: 3 deliveries), so they stop retrying forever and a human can inspect them. | 15 |
 | Decision log | OPA's record of every decision (input, result, path, time, `decision_id`), written as JSON; the audit evidence for "who was allowed what, and why". | 18 |
 | Decode | The second phase of generation: the model writes the answer one token at a time; its speed is limited by memory bandwidth. | 7 |
@@ -144,6 +145,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Default privileges (ALTER DEFAULT PRIVILEGES) | A standing instruction that every table a given role creates from now on automatically gets certain grants, so new tables are never invisible to the app. | 11 |
 | Delete marker | With versioning on, "delete" only adds a marker that hides the object; older versions still exist until each is deleted by version ID. | 14 |
 | Delimiting | Wrapping untrusted text in clear markers (here XML-style tags like `<question>…</question>`) and telling the model that what's inside is data, not instructions. | 24 |
+| Dense retrieval | Search by meaning: the question and the chunks are turned into vectors and the closest vectors win. Finds "holiday" when the text says "annual leave"; misses exact codes like "E-4021". | 32 |
 | Deny by default | Nothing is allowed unless a rule explicitly allows it; in Rego, `default allow := false`. | 18 |
 | Dependabot | GitHub's bot that opens pull requests to update pinned versions (action SHAs, `uv.lock`, base images); CI tests each one before merging. | 27 |
 | Dependency | A package your project needs in order to work. | 2 |
@@ -189,6 +191,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Extension (Postgres) | An add-on that teaches Postgres new tricks; `vector` (pgvector) adds vector types and indexes. | 11 |
 | Fail closed | When unsure, deny: no groups in the token means no documents, not all documents; an unreachable key service means 503, not "let it through". | 17 |
 | Fail open | The opposite of fail closed: when something breaks or a fact is missing, let the request through. Never acceptable for security; an undefined Rego value can cause it silently. | 18 |
+| Fail open (search helpers) | For helpers that only improve results (a reranker, a query rewriter): when one fails, continue without it and record that, instead of failing the whole search. Never used for access checks, which always fail closed. | 32 |
 | Faithfulness | Every claim in an answer is supported by the documents it was given (nothing invented). | 26 |
 | Fallback | Sending a request to a different model when the first one fails; fine between chat models, never between embedders (different vector spaces). | 10 |
 | False positive | A check flags something that is actually fine; silence it narrowly, with a comment explaining why. | 5 |
@@ -197,6 +200,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Formatter | A tool (e.g. `ruff format`) that rewrites code layout into one consistent style without changing what it does. | 5 |
 | Formula | A Homebrew package that is a command-line tool. | 1 |
 | Full-text search / tsvector | Postgres's built-in keyword search: words normalised to stems (a `tsvector`) and indexed with GIN. | 11 |
+| Fusion (rank fusion) | Merging several ranked lists (from vector search, keyword search, or several search texts) into one list, without adding raw scores of different kinds. | 32 |
 | Gate (quality gate) | Pass/fail rules a run must meet before a change ships: thresholds in `evals/gates.yaml`, the prompt's own `min_score`, and no regression against the baseline. | 26 |
 | Gateway (AI / LLM gateway) | A server in front of all model servers: every request passes through it for authentication, allow-listing, routing, limits and logging. | 9 |
 | GenAI semantic conventions | The emerging standard `gen_ai.*` attribute names for model calls (operation, model, token usage), so LLM tools and vendor dashboards understand each other. | 19 |
@@ -227,6 +231,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Homebrew | The standard package manager ("app store for developer tools") on macOS. | 1 |
 | host.docker.internal | The address a container uses to reach programs running on the host Mac itself. | 3 |
 | Hybrid search | Running keyword (BM25) and vector search together and fusing their normalised scores; robust across exact-code and paraphrase questions. | 13 |
+| HyDE (Hypothetical Document Embeddings) | Let an LLM write a plausible answer to the question, then search with that passage (embedded like a document), because answers look more like answers than questions do. | 32 |
 | Hypothetical questions | Questions an LLM says a chunk answers, embedded with it so that how users ask and how documents state meet in the same place. | 31 |
 | ID token | The token that tells the app (not the API) who signed in: name, username, email. | 16 |
 | Idempotency | Doing a job twice has the same effect as doing it once ("upsert chunks for document X at hash Y", not "append chunks"). Required with at-least-once delivery. | 15 |
@@ -277,6 +282,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Line filter (LogQL) | A LogQL step that keeps only lines containing (`|=`), not containing (`!=`) or matching (`|~`) some text, e.g. `|= "4bf92f35…"` to find one request's lines. | 21 |
 | Lineage | The recorded chain from an output (an answer) back to its inputs (chunks → document → exact file version). | 14 |
 | Linter / static analysis | A tool (e.g. `ruff check`) that reads code without running it and flags likely bugs and risky patterns, each as a coded rule like `B006`. | 5 |
+| Listwise reranking | Reranking where an LLM sees all candidate passages at once and returns their order ("3 > 1 > 2"); strong on reasoning-heavy questions, slow and costly. | 32 |
 | Liveness / readiness | Two health questions: "is the process alive?" (restart it if not) and "can it serve traffic yet?". | 9 |
 | LLM observability | Recording what an AI system was asked, what it looked up and what it answered, to debug and improve it (Langfuse here). | 22 |
 | LLM-as-judge | A model grading another model's answer against a reference. Useful, but biased (prefers longer answers and its own style) and fallible, so here it only advises. | 26 |
@@ -307,14 +313,17 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Metric | A number measured over time (requests per second, latency, errors); answers "is something wrong?". | 19 |
 | MFA / TOTP | Multi-factor authentication: a second proof besides the password. TOTP is the six-digit, time-based code from an authenticator app. | 16 |
 | Migration | A versioned, reviewable script that changes the database structure, applied in order and recorded in the database. | 11 |
+| Min-max normalisation | Stretching a list of scores so the lowest becomes 0 and the highest 1, so scores of different kinds can be weighted and added; sensitive to outliers. | 32 |
 | Mixture of Experts (MoE) | A model that stores many specialist sub-networks but uses only a few per token: memory like a big model, speed like a small one. | 7 |
 | ML-BOM | A machine-readable bill of materials listing models and datasets (CycloneDX ML-BOM, SPDX 3 AI/Dataset profiles). | 25 |
+| MMR (Maximal Marginal Relevance) | Choosing results one by one, each time the candidate that is relevant AND least like those already chosen: fewer near-repeats in the context. | 32 |
 | Model alias (model group) | The public role name clients use, such as `qwen-fast`; LiteLLM calls it `model_name`. | 9 |
 | Model card | A short document about one model: what it is, where it came from, intended use and out-of-scope use, limits, risks, evaluation, licence. | 25 |
 | Model inventory | A reviewed list of which exact models a platform serves: repo, revision, licence, port, role and who approved it (`infra/model-serving/models.yaml`). | 7 |
 | Model revision | The exact git commit (40-character SHA) of a model repository on Hugging Face; the same name isn't always the same model. | 7 |
 | Monorepo | One repository holding all services, libraries, infrastructure and docs. | 4 |
 | MRR (mean reciprocal rank) | On average over queries, 1 / position of the first relevant result: 1.0 means the right document always comes first. | 26 |
+| Multi-query | An LLM writes several paraphrases of the question; each is searched and the lists are fused. Better recall for questions worded unlike the documents, at the cost of more searches. | 32 |
 | Multi-stage build | A Dockerfile with several `FROM` stages: one with build tools makes the result, the final small image copies only that result (here the finished `.venv`). | 17 |
 | Multitenancy / tenant | Serving many customers or departments from one system / one such customer, whose data must stay separate. | 12 |
 | Multi-window alert | A burn-rate alert that requires both a long window (1 h or 6 h: a real trend) and a short one (5 min or 30 min: still happening) to be over the threshold, so blips don't page and alerts clear quickly after recovery. | 20 |
@@ -420,12 +429,16 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Push / pull | Send your commits to the remote / fetch other people's commits from it. | 4 |
 | pyproject.toml | The standard Python project file listing the dependency ranges you'll accept (PEP 621). | 2 |
 | Quantization | Storing each of a model's numbers in fewer bits (8-bit, 4-bit): smaller and faster, at the cost of a little accuracy. | 7 |
+| Query decomposition | An LLM splits a compound question ("X and Y?") into simpler sub-questions that are each searched, so each part finds its own document. | 32 |
 | Query instruction | A one-sentence task description prefixed to queries (not documents) for instruction-aware embedders: `Instruct: {task}\nQuery:{query}`. | 8 |
+| Query rewriting | Turning the question into a better search query; for a follow-up ("how do I fix it?"), rewriting it as a standalone question using the conversation. | 32 |
+| Query transformation | Changing what is searched for before retrieval: expanding acronyms, rewriting, paraphrasing, imagining an answer, splitting or generalising the question. | 32 |
 | `rate()` / `increase()` | PromQL functions for counters: `rate` is the per-second speed over a window, `increase` the total growth over it. Both handle counter resets when a process restarts; neither can see a counter's first appearance as growth. | 20 |
 | Rate limit (RPM / TPM) | How many requests per minute / tokens per minute a key may use; going over returns 429 Too Many Requests. | 10 |
 | Raw zone (bronze) | The part of a data platform holding immutable original data, from which everything else can be rebuilt. | 14 |
 | RBAC (role-based access control) | Deciding what each user, key or token may read or write by the role or permissions it carries. | 12 |
 | recall@k | The share of the relevant documents found in the top k results. "Did we find what matters?" | 26 |
+| Recency boost | Blending relevance with freshness (a half-life on a date in the chunk's metadata), so the 2026 policy outranks the 2021 one when both are about equally relevant. | 32 |
 | Recording rule | A PromQL query Prometheus pre-computes on every evaluation and stores under a new name (e.g. `rag:search_errors:ratio_rate1h`), so dashboards and alerts stay fast and consistent. | 20 |
 | Re-indexing | Re-embedding every stored document because the embedding contract changed; planned like a migration. | 8 |
 | Read-only filesystem (container) | Starting a container so it can't write to its own files (`read_only: true`), with a small RAM `tmpfs` for scratch space; here code ownership by root gives the same protection because Compose can't combine it with environment-sourced secrets. | 17 |
@@ -449,6 +462,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Renew (lease) | Extending a lease before it expires, up to its max TTL. For our database logins a renewal also moves the Postgres VALID UNTIL forward. | 28 |
 | Repository | The project's filing cabinet: all files plus their full history of changes (git). | 4 |
 | Required action | Something a user must do at their next sign-in: change a temporary password, set up MFA (`CONFIGURE_TOTP`), verify an email. | 16 |
+| Reranking | Re-ordering the best few dozen candidates with a stronger, slower model (a cross-encoder or an LLM) that reads the question and each passage together. | 32 |
 | Rescoring | After a fast search on compressed vectors, re-ranking the top candidates using the original vectors to recover accuracy. | 12 |
 | Resource (OpenTelemetry) | Facts about the process sending telemetry (`service.name`, version, environment), attached to every span and metric. | 19 |
 | ResourceQuota | A ceiling for a whole namespace: total CPU and memory requests and limits, number of pods. | 29 |
@@ -470,6 +484,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Rotation | Replacing a secret with a new value on a schedule, or immediately after a suspected leak. | 6 |
 | Routing | Choosing which real backend (deployment) answers a request for a given model alias. | 9 |
 | Routing (alerts) | Alertmanager's tree of matchers that sends each alert to a receiver: here `severity="critical"` goes to `platform-team-urgent` (page), everything else to `platform-team` (ticket). | 20 |
+| RRF (Reciprocal Rank Fusion) | The default way to merge ranked lists: each chunk scores 1/(60 + its rank) in every list it appears in, summed. Uses only positions, so it needs no tuning. | 32 |
 | Rule (Rego) | A named statement such as `allow if { ... }`, true when every line in its body is true; several rules with the same name mean OR. | 18 |
 | Runbook | Step-by-step instructions linked from an alert: what it means, what to check first, likely causes, how to fix, how to close. Every alert here links one under `docs/runbooks/`. | 20 |
 | Runner (hosted, self-hosted) | The machine that runs a CI job: GitHub-hosted (a fresh VM each time) or self-hosted (your own, e.g. the Mac with the models; never for fork code). | 27 |
@@ -528,6 +543,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Source of truth | The one authoritative store that decides what exists and who may see it; every other copy is derived from it. | 12 |
 | Span | One timed step in a request: name, start, duration, status and attributes. | 19 |
 | Span metrics | Request rate, errors and duration per service and span name (`traces_spanmetrics_*`), computed from traces by Tempo's metrics generator. | 21 |
+| Sparse (keyword) retrieval | Search by words: BM25 or Postgres full-text search. Finds exact codes and names ("E-4021") but misses synonyms. | 32 |
 | Sparse vector | A vector that's mostly zeros, stored as (position, value) pairs; used for keyword-like retrieval (SPLADE, BM25-style). | 12 |
 | SPDX licence id | The standard short name for a licence (`apache-2.0`, `mit`), so tools can compare them. | 25 |
 | Speculative decoding | A small draft model guesses a few tokens ahead and the big model checks them in one pass, speeding up decoding (`--draft-model`). | 7 |
@@ -539,6 +555,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Staged files | The files you have `git add`-ed: exactly what the next commit will contain, and what hooks check. | 5 |
 | Status: live / mocked / reference | How a rag-core component is tested here: against the real service, against its exact HTTP requests, or not at all (needs heavy extras). | 30 |
 | Stemming | Reducing words to a common root ("Fridays" → "fridai") so variations of a word match. | 13 |
+| Step-back prompting | An LLM writes a more general question about the principle behind the user's question; searching both finds the background policy as well as the specific rule. | 32 |
 | Stream (Loki) | All log lines that share exactly the same set of labels; each unique label combination is a separate stream, so labels must have few values. | 21 |
 | Stream (Valkey/Redis) | An append-only log of messages, each with an increasing ID (`XADD`); with consumer groups it works as a crash-safe job queue. | 15 |
 | Streaming (SSE) | Sending an answer token by token as it is generated, over Server-Sent Events, instead of all at the end. | 9 |
