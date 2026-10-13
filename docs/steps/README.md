@@ -45,3 +45,4 @@ Phases: **A** Workstation · **B** Model serving · **C** Data stores · **D** I
 | 31 | Ingestion: from any document to searchable chunks | H · RAG core | [step-31-ingestion-pipeline.md](step-31-ingestion-pipeline.md) |
 | 32 | Retrieval and ranking: finding the right chunks | H · RAG core | [step-32-retrieval-and-ranking.md](step-32-retrieval-and-ranking.md) |
 | 33 | Augmentation and generation: cited answers | H · RAG core | [step-33-augmentation-and-generation.md](step-33-augmentation-and-generation.md) |
+| 34 | Guardrails: checks before and after the model | H · RAG core | [step-34-guardrails.md](step-34-guardrails.md) |

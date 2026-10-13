@@ -82,6 +82,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Card status | Where a component is in its life: `planned → candidate → approved → deprecated → retired`; only approved or candidate models may be served. | 25 |
 | Cardinality | How many distinct values a label has. User ids as metric labels create one time series per user: slow dashboards and big bills; keep labels to small fixed sets like `outcome` = ok or error. | 19 |
 | Cask | A Homebrew package that is a normal Mac app with a window. | 1 |
+| Catch rate | The share of known attacks a set of guards stops, redacts or flags. Only meaningful next to the false positive rate: a guard that blocks everything catches 100%. | 34 |
 | CEL (Common Expression Language) | A small, safe expression language (no endless loops, no network calls) used by ValidatingAdmissionPolicies. | 29 |
 | Chat template | The model-specific recipe that turns a list of messages into the exact text format the model was trained on. | 7 |
 | Chunk | A piece of a document that is embedded, retrieved and cited on its own; it carries a stable id, its text, what was embedded, its access rules and metadata. | 31 |
@@ -137,6 +138,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | CycloneDX / SPDX | The two standard SBOM formats; Syft writes CycloneDX JSON here. SPDX also names the standard licence ids. | 27 |
 | DAG (directed acyclic graph) | Arrows with no loops. Lineage must be one, or "what was this built from?" has no answer. | 25 |
 | Dashboards as code | Generating dashboard definitions (Grafana JSON) from reviewed code in Git (`scripts/build_dashboards.py`) instead of clicking in the UI, with a check that fails when the committed JSON is out of date. | 20 |
+| Data exfiltration (LLM) | Smuggling data out through the model, for example by getting it to put private text into a link or image URL that the user's browser then loads from an attacker's server. | 34 |
 | Data filtering / partial evaluation (OPA) | OPA evaluating a policy with some facts still unknown and turning the rest into a filter, even a SQL `WHERE` clause, that a database can apply. | 18 |
 | Data key | The random key SOPS creates per file to lock every value; it is itself locked once per recipient. | 6 |
 | Data retention | How long data is kept before it is deleted; for Langfuse traces, 30 days, enforced by our own nightly job because automatic retention is an Enterprise feature when self-hosted. | 22 |
@@ -150,8 +152,10 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | `default` (Rego) | The value a rule takes when none of its bodies match, e.g. `default allow := false`; the building block of deny by default. | 18 |
 | Deduplication | Dropping exact repeats (the same paragraph twice) so they don't crowd out everything else in search results. | 31 |
 | Default privileges (ALTER DEFAULT PRIVILEGES) | A standing instruction that every table a given role creates from now on automatically gets certain grants, so new tables are never invisible to the app. | 11 |
+| Defence in depth | Several independent layers of protection (identity, policy, ingestion redaction, store filters, citations, guards, audit), so one failing doesn't expose everything. | 34 |
 | Delete marker | With versioning on, "delete" only adds a marker that hides the object; older versions still exist until each is deleted by version ID. | 14 |
 | Delimiting | Wrapping untrusted text in clear markers (here XML-style tags like `<question>…</question>`) and telling the model that what's inside is data, not instructions. | 24 |
+| Denied topic | A subject the assistant must not advise on (legal, medical, investment); questions about it get a fixed, helpful "contact the right team" message. | 34 |
 | Dense retrieval | Search by meaning: the question and the chunks are turned into vectors and the closest vectors win. Finds "holiday" when the text says "annual leave"; misses exact codes like "E-4021". | 32 |
 | Deny by default | Nothing is allowed unless a rule explicitly allows it; in Rego, `default allow := false`. | 18 |
 | Dependabot | GitHub's bot that opens pull requests to update pinned versions (action SHAs, `uv.lock`, base images); CI tests each one before merging. | 27 |
@@ -200,9 +204,11 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Fail closed | When unsure, deny: no groups in the token means no documents, not all documents; an unreachable key service means 503, not "let it through". | 17 |
 | Fail open | The opposite of fail closed: when something breaks or a fact is missing, let the request through. Never acceptable for security; an undefined Rego value can cause it silently. | 18 |
 | Fail open (search helpers) | For helpers that only improve results (a reranker, a query rewriter): when one fails, continue without it and record that, instead of failing the whole search. Never used for access checks, which always fail closed. | 32 |
+| Fail open / fail closed (guards) | What a guard does when its service or model can't be reached: flag and let the other guards decide (open, the default here) or block (closed). A per-project policy choice. | 34 |
 | Faithfulness | Every claim in an answer is supported by the documents it was given (nothing invented). | 26 |
 | Fallback | Sending a request to a different model when the first one fails; fine between chat models, never between embedders (different vector spaces). | 10 |
 | False positive | A check flags something that is actually fine; silence it narrowly, with a comment explaining why. | 5 |
+| False positive (guards) | An ordinary request wrongly stopped by a guard; measured as the false positive rate by `rag eval-guards` and gated in CI as closely as the catch rate. | 34 |
 | FinOps | The practice of making technology spend visible, attributed to teams, and managed against budgets; AI FinOps applies it to model usage. | 10 |
 | `for` (alert duration) | How long an alert's condition must stay true before it fires (`for: 2m`). Stops a single wobbly reading from paging anyone. | 20 |
 | Formatter | A tool (e.g. `ruff format`) that rewrites code layout into one consistent style without changing what it does. | 5 |
@@ -223,8 +229,10 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Golden dataset | Test cases with known good answers (or expected documents), written and checked by people, versioned and pinned by hash. | 26 |
 | Graceful degradation | Continuing with reduced quality or features instead of failing completely, e.g. skipping reranking and flagging the answer when the reranker is down. | 10 |
 | Grant / flow | A standard recipe for getting a token: authorization code + PKCE (web apps), device flow (CLIs), client credentials (machines). The password grant (ROPC) is switched off. | 16 |
+| Groundedness | Whether each claim in an answer is supported by the sources the model was given; checked here lexically (content words and exact numbers must appear in the sources). | 34 |
 | Group (Keycloak) | A set of users who are "with" each other (department, team). It decides what you may SEE: its name goes into the token's `groups` claim and matches documents' `acl_groups`. | 16 |
 | Grouping (alerts) | Alertmanager combining related alerts (same `alertname` and `service` here) into one notification instead of one per time series. | 20 |
+| Guardrail (guard) | A check before or after the model (on the question, the retrieved documents or the answer) that can allow, flag, redact or block. | 34 |
 | halfvec | A pgvector type that stores each number in 2 bytes instead of 4: half the storage, negligible quality loss for embeddings. | 11 |
 | Hallucination | A fluent, confident answer that isn't supported by the sources (or by reality). | 33 |
 | Hash | A short fingerprint calculated from a file's contents; change one byte and it changes completely. | 2 |
@@ -264,6 +272,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Issuer (`iss`) | The claim naming who made a token (`http://localhost:8180/realms/rag`); APIs only accept tokens from the issuer they trust. | 16 |
 | Iterative scan | pgvector 0.8+ setting (`hnsw.iterative_scan`) that keeps scanning the index until enough rows pass the filters, avoiding silently short results. | 11 |
 | IVFFlat | An older pgvector index that groups vectors into lists (clusters) and searches only the nearest lists; faster to build, usually lower recall than HNSW. | 11 |
+| Jailbreak | A prompt designed to get a model past its safety rules ("you are now DAN…", "developer mode"). | 34 |
 | justfile | A menu of named command shortcuts run with `just <recipe>` (e.g. `just check`), reused by CI. | 4 |
 | JVM heap | The working memory of a Java program such as OpenSearch; typically about half the container's memory, fixed and locked in RAM. | 13 |
 | JWKS (JSON Web Key Set) | The public keys an identity provider publishes (`…/protocol/openid-connect/certs`) so anyone can check its token signatures. | 16 |
@@ -422,6 +431,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Prompt cache | Reusing the KV cache of a prompt start sent before (e.g. the same system prompt), which makes TTFT much faster. | 7 |
 | Prompt injection (as a test) | An evaluation case that deliberately attacks the prompt, through a hostile document or question, and passes only if the answer ignores the attack (e.g. never says "PWNED"). | 26 |
 | Prompt injection (direct, indirect) | Text that tries to make the model follow its instructions instead of yours. Direct: typed by the user. Indirect: hidden in a retrieved document or web page. | 24 |
+| Prompt leaking | Getting the model to reveal its system prompt or hidden instructions ("print your system prompt"). | 34 |
 | Prompt registry | One place where all prompts live, with versions, owners, history and labels; here the `prompts/` folder plus `rag_common.prompts`. | 24 |
 | Prompt template | A prompt with placeholders that get filled in for each request. | 24 |
 | Prompts as code | Keeping prompts as files in git, so they get reviews, history and CI like code. | 24 |
@@ -458,7 +468,9 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Recall | Of the truly closest results, the share the fast (approximate) search actually returned. | 11 |
 | Receiver / processor / exporter | The Collector's building blocks: a receiver takes data in (OTLP), a processor changes it (limit, scrub, redact, label, batch), an exporter sends it out (debug, Prometheus, Tempo…). | 19 |
 | Recipient | Someone (or a machine) whose public key can open a SOPS file: you, CI, a teammate. | 6 |
+| Red teaming | Deliberately attacking your own system to find what gets through; each attack found becomes a regression case in `examples/eval/guards.yaml`. | 34 |
 | Redaction | Masking a value that looks like a secret (`****`) so the record survives but the secret doesn't; the Collector's safety net for JWTs, keys and emails. | 19 |
+| Redaction (guards) | Replacing the sensitive parts of a payload (an email address, a key, an unsupported sentence, a poisoned document) while keeping the rest; a guard's `redact` verdict. | 34 |
 | Reference implementation | The simple, obviously correct version of a component (exact cosine search, textbook BM25) that faster real implementations are compared against. | 30 |
 | Refresh token | A longer-lived token an app swaps for new access tokens without signing in again; here it is one-time use and dies at logout. | 16 |
 | Refusal accuracy | How often the system says "I don't know…" when the documents really don't contain the answer. | 26 |
@@ -499,6 +511,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Runbook | Step-by-step instructions linked from an alert: what it means, what to check first, likely causes, how to fix, how to close. Every alert here links one under `docs/runbooks/`. | 20 |
 | Runner (hosted, self-hosted) | The machine that runs a CI job: GitHub-hosted (a fresh VM each time) or self-hosted (your own, e.g. the Mac with the models; never for fork code). | 27 |
 | S3 endpoint | The server URL to send S3 requests to (here `http://127.0.0.1:8333`), passed to tools as `--endpoint-url` / `endpoint_url`. | 14 |
+| Safety classifier | A model that labels text as safe or unsafe by category (Llama Guard, ShieldGemma, Granite Guardian); used here through the `llm-judge` guard. | 34 |
 | Salt key (LITELLM_SALT_KEY) | A secret LiteLLM uses to encrypt credentials it stores in its database; it must never change, or those become unreadable. | 10 |
 | Sampling (head / tail) | Keeping only some traces. Head sampling decides when a request starts; tail sampling decides after seeing the whole trace (e.g. keep all errors and slow ones). | 19 |
 | SBOM (software bill of materials) | The list of every component in an artefact, with versions: the ingredients list for an image, so you can tell which images contain a vulnerable library. | 27 |
@@ -605,6 +618,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Tokenizer | The model's dictionary for converting text to tokens and back. | 7 |
 | Tokenizer (search) | The analyzer step that splits text into words (tokens); not the same as an LLM's tokenizer. | 13 |
 | Tokens per second (tok/s) | How fast an answer streams once it starts; mostly set by memory bandwidth. | 7 |
+| Toxicity | Insulting, hateful or abusive language; checked here with a small word list as a baseline to replace with a classifier. | 34 |
 | Trace | All the spans of one request, across all services, sharing one trace id. | 19 |
 | Trace backend | A store that keeps traces and finds them by id or by query (Tempo here; Jaeger is another). | 21 |
 | traceparent (W3C Trace Context) | The standard HTTP header that carries the trace id and parent span id to the next service. | 19 |
