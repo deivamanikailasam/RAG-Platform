@@ -13,6 +13,7 @@ allowed:                  # permissive: use, change and ship freely, keeping the
   - Unlicense
   - Zlib
   - CC0-1.0               # public-domain dedication; numpy ships small CC0 parts (added in this repo)
+  - MIT-CMU               # permissive (HPND family); Pillow, which reportlab needs for test PDFs (Step 31)
 review_required:          # allowed only with a recorded reason (who decided, and why it's fine for us)
   LGPL-3.0-only: >-
     psycopg (Step 11): used unmodified as a separately installed library, never copied into our
@@ -29,6 +30,7 @@ denied:                   # strong copyleft or source-available: never without l
 exceptions:               # metadata is missing or ambiguous: the licence a person verified by reading it
   Events: {licence: BSD-3-Clause, verified: 2026-10-13}   # opensearch-py dependency; declares just "BSD"
   nodeenv: {licence: BSD-3-Clause, verified: 2026-10-12}
+  reportlab: {licence: BSD-3-Clause, verified: 2026-10-13}   # writes the ingestion tests' PDFs; declares "BSD license"
   python-dateutil: {licence: Apache-2.0 OR BSD-3-Clause, verified: 2026-10-12}
   python-discovery: {licence: MIT, verified: 2026-10-12}
 ignore:                   # our own workspace packages

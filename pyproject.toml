@@ -9,6 +9,7 @@ dependencies = []
 dev = [
     "boto3>=1.43.0",               # AWS SDK: type-checks and tests the s3_*.py scripts against the object store (Step 14)
     "boto3-stubs[s3]>=1.43.0",     # type hints for boto3 S3 clients, so strict mypy can check those scripts (Step 14)
+    "fakeredis>=2.30",             # an in-process Valkey/Redis: tests the Streams job queue (Step 31)
     "httpx>=0.28.1",               # HTTP client: kc_*.py / api_demo.py scripts (Steps 16-17) and FastAPI's test client
     "httpx2>=2.13",                # openai 3.x's HTTP layer: the eval tests fake the gateway with it (Step 26)
     "moto[s3]>=5.1",               # in-process S3 with object lock: tests the audit anchor/verify script (Step 23)
@@ -22,7 +23,8 @@ dev = [
     "pytest>=9.1.1",
     "pyyaml>=6.0.3",               # tests read the Compose and gateway config files (Step 9)
     "qdrant-client>=1.19.1",       # Qdrant client: type-checks and tests the qdrant_*.py scripts (Step 12)
-    "redis>=8.1.0",                # Redis-protocol client: type-checks and tests kv_queue_demo.py against Valkey (Step 15)
+    "redis>=8.1.0",
+    "reportlab>=4.4",              # writes the sample PDFs the ingestion tests parse (Step 31)                # Redis-protocol client: type-checks and tests kv_queue_demo.py against Valkey (Step 15)
     "ruff>=0.17.0",
     "types-pyyaml>=6.0.12.20260906",  # type hints for pyyaml, so strict mypy can check those tests
 ]                                  # shared dev tools (Step 5), locked in uv.lock
@@ -87,9 +89,19 @@ files = [                           # add each new library/service as it's creat
     "tests",
 ]
 plugins = ["pydantic.mypy"]          # so mypy understands pydantic models (Step 6)
+# Two test folders that aren't packages may not both hold a `conftest` module (mypy refuses
+# duplicate module names): rag-core's sample-document fixtures (Step 31) are left out; the tests
+# that use them are checked.
+exclude = ['^libs/rag-core/tests/conftest\.py$']
 
 [[tool.mypy.overrides]]
 module = ["tokenizers", "tokenizers.*"]   # rag-core's optional extra (Step 30): not installed by default
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Step 31: the heavy, optional parsers and PII engine (status "reference": not installed by default),
+# and reportlab, which writes the test PDFs and ships no type hints
+module = ["docling", "docling.*", "presidio_analyzer", "presidio_anonymizer", "reportlab", "reportlab.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

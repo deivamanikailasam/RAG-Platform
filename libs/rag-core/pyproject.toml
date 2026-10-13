@@ -8,6 +8,7 @@ dependencies = [
     "pydantic>=2.10",
     "pyyaml>=6.0",
     "httpx>=0.28",
+    "opentelemetry-api>=1.45",   # Step 31: every ingestion stage is a trace span (rag-common sets up the SDK)
 ]
 
 [project.optional-dependencies]
@@ -18,9 +19,14 @@ pdf = [
 docx = [
     "python-docx>=1.2",
 ]
-postgres = ["psycopg[binary]>=3.2", "pgvector>=0.4"]
+# psycopg-pool: the Postgres components share a small pool whose logins are read per connection (Step 31)
+postgres = ["psycopg[binary]>=3.2", "pgvector>=0.4", "psycopg-pool>=3.3"]
 valkey = [
     "redis>=6.0",
+]
+# `load_source("s3://…")`: originals are read from the object store (Step 14) by the ingestion worker
+s3 = [
+    "boto3>=1.40",
 ]
 # The exact token counter (`token_counter: hf-tokenizer`) reads the model's tokenizer.json with it
 tokenizers = [

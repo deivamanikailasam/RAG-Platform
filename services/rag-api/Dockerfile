@@ -18,6 +18,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev --package rag-api --no-install-workspace
 # 2) then our own code
 COPY libs/rag-common libs/rag-common
+COPY libs/rag-core libs/rag-core
 COPY services/rag-api services/rag-api
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev --package rag-api --no-editable
@@ -28,6 +29,10 @@ RUN useradd --system --uid 10001 --no-create-home app
 COPY --from=build /app/.venv /app/.venv
 # The reviewed, locked registry (Step 24). Owned by root, so the app user (10001) can read but not change it.
 COPY prompts /app/prompts
+# Which components run where (Step 30); RAG_PROFILE picks the profile per deployment. The same image
+# runs the API and the ingestion worker (`rag worker --forever`, Step 31).
+COPY rag.yaml /app/rag.yaml
+ENV RAG_CONFIG=/app/rag.yaml
 ENV PATH=/app/.venv/bin:$PATH PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 USER 10001
 EXPOSE 8000
