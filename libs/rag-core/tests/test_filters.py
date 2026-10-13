@@ -4,13 +4,18 @@ the parser, the Python reference and the exact shape of what each store is sent.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
 import pytest
 
 from rag_core import filters as flt
-from rag_core.cli import parse_filters
+from rag_core.cli import main, parse_filters
 from rag_core.testing.conformance import FILTER_CASES, filter_chunks
+from rag_core.types import Chunk
+
+ROOT = Path(__file__).resolve().parents[3]
 
 
 def docs(expr: dict[str, Any] | None) -> set[str]:
@@ -135,3 +140,43 @@ def test_cli_filter_syntax() -> None:
     with pytest.raises(flt.FilterError):
         parse_filters(["no operator here"])
     assert parse_filters([]) == {}
+
+
+# ---------------------------------------------------------------- extension 03: the --filter papercut
+
+
+def test_cli_equality_filters_match_strings_that_look_like_numbers() -> None:
+    f = parse_filters(["section_numbers=4.2"])
+    assert f == {"section_numbers": {"in": ["4.2", 4.2]}}
+    test = flt.matcher(f)
+    assert test(
+        Chunk("a", "d", 0, "t", 1, metadata={"section_numbers": ["4", "4.2"]})
+    )  # the string
+    assert not test(Chunk("b", "d", 0, "t", 1, metadata={"section_numbers": ["4", "4.20.1"]}))
+    year = flt.matcher(parse_filters(["year=2025"]))
+    assert year(Chunk("c", "d", 0, "t", 1, metadata={"year": 2025}))  # ... and a real number
+    assert year(Chunk("c", "d", 0, "t", 1, metadata={"year": "2025"}))
+    assert parse_filters(["n!=3"]) == {"n": {"nin": ["3", 3]}}
+    assert parse_filters(["version<3"]) == {"version": {"lt": 3}}  # comparisons stay numeric
+    assert parse_filters(["department=hr"]) == {"department": {"eq": "hr"}}
+
+
+def test_rag_search_filter_on_a_numbered_section(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    doc = tmp_path / "manual.md"
+
+    def para(topic: str) -> str:  # long enough that the chunker keeps each section apart
+        return " ".join(
+            f"Rule {i} about {topic} says how long {topic} lasts and who agrees it."
+            for i in range(12)
+        )
+
+    doc.write_text(f"# Manual\n\n## 4 Leave\n\n{para('leave')}\n\n### 4.2 Parental leave\n\n"
+                   f"{para('parental leave')}\n\n## 5 Travel\n\n{para('travel')}\n")  # fmt: skip
+    args = ["search", "How long is leave?", "--file", str(ROOT / "rag.yaml"), "--profile", "offline",
+            "--group", "all-staff", "--ingest", str(doc), "--filter", "section_numbers=4.2", "--json"]  # fmt: skip
+    assert main(args) == 0
+    hits = json.loads(capsys.readouterr().out)["hits"]
+    assert hits
+    assert {h["section"] for h in hits} == {"Manual > 4 Leave > 4.2 Parental leave"}

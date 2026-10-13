@@ -77,6 +77,16 @@ FILTER_HELP = ("a metadata filter: key=value, key!=value, key=a,b (any of), key>
 _CONDITION = __import__("re").compile(r"^([A-Za-z_][A-Za-z0-9_\-]*)\s*(!=|>=|<=|=|>|<|\?)\s*(.*)$")
 
 
+def _typed(raw: str) -> Any:
+    """A --filter value as YAML reads it (4.2, 2025, true, 2025-01-01), dates as ISO strings."""
+    v = yaml.safe_load(raw) if raw else ""
+    return v.isoformat() if hasattr(v, "isoformat") else v
+
+
+def _same_value(a: Any, b: Any) -> bool:
+    return type(a) is type(b) and a == b
+
+
 def parse_filters(items: list[str]) -> dict[str, Any]:
     """`--filter` values as one filter expression (rag_core.filters): ANDed, validated."""
     from rag_core import filters
@@ -99,10 +109,17 @@ def parse_filters(items: list[str]) -> dict[str, Any]:
         if op == "?":
             parts.append({key: {"exists": True}})
             continue
-        values = [yaml.safe_load(v.strip()) if v.strip() else "" for v in text.split(",")]
-        values = [
-            v.isoformat() if hasattr(v, "isoformat") else v for v in values
-        ]  # YAML reads dates
+        raws = [v.strip() for v in text.split(",")]
+        values = [_typed(v) for v in raws]
+        if op in ("=", "!="):
+            # extension 03: `section_numbers=4.2` must match the STRING "4.2" (YAML reads a
+            # number), and `year=2025` the number 2025: equality matches the text as typed AND
+            # its number/boolean reading, so it works whatever type the metadata field holds
+            values = []
+            for raw in raws:
+                for v in (raw, _typed(raw)):
+                    if v is not None and not any(_same_value(v, w) for w in values):
+                        values.append(v)
         if op in ("=", "!=") and len(values) > 1:
             parts.append({key: {"in" if op == "=" else "nin": values}})
         else:
