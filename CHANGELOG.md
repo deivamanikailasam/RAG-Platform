@@ -54,3 +54,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `just vault-put rag-api … opa_token=RAG_API_OPA_TOKEN` works as the steps print it: the secrets generator writes `RAG_API_OPA_TOKEN` (a copy of `OPA_API_TOKEN`), `.env.example` documents it, and `vault-put` names any missing variable instead of failing with a bare KeyError.
+- `just promote` can commit: `deploy` is an allowed type in the conventional-pre-commit hook (and in `CONTRIBUTING.md`), with a test that keeps the recipe and the hook in step.

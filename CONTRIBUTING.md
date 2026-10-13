@@ -28,7 +28,8 @@ Stage A and B), and read the [documentation map](docs/README.md).
 ## Commit messages: Conventional Commits
 
 The `commit-msg` hook enforces [Conventional Commits](https://www.conventionalcommits.org/) with these
-types: `feat`, `fix`, `docs`, `refactor`, `test`, `build`, `ci`, `chore`, `perf`, `revert`.
+types: `feat`, `fix`, `docs`, `refactor`, `test`, `build`, `ci`, `chore`, `perf`, `revert`, and
+`deploy` (used only by `just promote` for promotion commits).
 
 ```text
 feat(gateway): virtual keys, team budgets, shadow pricing, rate limits and fallbacks

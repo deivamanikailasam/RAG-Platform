@@ -855,6 +855,9 @@ now part of Step 37.
   the ignore file and none with it. A real cluster (OrbStack, or kind) was not started: `k8s-up`, `k8s-bootstrap`,
   `k8s-deps-check`, `k8s-netpol-check`, `argocd-ui` and `promote` need your Mac, your GitHub repository and
   OrbStack.
+- **Promotion commits pass the commit-msg hook:** `just promote` commits as `deploy(<env>): rag-api <digest>`.
+  Step 5's conventional-pre-commit hook did not list `deploy`, so it would have refused the commit; `deploy` is now
+  an allowed type in `.pre-commit-config.yaml` (and `CONTRIBUTING.md`), checked by `tests/test_promote.py`.
 - **Vendored Argo CD manifest:** `deploy/argocd/install/upstream/install.yaml` was downloaded from the
   `v3.5.5` tag; its SHA-256 (`90dc9094…5f50`) matches the hash the guide records. It is about 1.9 MB, so
   `.pre-commit-config.yaml` exempts exactly that file from the 1 MB `check-added-large-files` limit, and

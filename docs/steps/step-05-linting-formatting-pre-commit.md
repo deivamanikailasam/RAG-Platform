@@ -639,6 +639,9 @@ git switch main && git pull
   instructs, so the committed config pins pre-commit-hooks v6.0.0, gitleaks v8.30.0 and conventional-pre-commit
   v4.4.0 by commit SHA (the guide's starting tags were v5.0.0, v8.21.2 and v3.6.0). The hook IDs and arguments are
   unchanged. pre-commit 4.6.2 did not warn about `language: system`, so it is kept as written.
+- **`deploy` is an allowed commit type.** Step 29's `just promote` commits as `deploy(<env>): rag-api <digest>`,
+  which the chapter's type list would reject, so `deploy` was added to the hook's arguments (a test in
+  `tests/test_promote.py` keeps the recipe and the hook in step).
 - **Locked tool versions** at the time of this step: ruff 0.17.0, mypy 2.4.0, pytest 9.1.1, pre-commit 4.6.2. The
   `uv add` lower bounds (`>=`) come from uv; the exact versions live in `uv.lock`.
 - **`just install-hooks`** is an addition of this repository, following the chapter's own "Common mistakes" advice

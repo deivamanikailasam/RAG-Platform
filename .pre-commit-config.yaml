@@ -37,7 +37,7 @@ repos:
     hooks:
       - id: conventional-pre-commit
         stages: [commit-msg]
-        args: [feat, fix, docs, refactor, test, build, ci, chore, perf, revert]
+        args: [feat, fix, docs, refactor, test, build, ci, chore, perf, revert, deploy]  # deploy: `just promote` (Step 29)
 
   # ---- Python tools: run through uv so versions come from uv.lock ----
   - repo: local

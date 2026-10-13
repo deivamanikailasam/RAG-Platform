@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -100,3 +101,18 @@ def test_an_entry_without_a_digest_gets_one(tmp_path: Path) -> None:
     assert doc["images"][0]["digest"] == NEW
     assert doc["patches"] == []
     assert "  - name: rag-api  # the app\n" in path.read_text()
+
+
+def test_the_commit_msg_hook_accepts_the_promotion_commit() -> None:
+    """`just promote` commits as `deploy(<env>): …`; the conventional-pre-commit hook must allow it."""
+    config = yaml.safe_load((ROOT / ".pre-commit-config.yaml").read_text())
+    hook = next(
+        h for repo in config["repos"] for h in repo["hooks"] if h["id"] == "conventional-pre-commit"
+    )
+    recipe = (ROOT / "justfile").read_text()
+    used = set(re.findall(r'git commit -am "(\w+)\(\{\{env\}\}\)', recipe))
+    assert used == {"deploy"}
+    assert used <= set(hook["args"])
+    # CONTRIBUTING lists the same types the hook enforces
+    contributing = (ROOT / "CONTRIBUTING.md").read_text()
+    assert all(f"`{t}`" in contributing for t in hook["args"] if not t.startswith("-"))
