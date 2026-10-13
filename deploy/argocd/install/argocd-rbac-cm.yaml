@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-rbac-cm
+data:
+  # Anyone who signs in can look; only admins change things. Changes should come through git anyway.
+  policy.default: role:readonly
+  scopes: "[groups]"
