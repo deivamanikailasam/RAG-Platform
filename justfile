@@ -380,6 +380,17 @@ ci-config:
     just dashboards-check
     just alerts-test
     just vault-check
+    just rag-config-check
+    just search-eval
+
+# rag.yaml: every profile names real components with valid settings (Step 30), no services needed
+rag-config-check:
+    for p in offline local local-engines; do uv run rag config validate --profile $p; done
+
+# Search quality gate (Step 32): the shipped search settings must keep finding the handbook answers,
+# and must never return a forbidden document. Offline: no models or stores needed.
+search-eval *args:
+    uv run rag eval-search examples/eval/handbook.yaml --profile offline --variant all-together --fail-under recall=0.9 --fail-under mrr=0.8 {{args}}
 
 # Secrets, workflows, dependencies, licences, Dockerfile, Kubernetes manifests
 ci-supply-chain:
