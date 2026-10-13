@@ -51,6 +51,11 @@ rag online-eval (--events audit.jsonl | --dsn-file F | --dsn-env V) [--since-hou
                                                           answer quality per release from the audit log
                                                           exit 0 pass, 1 fail, 3 not enough data yet
 
+Agents (extension 03):
+rag mcp --subject ann --group all-staff [--classification internal] [--corpus dataset.yaml]
+        | --token-file F --oidc-issuer URL --oidc-audience A --oidc-jwks-url URL
+                                                          search and answer as MCP tools over stdio
+
 Reuse (Step 38):
 rag doctor [PATH] [--json]                                does a project meet the platform's standards?
                                                           (docs/standards/rag-standards.md; exit 1 on a MUST)
@@ -237,6 +242,20 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--json", action="store_true")
     _lifecycle_parsers(sub)
     _online_parser(sub)
+    p = sub.add_parser("mcp", help="serve search and answer as MCP tools over stdio (extension 03)")
+    p.add_argument("--file", default=os.environ.get("RAG_CONFIG", "rag.yaml"))
+    p.add_argument("--profile")
+    p.add_argument("--subject", help="who is asking (required unless --token-file)")
+    p.add_argument("--group", action="append", default=[])
+    p.add_argument("--classification", action="append", default=[])
+    p.add_argument("--tenant", default="default")
+    p.add_argument("--token-file", help="an OIDC access token, verified on every call")
+    p.add_argument("--oidc-issuer")
+    p.add_argument("--oidc-audience")
+    p.add_argument("--oidc-jwks-url")
+    p.add_argument(
+        "--corpus", help="ingest this evaluation dataset's documents first (in-memory profiles)"
+    )
     p = sub.add_parser("doctor", help="check a project against the platform standards (Step 38)")
     p.add_argument("path", nargs="?", default=".", help="the project folder (default: here)")
     p.add_argument("--json", action="store_true")
@@ -272,6 +291,8 @@ def main(argv: list[str] | None = None) -> int:
             return _eval_guards(a, container)
         if a.cmd == "search":
             return _search(a, container)
+        if a.cmd == "mcp":
+            return _mcp(a, container)
         if a.cmd == "index":
             return _index(container)
         if a.cmd == "ask":
@@ -309,6 +330,24 @@ def main(argv: list[str] | None = None) -> int:
             raise
         print(f"ERROR: {e}", file=sys.stderr)
         return 2
+
+
+def _mcp(a: argparse.Namespace, c: Container) -> int:
+    """Extension 03: the platform as MCP tools, for agents. Refuses to start without an identity."""
+    from rag_core import mcp
+
+    try:
+        identity = mcp.identity_from(a)
+    except mcp.IdentityError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 2
+    if a.corpus:
+        from rag_core import evaluate as ev
+
+        ev.ingest_corpus(c, ev.load_dataset(Path(a.corpus)), Path(a.corpus).parent)
+    print(f"rag mcp: profile {c.profile!r}, serving search and answer on stdio", file=sys.stderr)
+    mcp.McpServer(mcp.RagTools(c, identity)).serve(sys.stdin, sys.stdout)
+    return 0
 
 
 def _readiness(container: Container) -> int:
