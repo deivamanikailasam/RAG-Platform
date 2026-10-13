@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
@@ -120,10 +119,8 @@ def test_the_repository_profiles_build(capsys: pytest.CaptureFixture[str]) -> No
 
 
 def test_validate_finds_problems_without_connecting() -> None:
-    # The guide uses `pgvector` here; it arrives in Step 31, so this step checks the built-in
-    # `memory` store, which takes no parameters at all: any key is an extra input.
     c = Container(
-        {"vector_store": {"use": "memory", "dimensons": 3}, "guards": [{"use": "nope"}], "x": 1}
+        {"vector_store": {"use": "pgvector", "dimensons": 3}, "guards": [{"use": "nope"}], "x": 1}
     )
     problems = c.validate()
     assert any("dimensons: Extra inputs are not permitted" in p for p in problems)
@@ -134,23 +131,9 @@ def test_validate_finds_problems_without_connecting() -> None:
 
 
 def test_startup_errors_name_the_slot() -> None:
-    # The guide's version starts Step 31's `pii: regex` without its key. Until that component
-    # exists, a test-only one fails at start-up in exactly the same way.
-    class KeyParams(BaseModel):
-        strategy: str = "mask"
-        key_env: str = "PII_KEY"
-
-    @register("pii", "regex-startup-test", params=KeyParams, summary="test only")
-    def _pii(p: KeyParams, c: Container) -> object:
-        if p.strategy == "pseudonymise" and not os.environ.get(p.key_env):
-            raise ValueError("pseudonymise needs a key")
-        return object()
-
     with pytest.raises(
-        ComponentError,
-        match="pii 'regex-startup-test' could not start: ValueError: pseudonymise needs a key",
+        ComponentError, match="pii 'regex' could not start: ValueError: pseudonymise needs a key"
     ):
         Container(
-            {"pii": {"use": "regex-startup-test", "strategy": "pseudonymise",
-                     "key_env": "NOT_SET_ANYWHERE"}}
-        ).get("pii")  # fmt: skip
+            {"pii": {"use": "regex", "strategy": "pseudonymise", "key_env": "NOT_SET_ANYWHERE"}}
+        ).get("pii")

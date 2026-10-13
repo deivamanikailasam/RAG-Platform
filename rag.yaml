@@ -1,20 +1,44 @@
-# Which component fills each slot of a RAG pipeline, per environment (Step 30).
-# `uv run rag components` lists what can go in each slot; `uv run rag config show --profile <p>`
-# prints a profile after `extends` and RAG__<SLOT>__<PARAM> environment overrides.
-# Secrets never go here: components take the NAME of an environment variable (api_key_env).
-# Steps 31-35 add ingestion, retrieval, generation, guardrail and pipeline slots.
+# Which component fills each slot of the RAG pipeline, per environment (Steps 30-35).
+# `rag components` lists everything that can go here; `rag config check --profile <p>` builds it.
+# Switch one thing without editing this file: RAG__RERANKER__USE=none, RAG__CHUNKER__MAX_TOKENS=300
+# Secrets never go here: components take the NAME of an environment variable (api_key_env) or of a
+# file the OpenBao agent writes (credentials_file, url_file).
 version: 1
 profiles:
-  # Runs anywhere, with nothing else running: tests, CI, demos, a new laptop
+  # ---- runs anywhere, with nothing else running: tests, CI, demos, a new laptop ----
   offline:
     token_counter: approx
     llm: {use: scripted, default: "I don't know."}
+    # ingestion (Step 31)
+    parsers: [markdown, html, pdf, docx, csv, text]
+    normalizers: [unicode, boilerplate]
+    pii: {use: regex, strategy: mask}
+    chunker: {use: structure, max_tokens: 400, overlap_tokens: 40, min_tokens: 60}
+    enrichers: [context-header]
     embedder: {use: hashing, dimensions: 256}
     vector_store: memory
     keyword_index: memory-bm25
+    manifest: memory
+    queue: memory
 
-  # The platform on your Mac (Compose / OrbStack): real models through the gateway
+  # ---- the platform on your Mac (Compose / OrbStack): real models and stores ----
   local:
     extends: offline
     llm: {use: gateway, model: qwen-fast, base_url: "http://litellm:4000/v1"}
     judge_llm: {use: gateway, model: qwen-quality, base_url: "http://litellm:4000/v1"}
+    pii: {use: regex, strategy: pseudonymise, key_env: RAG_PII_HMAC_KEY}
+    embedder:
+      use: cached
+      inner: {use: gateway, model: embedder, dimensions: 1024, base_url: "http://litellm:4000/v1"}
+    vector_store: {use: pgvector, dsn_env: null, credentials_file: /run/bao/rag_db.json, collection: default}
+    keyword_index: {use: postgres-fts, dsn_env: null, credentials_file: /run/bao/rag_db.json, collection: default}
+    manifest: {use: postgres, dsn_env: null, credentials_file: /run/bao/rag_db.json, collection: default}
+    queue: {use: valkey-streams, url_file: /run/bao/valkey_url}
+
+  # ---- the same, with the dedicated search engines from Steps 12-13 instead of Postgres ----
+  local-engines:
+    extends: local
+    vector_store: {use: qdrant, url: "http://qdrant:6333", collection: rag_chunks, dimensions: 1024}
+    keyword_index: {use: opensearch, url: "https://opensearch:9200", index: rag-chunks,
+                    user_env: OPENSEARCH_INDEXER_USER, password_env: OPENSEARCH_INDEXER_PASSWORD}
+    # the manifest stays in Postgres: it records what is in the engines

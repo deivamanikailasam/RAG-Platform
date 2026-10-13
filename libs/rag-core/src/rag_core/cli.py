@@ -5,7 +5,13 @@ rag config check    [--file rag.yaml] [--profile dev]     build every component 
 rag config validate [--file rag.yaml] [--profile prod]    names and parameters only: no services
 rag config show     [--file rag.yaml] [--profile dev]     the resolved profile (after extends + env)
 
-Step 31 adds the ingestion commands (ingest, delete, enqueue, worker) to this same entry point.
+Ingestion (Step 31):
+rag ingest  [--profile p] [--group hr] [--classification internal] [--tenant t] [--force] URI…
+rag delete  [--profile p] URI…                            remove sources from every store
+rag enqueue [--profile p] [--group hr] [--delete] URI…    add jobs to the profile's queue
+rag worker  [--profile p] [--forever]                     take jobs from the queue
+
+A URI is file:///abs/path, s3://bucket/key, or a local path (turned into a file:// URI).
 """
 
 from __future__ import annotations
@@ -14,11 +20,12 @@ import argparse
 import json
 import os
 import sys
+from pathlib import Path
 
 import yaml
 
 from rag_core import config as cfg
-from rag_core.registry import ComponentError, describe
+from rag_core.registry import ComponentError, Container, describe
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -31,6 +38,22 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("action", choices=["check", "show", "validate"])
     p.add_argument("--file", default=os.environ.get("RAG_CONFIG", "rag.yaml"))
     p.add_argument("--profile")
+    for name in ("ingest", "delete", "enqueue", "worker"):
+        p = sub.add_parser(name, help=f"{name} (Step 31 ingestion)")
+        p.add_argument("--file", default=os.environ.get("RAG_CONFIG", "rag.yaml"))
+        p.add_argument("--profile")
+        if name != "worker":
+            p.add_argument("uris", nargs="+")
+        if name in ("ingest", "enqueue"):
+            p.add_argument("--group", action="append", default=[])
+            p.add_argument("--classification", default="internal")
+            p.add_argument("--tenant", default="default")
+        if name == "ingest":
+            p.add_argument("--force", action="store_true")
+        if name == "enqueue":
+            p.add_argument("--delete", action="store_true")
+        if name == "worker":
+            p.add_argument("--forever", action="store_true")
     a = ap.parse_args(argv)
     try:
         if a.cmd == "components":
@@ -49,6 +72,8 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"{'':51} {params}")
             return 0
         container = cfg.load(a.file, a.profile)
+        if a.cmd in ("ingest", "delete", "enqueue", "worker"):
+            return _ingestion(a, container)
         if a.action == "validate":
             problems = container.validate()
             for prob in problems:
@@ -73,6 +98,40 @@ def main(argv: list[str] | None = None) -> int:
     except ComponentError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
+
+
+def _uri(u: str) -> str:
+    """`examples/corpus/a.md` -> `file:///…/examples/corpus/a.md`; URIs with a scheme pass as they are."""
+    return u if "://" in u else Path(u).resolve().as_uri()
+
+
+def _ingestion(a: argparse.Namespace, container: Container) -> int:
+    from rag_core.components.queues import Job
+    from rag_core.ingest import IngestionPipeline, Worker, load_source
+    from rag_core.types import Access
+
+    c = container
+    uris = [_uri(u) for u in getattr(a, "uris", [])]
+    if a.cmd == "enqueue":
+        q = c.get("queue")
+        access = {"classification": a.classification, "groups": a.group, "tenant": a.tenant}
+        for uri in uris:
+            print(q.put(Job("delete" if a.delete else "upsert", uri, access=access)), uri)
+        return 0
+    pipeline = IngestionPipeline(c, on_event=lambda e: None)
+    if a.cmd == "worker":
+        results = Worker(pipeline, c.get("queue")).run(forever=a.forever)
+    elif a.cmd == "delete":
+        results = [pipeline.delete(u) for u in uris]
+    else:
+        who = Access(a.classification, tuple(a.group), a.tenant)
+        results = [pipeline.ingest(load_source(u, who), force=a.force) for u in uris]
+    for r in results:
+        extra = f"   pii: {', '.join(r.pii)}" if r.pii else ""
+        print(
+            f"{r.status:9} {r.chunks:4} chunks {r.seconds:6.2f}s   {r.uri}{'   ' + r.detail if r.detail else ''}{extra}"
+        )
+    return 1 if any(r.status == "failed" for r in results) else 0
 
 
 if __name__ == "__main__":
