@@ -36,5 +36,6 @@
 | [0032](0032-search-through-a-switchable-hybrid-pipeline.md) | Search through one switchable pipeline: hybrid retrieval, fusion, reranking | Accepted |
 | [0033](0033-answer-with-checked-citations-and-abstention.md) | Answer from numbered sources, check citations, abstain rather than guess | Accepted |
 | [0034](0034-layered-guardrails-measured-in-ci.md) | Layered, switchable guardrails at three stages, measured in CI | Accepted |
+| [0035](0035-rag-architectures-as-switchable-pipelines.md) | RAG architectures as switchable pipelines sharing every control | Accepted |
 
 New ADR: `just adr "Short title"`, then fill it in and add a row here.
