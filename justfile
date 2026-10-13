@@ -313,7 +313,9 @@ audit-test:
       -e POSTGRES_PASSWORD=test-admin pgvector/pgvector:0.8.7-pg17@sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d >/dev/null
     trap 'docker stop audit-test-pg >/dev/null' EXIT
     until docker exec audit-test-pg pg_isready -h 127.0.0.1 -U postgres -q; do sleep 1; done
-    AUDIT_TEST_ADMIN_DSN=postgres://postgres:test-admin@127.0.0.1:55432/postgres uv run pytest
+    # Step 31: the same Postgres (it's the pgvector image) runs rag-core's store conformance tests
+    AUDIT_TEST_ADMIN_DSN=postgres://postgres:test-admin@127.0.0.1:55432/postgres \
+    RAG_TEST_PGVECTOR_DSN=postgres://postgres:test-admin@127.0.0.1:55432/postgres uv run pytest
 
 audit_reader_dsn := "postgres://audit_reader:$AUDIT_DB_READER_PASSWORD@127.0.0.1:5432/audit"
 

@@ -111,6 +111,7 @@ def test_manifest_is_complete_and_strict() -> None:
         "kubectl",  # Step 29: the envtest bundle, for the Kubernetes tests and the manifest scan
         "kube-apiserver",
         "etcd",
+        "qdrant",  # Step 31: the real Qdrant server, for the vector-store conformance tests
     }
     for name, t in tools.items():
         for plat in ("linux-amd64", "darwin-arm64"):

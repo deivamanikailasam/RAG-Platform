@@ -33,6 +33,8 @@ jobs:
           --health-interval 2s --health-timeout 5s --health-retries 30
     env:
       AUDIT_TEST_ADMIN_DSN: postgres://postgres:test-admin@127.0.0.1:55432/postgres
+      # Step 31: rag-core's pgvector and Postgres full-text conformance tests, on the same Postgres
+      RAG_TEST_PGVECTOR_DSN: postgres://postgres:test-admin@127.0.0.1:55432/postgres
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -45,7 +47,7 @@ jobs:
       - name: Install just and the pinned tools (checksums verified)
         run: |
           uv tool install rust-just==1.58.0
-          uv run --frozen python scripts/ci_tools.py opa regal dbmate bao kubectl kube-apiserver etcd
+          uv run --frozen python scripts/ci_tools.py opa regal dbmate bao kubectl kube-apiserver etcd qdrant
           echo "$PWD/.tools/bin" >> "$GITHUB_PATH"
       - run: sudo apt-get install -y --no-install-recommends postgresql-client  # psql for the audit bootstrap test
       - run: just ci-static
