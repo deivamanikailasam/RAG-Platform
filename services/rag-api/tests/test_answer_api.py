@@ -178,3 +178,18 @@ def test_guard_block_shows_a_message_and_audits_the_reason(client: TestClient, i
     assert details["blocked"].startswith("prompt injection")
     assert details["guards"][0]["guard"] == "injection"
     assert question not in json.dumps(details)
+
+
+def test_answer_filter_limits_the_context(client: TestClient, idp: FakeIdP, audit: FakeAudit,
+                                          answerer: AnswerPipeline) -> None:  # fmt: skip
+    """Extension 01: the filter decides which documents may ground the answer (within the policy)."""
+    body: dict[str, object] = {
+        "question": "How many days a week can I work from home?",
+        "filter": {"title": {"ne": "Remote work"}},
+    }
+    citations: list[dict[str, object]] = ask(client, idp, body)["citations"]  # type: ignore[assignment]
+    assert all(c["title"] != "Remote work" for c in citations)
+    bad = client.post("/v1/answer", json={"question": "x", "filter": {"a": {"between": [1, 2]}}},
+                      headers=bearer(idp.mint(groups=["all-staff"])))  # fmt: skip
+    assert bad.status_code == 422
+    assert "unknown operator" in bad.text

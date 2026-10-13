@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import zlib
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol, cast
 
@@ -17,6 +18,7 @@ from pydantic import BaseModel
 from rag_api.policy import DocumentRef
 from rag_api.settings import Settings
 from rag_common.prompts import Registry
+from rag_core import filters as rag_filters
 
 # The filter VALUES come from the policy (OPA); this query only applies them.
 SQL = """
@@ -25,7 +27,7 @@ SELECT d.id, d.title, d.classification, d.acl_groups,
 FROM rag.chunks c JOIN rag.documents d ON d.id = c.document_id
 WHERE d.deleted_at IS NULL
   AND d.classification = ANY(%(classifications)s)
-  AND (d.classification = 'public' OR d.acl_groups && %(groups)s)
+  AND (d.classification = 'public' OR d.acl_groups && %(groups)s){metadata_filter}
 ORDER BY c.embedding <=> %(q)s
 LIMIT %(k)s
 """
@@ -59,6 +61,7 @@ class SearchBackend(Protocol):
         classifications: frozenset[str],
         k: int,
         user: str,
+        filters: Mapping[str, Any] | None = None,  # extension 01: ANDed with the policy's filter
     ) -> list[Candidate]: ...
 
 
@@ -80,9 +83,13 @@ class PgSearch:
         classifications: frozenset[str],
         k: int,
         user: str,
+        filters: Mapping[str, Any] | None = None,
     ) -> list[Candidate]:
         if not classifications:
             return []  # fail closed: no clearance, no documents
+        # extension 01: the metadata filter as bound parameters, appended to the access clause
+        params: dict[str, Any] = {}
+        sql = SQL.replace("{metadata_filter}", rag_filters.to_sql(filters, params))
         # "user" lets the gateway attribute cost and logs to the real person (Step 10 spend tracking)
         # A GenAI span named the OpenTelemetry way ("{operation} {model}"). The HTTP call inside
         # carries the trace id to LiteLLM, which continues the same trace.
@@ -104,12 +111,13 @@ class PgSearch:
             # carry it into another request; without it the database returns no rows at all.
             conn.execute("SELECT set_config('rag.tenant', %s, true)", (self._tenant,))
             rows = conn.execute(
-                SQL,
+                sql,
                 {
                     "q": HalfVector(emb.data[0].embedding),
                     "groups": sorted(groups),
                     "classifications": sorted(classifications),
                     "k": k,
+                    **params,
                 },
             ).fetchall()
         return [
@@ -140,6 +148,7 @@ class CoreSearch:
         classifications: frozenset[str],
         k: int,
         user: str,
+        filters: Mapping[str, Any] | None = None,
     ) -> list[Candidate]:
         from rag_core.types import Classification, Query
         from rag_core.types import Principal as CorePrincipal
@@ -150,7 +159,7 @@ class CoreSearch:
         levels = cast(tuple[Classification, ...], tuple(sorted(classifications)))
         who = CorePrincipal(user, tuple(sorted(groups)), levels, self._tenant)
         # Ask for more chunks than documents: several chunks often come from one document
-        result = self._pipeline.search(Query(query, who, k=k * 3))
+        result = self._pipeline.search(Query(query, who, dict(filters or {}), k=k * 3))
         trace.get_current_span().set_attribute("rag.search.texts", len(result.texts))
         best: dict[int, Candidate] = {}
         for h in result.hits:

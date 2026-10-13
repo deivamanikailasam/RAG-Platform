@@ -21,7 +21,7 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.psycopg import PsycopgInstrumentor
 from opentelemetry.metrics import CallbackOptions, Observation
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from rag_api.audit import (
     AuditEvent,
@@ -39,6 +39,7 @@ from rag_common.auth import AuthError, KeyServiceUnavailable, OIDCSettings, Prin
 from rag_common.prompts import PromptError, Registry
 from rag_common.telemetry import setup_logging, setup_telemetry
 from rag_core import config as rag_config
+from rag_core import filters as rag_filters
 from rag_core.answer import AnswerPipeline
 from rag_core.components.generation import PackedContext
 from rag_core.registry import Container
@@ -364,9 +365,35 @@ def me(p: Annotated[Principal, Depends(current_principal)]) -> Me:
     )
 
 
+FILTER_DOC = (
+    "Optional metadata filter (extension 01), ANDed with the permission filter: it can only narrow "
+    "what the caller may see. Fields are chunk metadata (department, doc_type, tags, language, "
+    "section, updated, …) or `document` (the source URI). Operators: eq (or a bare value), ne, "
+    "in (or a list), nin, gt/gte/lt/lte (numbers, ISO dates), range, exists, and/or/not. "
+    'Example: {"department": "hr", "updated": {"gte": "2025-01-01"}, '
+    '"or": [{"tags": "leave"}, {"doc_type": {"in": ["policy", "guide"]}}]}'
+)
+FILTER_EXAMPLES = [{"department": "hr", "updated": {"gte": "2025-01-01"}}]
+
+
+def _check_filter(value: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Validated here, so a bad filter is a 422 that says what is wrong, before any search."""
+    if not value:
+        return None
+    try:
+        return rag_filters.validate(value)
+    except rag_filters.FilterError as e:
+        raise ValueError(str(e)) from None
+
+
 class SearchRequest(BaseModel):
     query: str = Field(min_length=1, max_length=2000)
     k: int = Field(default=5, ge=1, le=20)
+    filter: dict[str, Any] | None = Field(
+        default=None, description=FILTER_DOC, examples=FILTER_EXAMPLES
+    )
+
+    _valid_filter = field_validator("filter")(_check_filter)
 
 
 @app.post("/v1/search")
@@ -397,6 +424,10 @@ def search(
                         "rag.k": req.k,
                         "rag.filter.classifications": sorted(f.classifications),
                         "rag.filter.group_count": len(f.groups),
+                        # which metadata fields were filtered on, never their values
+                        "rag.filter.metadata_fields": sorted(
+                            rag_filters.fields(rag_filters.parse(req.filter))
+                        ),
                     }
                 )
                 candidates = backend.search(
@@ -405,6 +436,7 @@ def search(
                     classifications=f.classifications,
                     k=req.k,
                     user=p.subject,
+                    filters=req.filter,
                 )
                 span.set_attribute("rag.candidates", len(candidates))
             # 2. POST-check every candidate with the policy's full rule (safe). If the two ever
@@ -436,6 +468,8 @@ def search(
                     p, "search", "allowed", "documents",
                     returned_ids=[c.ref.id for c in returned], dropped_by_policy=len(dropped),
                     k=req.k, query_chars=len(req.query), prompts=[query_prompt.ref],
+                    # which metadata fields narrowed the search (never the values), when any did
+                    **({"filter_fields": sorted(rag_filters.fields(rag_filters.parse(req.filter)))} if req.filter else {}),
                 ),
             )  # fmt: skip
             outcome = "ok"
@@ -462,6 +496,11 @@ class AnswerRequest(BaseModel):
     # A conversation: earlier turns are remembered per person AND session (Step 33)
     session_id: str | None = Field(default=None, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
     stream: bool = False
+    filter: dict[str, Any] | None = Field(
+        default=None, description=FILTER_DOC, examples=FILTER_EXAMPLES
+    )
+
+    _valid_filter = field_validator("filter")(_check_filter)
 
 
 class CitationOut(BaseModel):
@@ -569,7 +608,7 @@ def answer(
         seen: dict[str, PackedContext | None] = {}
         try:
             a = answerer.answer(req.question, who, session_id=req.session_id, post_check=post_check,
-                                before_generation=lambda ctx, early: seen.update(ctx=ctx))  # fmt: skip
+                                filters=req.filter, before_generation=lambda ctx, early: seen.update(ctx=ctx))  # fmt: skip
             record(seen.get("ctx"), None, final=a)  # recorded BEFORE the answer is returned
         except HTTPException:
             ANSWERS.add(1, {"outcome": "error"})
@@ -580,7 +619,7 @@ def answer(
                          citations=_citations(a, context_ids))  # fmt: skip
 
     events = answerer.stream(req.question, who, session_id=req.session_id, post_check=post_check,
-                             before_generation=lambda ctx, early: record(ctx, early))  # fmt: skip
+                             filters=req.filter, before_generation=lambda ctx, early: record(ctx, early))  # fmt: skip
     try:
         # search, OPA post-check and the audit record happen HERE: errors are real HTTP errors
         first = next(events)

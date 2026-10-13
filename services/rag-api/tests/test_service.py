@@ -87,7 +87,13 @@ def test_openapi_lists_the_endpoints() -> None:
 
 def test_search_request_has_no_groups_field() -> None:
     schema = TestClient(app).get("/openapi.json").json()["components"]["schemas"]["SearchRequest"]
-    assert set(schema["properties"]) == {"query", "k"}  # the caller can't even ask for groups
+    assert set(schema["properties"]) == {
+        "query",
+        "k",
+        "filter",
+    }  # the caller can't even ask for groups
+    # extension 01: the metadata filter is documented as narrowing only, never widening
+    assert "can only narrow" in schema["properties"]["filter"]["description"]
 
 
 # ------------------------------------------------------------------ settings

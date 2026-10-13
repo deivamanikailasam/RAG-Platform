@@ -81,3 +81,33 @@ def test_core_backend_fails_closed_without_clearance(core: CoreSearch) -> None:
         )
         == []
     )
+
+
+# ---- extension 01: metadata filters on /v1/search ------------------------------------------------
+
+
+def test_filter_narrows_the_results_and_is_audited(
+    client: TestClient, idp: FakeIdP, audit: FakeAudit
+) -> None:
+    token = idp.mint(groups=["all-staff"])
+    body = {"query": "How many days of leave?", "k": 5,
+            "filter": {"title": {"in": ["Parental leave policy", "Sick leave"]}}}  # fmt: skip
+    r = client.post("/v1/search", json=body, headers=bearer(token))
+    assert r.status_code == 200, r.text
+    assert r.json()
+    assert {h["title"] for h in r.json()} <= {"Parental leave policy", "Sick leave"}
+    assert audit.events[-1].details["filter_fields"] == ["title"]  # the field, never the values
+
+
+def test_filter_never_widens_what_the_policy_allows(client: TestClient, idp: FakeIdP) -> None:
+    body = {"query": "executive bonus pool", "filter": {"title": "Executive compensation 2026"}}
+    r = client.post("/v1/search", json=body, headers=bearer(idp.mint(groups=["all-staff"])))
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_invalid_filter_is_a_422_that_says_why(client: TestClient, idp: FakeIdP) -> None:
+    body = {"query": "leave", "filter": {"updated": {"after": "2025"}}}
+    r = client.post("/v1/search", json=body, headers=bearer(idp.mint(groups=["all-staff"])))
+    assert r.status_code == 422
+    assert "unknown operator" in r.text

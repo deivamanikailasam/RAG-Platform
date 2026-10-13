@@ -78,8 +78,9 @@ class FakeSearch:
         ]  # fmt: skip
 
     def search(self, query: str, *, groups: frozenset[str], classifications: frozenset[str],
-               k: int, user: str) -> list[Candidate]:  # fmt: skip
-        self.calls.append({"groups": groups, "classifications": classifications, "user": user})
+               k: int, user: str, filters: Any = None) -> list[Candidate]:  # fmt: skip
+        self.calls.append({"groups": groups, "classifications": classifications, "user": user,
+                           "filters": filters})  # fmt: skip
         return self.candidates
 
 
