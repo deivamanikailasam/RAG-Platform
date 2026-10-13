@@ -15,6 +15,12 @@ kinds, with every setting and default). The steps that built them: [30](../steps
 (retrieval), [33](../steps/step-33-augmentation-and-generation.md) (answers),
 [34](../steps/step-34-guardrails.md) (guardrails), [35](../steps/step-35-rag-architectures.md) (architectures).
 
+**Two companion pages.** The [decision guide](decision-guide.md) takes the whole pipeline one link at
+a time and says, for every option (in this repository or not), when to use it, when not to, the
+trade-off and where it is, with a flowchart for choosing an architecture and validated
+[starter configs](decision-guide.md#starter-configs). The [coverage matrix](coverage-matrix.md)
+answers "do we have X?" item by item.
+
 Contents: [1 · RAG in one picture](#1-rag-in-one-picture) · [2 · How switching works](#2-how-switching-works) ·
 [3 · Parsing](#3-parsing-reading-files) · [4 · Cleaning and PII](#4-cleaning-and-personal-data) ·
 [5 · Chunking](#5-chunking-strategies) · [6 · Enrichment](#6-contextual-enrichment) ·
@@ -213,6 +219,8 @@ Keeping the index in step with a folder or bucket: `connector: {use: filesystem 
 > ([Step 36](../steps/step-36-lifecycle-threat-model-compliance.md)). That's also why the gateway has no
 > fallback for the embedder.
 
+Other vector databases (Weaviate, Milvus, Pinecone, Elasticsearch, Vespa, managed cloud search…) and when
+each wins: [decision guide](decision-guide.md#vector-databases).
 **Alternatives:** bigger embedders (Qwen3-Embedding-4B/8B), hosted embeddings (OpenAI, Cohere,
 Voyage, Jina, Mistral, Gemini, Bedrock) through a gateway alias. How to choose (language, domain,
 context length, dimensions, MTEB, cost, local vs API) and switch: [extension 02](../extensions/02-chunking-indexing-compression.md#7-choosing-an-embedding-model-and-switching-it-through-the-gateway).
@@ -509,7 +517,7 @@ GraphRAG extras (extension 03): `enrichers: [context-header, llm-entities]` has 
 and shared (migration `20261016000000_graph_store.sql`). Agents can call search and answer as MCP
 tools with `rag mcp` (identity fixed at launch; see the [trust model](../extensions/03-more-rag-architectures.md#7-agents-rag-mcp)).
 
-Quick pick, first yes wins: small talk → `adaptive`; numbers in tables → `sql`; facts from several places
+Quick pick, first yes wins (as a flowchart: [decision guide](decision-guide.md#rag-architectures)): small talk → `adaptive`; numbers in tables → `sql`; facts from several places
 → `agentic` (or `graph`); wrong context worse than none → `corrective`; every answer checked →
 `self-reflective`; otherwise → `standard`. Tiny corpus → `long-context`. "Main themes" → `graph-global`.
 No embeddings → `keyword` or `pageindex`.
@@ -546,6 +554,10 @@ ingesting the handbook. In production: online evaluation per release
 ([quality-and-operations.md](../guides/quality-and-operations.md#1-evaluation-and-testing)).
 
 ## 20. Cheat sheet: situation → choice
+
+The short version. The long version, with "avoid it when" and ecosystem tools for every row, is the
+[decision guide](decision-guide.md); whole profiles for common situations are its
+[starter configs](decision-guide.md#starter-configs).
 
 | Situation | Choice |
 |---|---|
@@ -602,5 +614,6 @@ ingesting the handbook. In production: online evaluation per release
 | "Is B really better?" / "Which knob matters?" | `rag eval-compare` / `rag eval-sweep` |
 | Too few test questions | `rag eval-generate` + review; `rag eval-candidates` from feedback |
 
-See also: [glossary](../glossary.md) for every term, [catalogue](../catalogue.md) for every setting,
+See also: [decision guide](decision-guide.md) for when to use which, [coverage matrix](coverage-matrix.md)
+for what is and isn't here, [glossary](../glossary.md) for every term, [catalogue](../catalogue.md) for every setting,
 [architecture overview](../architecture/overview.md) for where each stage runs.

@@ -1,7 +1,7 @@
 # Glossary
 
 Plain-English definitions of the terms introduced across the build guide, in alphabetical order.
-The Step column gives the step where the term is first explained (Appendix B of the guide); see [`docs/steps/`](steps/README.md). E01, E02, … are the [extension pages](extensions/README.md) added after the guide.
+The Step column gives the step where the term is first explained (Appendix B of the guide); see [`docs/steps/`](steps/README.md). E01, E02, … are the [extension pages](extensions/README.md) added after the guide; DG is the [decision guide](concepts/decision-guide.md) and its [coverage matrix](concepts/coverage-matrix.md).
 
 | Term | Meaning | Step |
 |---|---|---:|
@@ -176,6 +176,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | CORS | Browser rules for which websites may call a server from inside a web page; too open (`*`) and any site you visit could call your local model. | 7 |
 | Cosine similarity | A score for how closely two vectors point the same way: near 1 = very similar meaning, near 0 = unrelated. For unit-length vectors it equals the dot product. | 8 |
 | Counter (metric) | A number that only goes up, such as requests served; dashboards turn it into a rate. | 19 |
+| Coverage matrix | A table answering "do we have X?" for every RAG technique: in the repository (with the component), reference (how to enable it) or not included (why, and how to plug it in). [docs/concepts/coverage-matrix.md](concepts/coverage-matrix.md). | DG |
 | Cross-encoder | A model (the reranker) that reads the query and one document together and scores their relevance; precise but slow, so only used on a shortlist. | 8 |
 | Cross-lingual retrieval | Finding documents in one language with a question in another, by a multilingual embedder and/or translating the question (`query_transformer: translate`). | E04 |
 | Crypto-shredding | Making data unreadable by destroying a key or a lookup instead of deleting it; reconciles "never delete" with the right to erasure (e.g. deleting the Keycloak account behind an audit `sub`). | 23 |
@@ -193,6 +194,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | dbmate | A simple, single-binary tool that applies versioned SQL migrations in order and records which have run. | 11 |
 | DBSF (distribution-based score fusion) | A way to merge ranked lists by first scaling each list by its own spread (its mean plus or minus three standard deviations), so one extreme score doesn't squash the rest; the method Qdrant uses. | 32 |
 | Dead-letter queue (DLQ) | Where jobs go after failing too many times (here: 3 deliveries), so they stop retrying forever and a human can inspect them. | 15 |
+| Decision guide | The "when to use which" page: every concept, technique, tool and component along the RAG pipeline, in plain English, with when to use it, when not to, the trade-off and where it is in this repository. [docs/concepts/decision-guide.md](concepts/decision-guide.md). | DG |
 | Decision log | OPA's record of every decision (input, result, path, time, `decision_id`), written as JSON; the audit evidence for "who was allowed what, and why". | 18 |
 | Decode | The second phase of generation: the model writes the answer one token at a time; its speed is limited by memory bandwidth. | 7 |
 | Decontextualisation | Rewriting a sentence so it makes sense alone: "It is 18 weeks" → "Parental leave is 18 weeks". What proposition chunking aims for. | E02 |
@@ -224,20 +226,24 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | direnv | A tool that loads a project's settings automatically when you enter its folder. | 1 |
 | Disaster recovery (DR) | Getting back after something high availability can't absorb: a region lost, or data destroyed by mistake; here a point-in-time restore into a new cluster, practised monthly. | 37 |
 | Discovery document | The `/.well-known/openid-configuration` page listing an identity provider's issuer, endpoints and signing-key (JWKS) address. | 16 |
+| DiskANN, IVF-PQ, ScaNN | Vector index types built for hundreds of millions to billions of vectors (on disk, or compressed); offered by pgvectorscale, Milvus and Vertex AI Vector Search. Not needed at this platform's scale; HNSW is the default. | DG |
 | Distance metric (similarity metric) | How "close" two vectors are measured: cosine (angle), dot product (angle and length), L2 (straight-line distance) or L1 (sum of differences). Must match what the embedding model was trained for; part of the embedding contract. `metric:` on every vector store. | E01 |
 | Distance operator | pgvector's comparison symbols: `<=>` cosine distance, `<#>` negative inner product, `<->` Euclidean (L2), `<+>` L1. | 11 |
 | Distributed lock | A short-lived "I'm working on this" marker shared by all workers (`SET key token NX PX 30000`): only one holder, expires on its own, released only with the owner's token. | 15 |
 | Docker Compose | A file (`compose.yaml`) listing many containers and how they connect; `docker compose up` starts them all. | 3 |
 | Docker engine / CLI | The engine runs containers inside the VM; the `docker` command is how you talk to it. | 3 |
 | Document summary index | One summary per document, indexed next to its chunks, so broad questions find the right document; its best detailed chunks are then added. `enrichers: [summary]` + `summary-expand`. | E02 |
+| Documentation coverage | A CI check (`just doc-coverage`) that fails when a component, `just` recipe, ADR or page has no documentation, or when a link in the docs is broken: "is there a document for everything?". | DG |
 | Dot product (inner product) | Multiply two vectors number by number and add up: large when they point the same way AND are long. Equals cosine similarity for unit-length vectors. `metric: dot`. | E01 |
 | Downstream | Everything that depends on a component, directly or through others; what an impact analysis lists. | 25 |
 | Drafter and verifier | In speculative RAG, the fast model that writes several short draft answers (drafter) and the stronger model that reads them and picks the best (verifier). | E03 |
 | Drift | When the dependency list (`pyproject.toml`) and the lockfile (`uv.lock`) no longer match; `uv sync --locked` catches it. | 2 |
+| DSPy | A framework that treats prompts as programs and optimises them automatically against a metric and an evaluation set. Not used here; a prompt it finds can be registered in the prompt registry. | DG |
 | Dual logging | Docker keeping a local copy of a container's recent output even when a remote logging driver (like `fluentd`) ships it elsewhere, so `docker compose logs` keeps working. | 21 |
 | Dynamic secret | A secret created on request, for one client, with an expiry. It didn't exist before you asked, and it is gone after its lease ends. | 28 |
 | EditorConfig | A small `.editorconfig` file telling every editor the same formatting basics (indentation, line endings). | 4 |
 | ef_search / ef_construction | HNSW's candidate-list sizes: `ef_construction` at build time (graph quality vs build time), `ef_search` at query time (recall vs latency). Higher = better recall, slower. | E01 |
+| Embedded vector store (Chroma, LanceDB) | A vector store that runs inside your application process or reads files directly, with no server; good for prototypes, notebooks and desktop or edge apps, not for shared enterprise search with permissions. | DG |
 | Embedding cache | A memory of "this text, with this model, gave this vector", so re-ingesting unchanged chunks or repeating a query costs nothing. | 31 |
 | Embedding contract | Everything that defines how vectors were made (model + revision, dimensions, query instruction, normalisation, pooling, chunk limit); change any part and the index must be rebuilt. | 8 |
 | Embedding / vector | A fixed-length list of numbers representing a text's meaning: a point in meaning space. | 8 |
@@ -308,6 +314,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Group (Keycloak) | A set of users who are "with" each other (department, team). It decides what you may SEE: its name goes into the token's `groups` claim and matches documents' `acl_groups`. | 16 |
 | Grouping (alerts) | Alertmanager combining related alerts (same `alertname` and `service` here) into one notification instead of one per time series. | 20 |
 | Guardrail (guard) | A check before or after the model (on the question, the retrieved documents or the answer) that can allow, flag, redact or block. | 34 |
+| Guardrails AI, NeMo Guardrails, Lakera Guard | Third-party guardrail tools: output validators (Guardrails AI), programmable conversation rails (NVIDIA NeMo Guardrails), a hosted prompt-injection detector (Lakera). Plugged in here through the `webhook` guard. | DG |
 | halfvec | A pgvector type that stores each number in 2 bytes instead of 4: half the storage, negligible quality loss for embeddings. | 11 |
 | Hallucination | A fluent, confident answer that isn't supported by the sources (or by reality). | 33 |
 | Hash | A short fingerprint calculated from a file's contents; change one byte and it changes completely. | 2 |
@@ -381,7 +388,9 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Label (metric) | A key=value pair that identifies one slice of a metric, e.g. `outcome="error"`, `job="opa"`, `service_version="0.1.0"`. Every distinct label combination is its own time series. | 20 |
 | Label (prompt) | A movable pointer from an environment to a prompt version ("production uses version 1, staging uses version 2"), kept in `prompts/labels.yaml`. | 24 |
 | Label propagation | A community-detection method: every node starts with its own label and repeatedly takes the label most of its neighbours have, until nothing changes. Simple, fast, and deterministic when nodes and ties are processed in a fixed order. | E03 |
+| LangChain, LangGraph | Popular open-source frameworks for chaining model calls and tools; LangGraph adds stateful agent graphs. Not dependencies here: an agent built with them calls rag-api or `rag mcp` as a tool. | DG |
 | Langfuse | Open-core (MIT) LLM observability: traces with content, prompts, datasets and scores; owned by ClickHouse, Inc. | 22 |
+| LangSmith | LangChain's hosted tracing and evaluation service. Not integrated; Langfuse (Step 22) plays that role here, and evaluation runs can be exported as JSONL. | DG |
 | Late chunking | Embedding a whole document with a long-context model and then averaging the token vectors inside each chunk, so each chunk's vector keeps its context (what "it" refers to). `embedder: late-chunking`. | E02 |
 | Late interaction (MaxSim) | Scoring a passage by taking, for each question token, its most similar passage token, and averaging: how ColBERT compares one-vector-per-token representations. | E02 |
 | Launch identity | The person (or token) an MCP server acts for, fixed by whoever starts it, never by the model: `rag mcp --subject … --group …` or `--token-file`. | E03 |
@@ -401,6 +410,8 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Listwise reranking | Reranking where an LLM sees all candidate passages at once and returns their order ("3 > 1 > 2"); strong on reasoning-heavy questions, slow and costly. | 32 |
 | LiteLLM | Open-source AI gateway exposing one OpenAI-compatible API in front of many model providers. | 9 |
 | Liveness / readiness | Two health questions: "is the process alive?" (restart it if not) and "can it serve traffic yet?". | 9 |
+| Llama Guard | Meta's open safety-classifier model: given a message, it says whether it is unsafe and which category. Usable here by serving it behind the gateway as `judge_llm` for the `llm-judge` guard. | DG |
+| LlamaIndex | A popular open-source data framework for RAG (loaders, indexes, query engines). Most of its techniques exist here as components; its loaders or retrievers can be wrapped as plugins. | DG |
 | LLM-as-judge | A model grading another model's answer against a reference. Useful, but biased (prefers longer answers and its own style) and fallible, so here it only advises. | 26 |
 | LLM observability | Recording what an AI system was asked, what it looked up and what it answered, to debug and improve it (Langfuse here). | 22 |
 | LLMLingua | Microsoft's prompt compression: a small model scores each token and the least informative are removed, often 2-5× shorter. `compressors: [llmlingua]` (reference, optional install). | E02 |
@@ -419,6 +430,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Luhn check | A simple checksum on card numbers; used to avoid redacting random digit strings that aren't cards. | 31 |
 | macOS Keychain | The Mac's built-in encrypted password store, unlocked by your login; home for personal tokens. | 6 |
 | maintenance_work_mem | Postgres memory for maintenance work such as building indexes; HNSW builds are much faster when the graph fits in it. | 11 |
+| Managed vector search (Pinecone, Vertex AI Vector Search, Azure AI Search, Bedrock Knowledge Bases, Turbopuffer) | Vector search run for you by a provider: no servers to operate, but data leaves your network and the API ties you to them. Each would be a `vector_store` plugin passing the conformance tests. | DG |
 | Manhattan (L1) distance | The sum of the absolute differences between two vectors, like walking city blocks; reported as 1 / (1 + distance). `metric: l1` (pgvector ≥ 0.7, Qdrant; OpenSearch only exact). | E01 |
 | Manifest (audit archive) | A small file describing one archived batch of audit events: first and last row, head hash, previous head and the segment's checksum. | 23 |
 | Manifest (ingestion) | The record of each ingested source: its content hash, the pipeline hash, how many chunks, the status and when; unchanged sources are skipped. | 31 |
@@ -439,6 +451,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Metric | A number measured over time (requests per second, latency, errors); answers "is something wrong?". | 19 |
 | MFA / TOTP | Multi-factor authentication: a second proof besides the password. TOTP is the six-digit, time-based code from an authenticator app. | 16 |
 | Migration | A versioned, reviewable script that changes the database structure, applied in order and recorded in the database. | 11 |
+| Milvus / Zilliz | A distributed open-source vector database for very large collections (many index types, GPU indexes); Zilliz Cloud is its managed version. | DG |
 | Min-max normalisation | Stretching a list of scores so the lowest becomes 0 and the highest 1, so scores of different kinds can be weighted and added; sensitive to outliers. | 32 |
 | Mirror (internal) | A company's scanned, approved copy of a public package store such as PyPI. | 1, 2 |
 | Mixture of Experts (MoE) | A model that stores many specialist sub-networks but uses only a few per token: memory like a big model, speed like a small one. | 7 |
@@ -706,8 +719,10 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Security plugin | OpenSearch's built-in TLS, users, roles and permissions; never disable it. | 13 |
 | Self-query | Extracting a metadata filter from the question itself ("HR policies updated after 2025" → department = hr, updated ≥ 2026-01-01) against a declared schema, by rules or an LLM whose output is checked. `query_transformer: self-query`. | E01 |
 | Self-reflective RAG (Self-RAG) | The system critiques its own answer against the sources and retrieves more and regenerates if it falls short; the `self-reflective` architecture. | 35 |
+| Semantic cache | Reusing a stored answer for a question with nearly the same *meaning* (embedding similarity above a threshold), not just the same words. Fast and cheap, but can return the answer to a subtly different question; `cache: semantic`, measured before use. | DG |
 | Semantic chunking | Cutting a text where the topic changes, found where the embeddings of neighbouring sentences stop being similar. | 31 |
 | Semantic conventions | Agreed attribute names (`http.request.method`, `gen_ai.request.model`) so every tool understands the data. | 19 |
+| Semantic Kernel | Microsoft's open-source orchestration SDK for .NET, Python and Java; an application built on it calls rag-api. | DG |
 | Semantic Versioning | MAJOR.MINOR.PATCH version numbers: breaking change → major, `feat` → minor, `fix` → patch. | 4 |
 | Sender-constrained token (DPoP / mTLS) | A token that only works together with the client's private key, so a stolen copy is useless. | 17 |
 | Sentence window | A chunking strategy that searches single sentences (precise) and gives the model the sentences around the match (context). | 31 |
@@ -759,6 +774,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | SSO session | Your sign-in at Keycloak itself. While it lasts (30 idle minutes, 10 hours at most here), other apps sign you in without asking again. | 16 |
 | Staged files | The files you have `git add`-ed: exactly what the next commit will contain, and what hooks check. | 5 |
 | Standards as code | Rules written down with ids and checked by a program (`rag doctor`), not only by reviewers. | 38 |
+| Starter config | A ready-made `rag.yaml` profile for a common situation (FAQ bot, legal, multilingual, air-gapped…) in `examples/profiles/recipes.yaml`, validated in CI; copy the closest one and measure it. | DG |
 | Status: live / mocked / reference | How a rag-core component is tested here: against the real service, against its exact HTTP requests, or not at all (needs heavy extras). | 30 |
 | Stdio transport | Running a tool server as a child process of the client and exchanging messages on its standard input and output: local, single-user, no network port. | E03 |
 | Stemming | Reducing words to a common root ("Fridays" → "fridai") so variations of a word match. | 13 |
@@ -814,6 +830,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Tokenizer | The model's dictionary for converting text to tokens and back. | 7 |
 | Tokenizer (search) | The analyzer step that splits text into words (tokens); not the same as an LLM's tokenizer. | 13 |
 | Tokens per second (tok/s) | How fast an answer streams once it starts; mostly set by memory bandwidth. | 7 |
+| Top-k | How many results a search returns (k). Here three numbers: `candidates` per search, `top_n` re-read by the reranker, `search_k` passages given to the model. | DG |
 | Toxicity | Insulting, hateful or abusive language; checked here with a small word list as a baseline to replace with a classifier. | 34 |
 | Trace | All the spans of one request, across all services, sharing one trace id. | 19 |
 | Trace backend | A store that keeps traces and finds them by id or by query (Tempo here; Jaeger is another). | 21 |
@@ -843,10 +860,12 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Verdict | A guard's decision: allow, flag, redact or block, with reasons. | 34 |
 | Version (prompt) | One frozen edition of a prompt, a file `prompts/<name>/v<N>.yaml`; `rag-answer@2` always means the same text. | 24 |
 | Versioning / version ID | Keeping every overwrite of an object as a separate version, each with its own ID, so nothing is silently lost. | 14 |
+| Vespa | An open-source search and ranking engine with tensors and multi-phase ranking (ColBERT-style late interaction built in), for large-scale custom ranking. | DG |
 | Virtual environment | A private folder of packages (`.venv`) for one project, tied to one interpreter. | 2 |
 | Virtual key | A per-app or per-person key issued by the gateway, with its own budget, limits and allowed models; needs a database (Step 10). | 9 |
 | Virtual machine (VM) | A computer simulated inside your computer; on a Mac, containers run inside a small Linux VM. | 3 |
 | WAL archiving | Copying Postgres's write-ahead log to object storage continuously, so the database can be replayed to any second. | 37 |
+| Weaviate | An open-source vector database with built-in hybrid search (its relative score fusion is the `relative-score` fusion here) and embedding modules. | DG |
 | Wheel | A pre-built Python package, ready to install, like flat-pack furniture. | 2 |
 | Wired memory / GPU working-set limit | The share of unified memory macOS lets the GPU lock for itself (`iogpu.wired_limit_mb`); large models need it big enough. | 7 |
 | Workflow / job / step | GitHub Actions' structure: a workflow (YAML file) has jobs that run in parallel on fresh machines, and each job has steps (commands or actions). | 27 |

@@ -14,6 +14,7 @@
 | **Setting it up on a Mac** | [Local setup guide](guides/local-setup.md) | [Reference: files and commands](reference.md), [runbooks](runbooks/) |
 | **Taking it to production** | [Production promotion guide](guides/production-promotion.md) | [Cloud mapping](architecture/cloud-mapping.md), [ADR-0037](adr/0037-production-environments-canaries-and-recovery.md), [disaster recovery](runbooks/disaster-recovery.md) |
 | **Building an assistant on the platform** | [New RAG project guide](guides/new-rag-project.md) | [Standards](standards/rag-standards.md), [catalogue](catalogue.md), [RAG handbook](concepts/rag-handbook.md) |
+| **Choosing techniques ("when to use which")** | [Decision guide](concepts/decision-guide.md) | [Coverage matrix](concepts/coverage-matrix.md), [starter configs](concepts/decision-guide.md#starter-configs), [catalogue](catalogue.md) |
 | **Tuning answer quality** | [RAG handbook](concepts/rag-handbook.md) | [Quality & operations §1](guides/quality-and-operations.md#1-evaluation-and-testing), Steps [31](steps/step-31-ingestion-pipeline.md)–[35](steps/step-35-rag-architectures.md) |
 | **On call / operating it** | [Quality & operations §2](guides/quality-and-operations.md#2-observability) | [Runbooks](#runbooks), [local setup: daily use](guides/local-setup.md#daily-use-after-a-restart) |
 | **Security, privacy, risk, audit** | [Quality & operations §3–4](guides/quality-and-operations.md#3-security-and-safety) | [Threat model](security/threat-model.md), [controls](compliance/controls.md), [cards](cards/README.md), [SECURITY.md](../SECURITY.md) |
@@ -35,6 +36,8 @@
 |---|---|
 | [Architecture overview](architecture/overview.md) | C4 views, request flows for search and answers, ingestion, data stores, trust boundaries, scaling, failure modes, every ADR in one table |
 | [RAG handbook](concepts/rag-handbook.md) | Every RAG technique in plain words, when to use it, and how to switch it in `rag.yaml` |
+| [Decision guide](concepts/decision-guide.md) | When to use which: every concept, technique, tool and component along the pipeline (and ecosystem alternatives) in plain English, an architecture flowchart, and ten validated starter configs |
+| [Coverage matrix](concepts/coverage-matrix.md) | "Do we have X?" item by item: in the repository, reference, or not included (why, and how to plug it in) |
 | [Extensions](extensions/README.md) | Techniques added after the 38 guide steps, one feature group per page: what, why, when to use which, how to switch it on |
 | [Cloud mapping](architecture/cloud-mapping.md) | Managed equivalents of every self-run piece on AWS, Google Cloud and Azure |
 | [C4 model as code](architecture/workspace.dsl) | Structurizr DSL source of the architecture diagrams |
@@ -100,6 +103,7 @@ commands, alternatives, common mistakes, what was added to the repository): [ste
 |---|---|
 | [Reference: files and commands](reference.md) | Every file, setting, port, secret name and command (Appendix A) |
 | [Glossary](glossary.md) | Every term in plain English, with the step that introduces it (Appendix B) |
+| Documentation coverage | `just doc-coverage` (in CI): every component, recipe, ADR and page documented, no broken links |
 | [Coverage audit](coverage-audit.md) | What was checked between the build guide and this repository, and what is created per machine instead of committed |
 | [Source build guide (PDF)](source/) | The original guide, in two parts |
 | [Changelog](../CHANGELOG.md) | What changed, step by step |

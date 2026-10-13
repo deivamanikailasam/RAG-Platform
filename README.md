@@ -2,6 +2,22 @@
 
 Local-first, enterprise-grade RAG platform (Project 0 of the RAG curriculum).
 
+## What's inside
+
+A RAG engine (`rag-core`) where every stage is a switchable component (159 in 31 kinds, see the
+[catalogue](docs/catalogue.md)), plus the platform around it. Is a technique here? See the
+**[coverage matrix](docs/concepts/coverage-matrix.md)**. Which one to use? See the
+**[decision guide](docs/concepts/decision-guide.md)** (with ten validated
+[starter configs](examples/profiles/recipes.yaml)).
+
+- **Ingestion:** parsers (Markdown, HTML, PDF, Word, CSV, text; Tika, Docling), cleaning, PII redaction, connectors with incremental `rag sync`.
+- **Chunking:** structure-aware, recursive, fixed, semantic, sentence-window, parent-child, hierarchical, proposition, code; late chunking; RAPTOR and document summaries; metadata extraction; contextual retrieval.
+- **Embeddings and stores:** any model through the gateway, instruction prefixes, Matryoshka, quantization, embedding cache; pgvector, Qdrant, OpenSearch; cosine, dot, Euclidean, Manhattan; HNSW, IVF, flat.
+- **Search:** hybrid (dense + BM25/SPLADE), metadata filters and self-query, query rewriting, multi-query, HyDE, step-back, decomposition, expansion, translation, routing, ensembles, precise section retrieval; fusion by RRF, relative score, weighted, DBSF, CombSUM/MNZ, Borda; cross-encoder, LLM and ColBERT-style reranking; MMR, recency, auto-merge.
+- **Answers:** context compression, lost-in-the-middle packing, checked citations, abstention, confidence, JSON, streaming, memory, exact and semantic caches.
+- **Architectures:** naive, standard, vector, keyword/vectorless, PageIndex, RAG-Fusion, HyDE, conversational, corrective, self-reflective, adaptive, FLARE, speculative, agentic, graph (local and global), SQL, table, long-context; MCP tools for agents.
+- **Safety and operations:** layered guardrails measured in CI, permissions inside every query, audit log, evaluation loop (metrics, judges, A/B, sweeps, synthetic sets, online evaluation), observability, Kubernetes with canaries and DR.
+
 ## Documentation
 
 Start with the **[documentation map](docs/README.md)**: who should read what. The two hands-on guides:
@@ -10,7 +26,8 @@ Start with the **[documentation map](docs/README.md)**: who should read what. Th
 - **[Production promotion](docs/guides/production-promotion.md)**: from the laptop to staging and production: signed images, GitOps, gates, canaries, HA/DR and the pre-production checklist.
 
 And to understand it: [architecture overview](docs/architecture/overview.md) ·
-[RAG handbook](docs/concepts/rag-handbook.md) · [quality and operations](docs/guides/quality-and-operations.md) ·
+[RAG handbook](docs/concepts/rag-handbook.md) · [decision guide](docs/concepts/decision-guide.md) ·
+[coverage matrix](docs/concepts/coverage-matrix.md) · [quality and operations](docs/guides/quality-and-operations.md) ·
 [new RAG project](docs/guides/new-rag-project.md) · [contributing](CONTRIBUTING.md) · [security](SECURITY.md).
 
 ## Quick start
