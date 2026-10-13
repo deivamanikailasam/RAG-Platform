@@ -85,7 +85,9 @@ def _cases(doc: dict[str, Any]) -> list[Case]:
     return out
 
 
-def _ingest(container: Container, doc: dict[str, Any], base: Path) -> int:
+def ingest_corpus(container: Container, doc: dict[str, Any], base: Path) -> int:
+    """Ingest a dataset's corpus with its real access rules (used by eval-search, `rag ask --corpus`
+    and the answer tests, Step 33)."""
     from rag_core.ingest import IngestionPipeline, load_source
 
     pipe = IngestionPipeline(container)
@@ -108,7 +110,7 @@ def run_variant(name: str, config: dict[str, Any], doc: dict[str, Any], base: Pa
 
     container = Container(config, name)
     if ingest:
-        _ingest(container, doc, base)
+        ingest_corpus(container, doc, base)
     pipeline = SearchPipeline(container)
     p = doc.get("principal", {})
     who = Principal(p.get("subject", "eval"), tuple(p.get("groups", ())),

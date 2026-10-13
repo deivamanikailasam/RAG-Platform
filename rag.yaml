@@ -21,13 +21,20 @@ profiles:
     manifest: memory
     queue: memory
     # search (Step 32)
-    query_transformer: none    # identity | expand-terms | with-history | rewrite | multi-query | hyde | decompose | step-back | chain
+    query_transformer: with-history   # identity | expand-terms | with-history | rewrite | multi-query | hyde | decompose | step-back | chain
     retriever: {use: hybrid, candidates: 30}     # dense | keyword | hybrid
     fusion: {use: rrf, k: 60}                    # rrf | weighted | dbsf
     reranker: {use: term-overlap, top_n: 30}     # offline stand-in for a cross-encoder
     postprocessors:
       - {use: dedupe, threshold: 0.85}
+      - {use: recency, weight: 0.15, half_life_days: 730}   # needs an "updated" date in metadata
       - {use: max-per-document, n: 3}
+    # answers (Step 33)
+    pipeline: {use: standard, search_k: 8, uncited: flag}
+    context_builder: {use: numbered, max_tokens: 3000, order: relevance}   # relevance | lost-in-middle | document
+    generator: {use: extractive, max_sentences: 3}   # no model offline; "llm" uses the registered prompt
+    memory: {use: memory, max_turns: 10}
+    cache: {use: memory, ttl_seconds: 3600}          # memory | valkey | semantic
 
   # ---- the platform on your Mac (Compose / OrbStack): real models and stores ----
   local:
@@ -44,10 +51,17 @@ profiles:
     keyword_index: {use: postgres-fts, dsn_env: null, credentials_file: /run/bao/rag_db.json, collection: default}
     manifest: {use: postgres, dsn_env: null, credentials_file: /run/bao/rag_db.json, collection: default}
     queue: {use: valkey-streams, url_file: /run/bao/valkey_url}
+    # Step 33: the answer model (qwen-quality) differs from the helper model (llm: qwen-fast)
+    answer_llm: {use: gateway, model: qwen-quality, base_url: "http://litellm:4000/v1", api_key_file: /run/bao/rag_api_gateway_key}
+    generator: {use: llm, llm_slot: answer_llm, prompt: rag-answer, prompts_dir: /app/prompts, prompt_label: production}
+    memory: {use: valkey, url_file: /run/bao/valkey_url, ttl_seconds: 86400}
+    cache: {use: valkey, url_file: /run/bao/valkey_url, ttl_seconds: 3600}
     reranker: {use: gateway, model: reranker, base_url: "http://litellm:4000", top_n: 30, api_key_file: /run/bao/rag_api_gateway_key}
+    query_transformer: {use: rewrite, llm_slot: llm}   # follow-ups made standalone (no call without history)
     postprocessors:
       - {use: dedupe, threshold: 0.85}
       - {use: min-score, stage: rerank, threshold: 0.05, min_keep: 1}
+      - {use: recency, weight: 0.15, half_life_days: 730}
       - {use: max-per-document, n: 3}
 
   # ---- the same, with the dedicated search engines from Steps 12-13 instead of Postgres ----

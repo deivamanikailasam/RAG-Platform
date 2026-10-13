@@ -17,6 +17,10 @@ rag search "question" --group hr [--classification internal] [-k 5] [--json] [--
 rag eval-search dataset.yaml [--variant …] [--no-ingest] [--fail-under recall=0.9] [--json]
                                                           compare search variants on labelled questions
 
+Answers (Step 33):
+rag ask "question" ["follow-up" …] --group hr [--corpus dataset.yaml] [--stream] [--no-memory] [--json]
+                                                          cited answers, as someone, as a conversation
+
 A URI is file:///abs/path, s3://bucket/key, or a local path (turned into a file:// URI).
 """
 
@@ -73,6 +77,19 @@ def main(argv: list[str] | None = None) -> int:
         "--ingest", nargs="*", default=[], help="ingest these files first (in-memory profiles)"
     )
     p.add_argument("--json", action="store_true")
+    p = sub.add_parser("ask", help="answer questions with citations, as a given person (Step 33)")
+    p.add_argument("questions", nargs="+", help="later questions can be follow-ups of earlier ones")
+    p.add_argument("--file", default=os.environ.get("RAG_CONFIG", "rag.yaml"))
+    p.add_argument("--profile")
+    p.add_argument("--group", action="append", default=[])
+    p.add_argument("--classification", action="append", default=[])
+    p.add_argument("--tenant", default="default")
+    p.add_argument(
+        "--corpus", help="ingest this evaluation dataset's documents first (in-memory profiles)"
+    )
+    p.add_argument("--stream", action="store_true", help="print the answer as it is generated")
+    p.add_argument("--no-memory", action="store_true", help="every question on its own")
+    p.add_argument("--json", action="store_true")
     p = sub.add_parser("eval-search", help="compare search variants on a labelled dataset")
     p.add_argument("dataset")
     p.add_argument("--file", default=os.environ.get("RAG_CONFIG", "rag.yaml"))
@@ -109,6 +126,8 @@ def main(argv: list[str] | None = None) -> int:
         container = cfg.load(a.file, a.profile)
         if a.cmd == "search":
             return _search(a, container)
+        if a.cmd == "ask":
+            return _ask(a, container)
         if a.cmd in ("ingest", "delete", "enqueue", "worker"):
             return _ingestion(a, container)
         if a.action == "validate":
@@ -200,6 +219,60 @@ def _search(a: argparse.Namespace, c: Container) -> int:
         print(f"{i}. {h.score:.4f}   {where}{' > ' + section if section else ''}   [{parts}]")
         print(f"     {h.chunk.text[:110].replace(chr(10), ' ')}")
     return 0
+
+
+def _ask(a: argparse.Namespace, c: Container) -> int:
+    from rag_core import evaluate as ev
+    from rag_core.answer import AnswerPipeline, answer_dict
+    from rag_core.types import Answer, Classification, Principal
+
+    if a.corpus:  # the dataset's documents, with their real access rules
+        dataset = Path(a.corpus)
+        ev.ingest_corpus(c, ev.load_dataset(dataset), dataset.parent)
+    classes: tuple[Classification, ...] = tuple(a.classification) or ("public", "internal")
+    who = Principal("cli", tuple(a.group), classes, a.tenant)
+    pipeline = AnswerPipeline(c)
+    session = None if a.no_memory else "cli"  # one conversation: later questions can be follow-ups
+    for question in a.questions:
+        if a.stream and not a.json:
+            print(f"Q: {question}\nA: ", end="", flush=True)
+            done: Answer | None = None
+            streamed = ""
+            for event in pipeline.stream(question, who, session_id=session):
+                if event.kind == "delta":
+                    streamed += event.data
+                    print(event.data, end="", flush=True)
+                elif event.kind == "done":
+                    done = event.data
+            print()
+            if done is None:  # pragma: no cover - the pipeline always ends with "done"
+                return 1
+            if done.text != streamed.strip():  # the citation check changed the draft
+                print(f"   checked: {done.text}")
+            _print_details(done, ms="-")
+            continue
+        answer = pipeline.answer(question, who, session_id=session)
+        if a.json:
+            print(json.dumps({"question": question, **answer_dict(answer),
+                              "cache": answer.trace.get("cache"), "model": answer.trace.get("model"),
+                              "prompt": answer.trace.get("prompt")}, indent=2))  # fmt: skip
+            continue
+        print(
+            f"Q: {question}\nA: {answer.text if not answer.blocked else '(blocked: ' + answer.blocked + ')'}"
+        )
+        _print_details(answer, ms=str(answer.trace.get("ms", "-")))
+        print()
+    return 0
+
+
+def _print_details(answer: Any, ms: str) -> None:
+    for cit in answer.citations:
+        name = cit.document_uri.rsplit("/", 1)[-1]
+        print(f"     [doc {cit.marker}] {name:30} ({cit.title})")
+    t = answer.trace
+    chunks = len((t.get("context") or {}).get("chunks", []))
+    print(f"     abstained={answer.abstained} cache={t.get('cache', '-')} model={t.get('model', '-')} "
+          f"prompt={t.get('prompt', '-')} context={chunks} chunks ms={ms}")  # fmt: skip
 
 
 def _eval_search(a: argparse.Namespace) -> int:
