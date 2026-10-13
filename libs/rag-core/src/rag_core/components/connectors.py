@@ -249,7 +249,7 @@ def _reference(name: str) -> Any:
             f"the {name!r} connector is a reference interface and is not configured in this platform: "
             "implement list()/fetch() in your project (register it under your own name), or export "
             "the content to a folder or bucket and use `filesystem` / `s3`. See "
-            "docs/extensions/04-evaluation-loops-and-remaining-techniques.md#connectors"
+            "docs/extensions/04-evaluation-loops-and-remaining-techniques.md#12-connectors-and-rag-sync"
         )
 
     return factory
