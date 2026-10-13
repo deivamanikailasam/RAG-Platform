@@ -30,6 +30,7 @@ SLOTS = {  # the slot in rag.yaml for each kind, and what it is for, in order of
     "reranker": "Re-ordering candidates (Step 32)", "postprocessor": "Filtering and shaping results (Step 32)",
     "context_builder": "Packing the context (Step 33)", "generator": "Writing the answer (Step 33)",
     "memory": "Conversation memory (Step 33)", "cache": "Answer cache (Step 33)",
+    "search_cache": "Retrieval-result cache (extension 01)",
     "guard": "Guardrails (Step 34)", "pipeline": "RAG architecture (Step 35)",
     "graph_store": "Knowledge graph (Step 35)", "llm": "Language models (Step 30)",
 }  # fmt: skip

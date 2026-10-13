@@ -3,6 +3,14 @@
 Semantic versioning (docs/standards/rag-standards.md, "Versioning"): MAJOR for breaking changes
 to contracts, the SDK, the CLI, component names and settings, rag.yaml or the packaged profiles.
 
+## Unreleased (minor: additions only)
+- Extension 01: `metric`, index and quantization settings on every vector store with an
+  embedding-contract check; `rag_core.filters` (typed metadata filters, pushed down into every
+  store); `self-query`; fusion `relative-score`, `combsum`, `combmnz`, `borda`; the `search_cache`
+  slot; the `ensemble` and `router` retrievers; `rag search/ask --filter`, `rag index ddl`;
+  conformance checks `check_metadata_filters`, `check_metrics`. Existing settings keep their meaning
+  (Qdrant's `hnsw_ef` is accepted as `ef_search`); the answer-cache key changes only when a filter is given.
+
 ## 1.0.0 (Step 38)
 First stable release: the public API is fixed for 1.x.
 - Contracts and types; 94 registered components in 24 kinds (docs/catalogue.md)

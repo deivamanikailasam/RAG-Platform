@@ -76,6 +76,8 @@ def check(config: Mapping[str, Any]) -> list[Finding]:
         out.append(Finding("warning", "generator", "extractive copies sentences instead of writing answers: fine only if that's the product"))  # fmt: skip
     if _use(config.get("cache")) == "memory":
         out.append(Finding("warning", "cache", "an in-process cache isn't shared by replicas and isn't cleared by `rag reacl` in other pods: use valkey"))  # fmt: skip
+    if _use(config.get("search_cache")) == "memory":  # extension 01: the same reason
+        out.append(Finding("warning", "search_cache", "an in-process result cache isn't cleared when a worker in another pod ingests: use valkey"))  # fmt: skip
     if _use(config.get("reranker")) == "term-overlap":
         out.append(Finding("warning", "reranker", "term-overlap is the offline stand-in: use a cross-encoder (gateway or tei)"))  # fmt: skip
     pii = config.get("pii")

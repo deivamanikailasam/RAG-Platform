@@ -95,6 +95,8 @@ class IngestionPipeline:
         # Step 33: any change to the index starts a new cache epoch, so no cached answer outlives
         # the documents it was based on (a Valkey cache does this for every replica at once)
         self.cache = container.get("cache") if container.has("cache") else None
+        # extension 01: cached search results are keyed by the same epoch idea
+        self.search_cache = container.get("search_cache") if container.has("search_cache") else None
         # Step 35: GraphRAG's entity store is one more place a document lives
         self.graph = container.get("graph_store") if container.has("graph_store") else None
 
@@ -177,8 +179,7 @@ class IngestionPipeline:
         if self.manifest:
             self.manifest.delete(uri)
         result = IngestResult(uri, "deleted", n, seconds=time.monotonic() - start)
-        if self.cache is not None:
-            self.cache.invalidate()
+        self._invalidate()
         self.on_event({"event": "rag.ingest", "uri": uri, "status": "deleted", "chunks": n})
         return result
 
@@ -199,8 +200,7 @@ class IngestionPipeline:
                     self.graph.chunks[cid] = replace(ch, access=access)
         if self.manifest is not None and (entry := self.manifest.get(uri)) is not None:
             self.manifest.put(replace(entry, access=_access_dict(access)))
-        if self.cache is not None:
-            self.cache.invalidate()  # cached answers may rest on what was just revoked
+        self._invalidate()  # cached answers and results may rest on what was just revoked
         self.on_event(
             {
                 "event": "rag.access",
@@ -211,10 +211,16 @@ class IngestionPipeline:
         )
         return n
 
+    def _invalidate(self) -> None:
+        """The index changed: a new epoch for cached answers and cached search results."""
+        for cache in (self.cache, self.search_cache):
+            if cache is not None:
+                cache.invalidate()
+
     def _done(self, source: Source, result: IngestResult, start: float) -> IngestResult:
         result = replace(result, seconds=round(time.monotonic() - start, 3))
-        if self.cache is not None and result.status == "indexed":
-            self.cache.invalidate()
+        if result.status == "indexed":
+            self._invalidate()
         if self.manifest is not None and result.status in ("indexed", "failed", "skipped"):
             self.manifest.put(
                 ManifestEntry(

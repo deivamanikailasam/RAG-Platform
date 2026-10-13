@@ -150,9 +150,8 @@ class AnswerPipeline:
 
         key = None
         if self.cache is not None:
-            key = cache_key(
-                principal, query.text, history, _version(self.c, self.generator, self.cache)
-            )
+            key = cache_key(principal, query.text, history,
+                            _version(self.c, self.generator, self.cache), query.filters)  # fmt: skip
             # semantic lookups only for questions without a conversation (follow-ups depend on it)
             hit = self.cache.get(key, principal, "" if history else query.text)
             if hit is not None:

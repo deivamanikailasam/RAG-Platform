@@ -15,7 +15,7 @@ import json
 import threading
 import time
 from collections import OrderedDict, deque
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -174,12 +174,17 @@ def _vmem(p: ValkeyMemoryParams, c: Container) -> ValkeyMemory:
 # ================================================================ caches
 
 
-def cache_key(principal: Principal, question: str, history: Sequence[Turn], version: str) -> str:
+def cache_key(principal: Principal, question: str, history: Sequence[Turn], version: str,
+              filters: Mapping[str, Any] | None = None) -> str:  # fmt: skip
     """Same visible documents + same question (normalised) + same conversation + same pipeline
-    version (index epoch, prompt, model, settings) = same answer."""
+    version (index epoch, prompt, model, settings) + same metadata filter = same answer."""
     norm = " ".join(words(question))
     hist = "|".join(f"{t.role}:{t.text}" for t in history)
     raw = f"{principal.fingerprint}\x00{norm}\x00{hist}\x00{version}"
+    if filters:  # extension 01: "leave days" for HR documents only is another question
+        from rag_core.filters import canonical
+
+        raw += f"\x00{canonical(filters)}"
     return hashlib.sha256(raw.encode()).hexdigest()
 
 

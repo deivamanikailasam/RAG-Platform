@@ -228,13 +228,29 @@ class ChainTransformer:
         self.steps = steps
 
     def transform(self, query: Query) -> list[str]:
+        return self.analyze(query)[0]
+
+    def analyze(self, query: Query) -> tuple[list[str], dict[str, Any]]:
+        """The texts, plus the metadata filter any step found (a self-query step, extension 01).
+        A filter-finding step reads the ORIGINAL question, wherever it is in the chain."""
         texts = [query.text]
+        found: list[dict[str, Any]] = []
         for step in self.steps:
+            if hasattr(step, "analyze"):
+                _, f = step.analyze(query)
+                if f:
+                    found.append(f)
             nxt: list[str] = []
             for t in texts:
                 nxt += [t] if isinstance(t, Passage) else step.transform(replace(query, text=t))
             texts = _unique(nxt)
-        return texts[:8]
+        from rag_core.filters import combine
+
+        return texts[:8], combine(*found)
+
+    @property
+    def fallback_on_empty(self) -> bool:
+        return all(getattr(s, "fallback_on_empty", True) for s in self.steps)
 
 
 @register("query_transformer", "chain", params=ChainParams,
@@ -269,24 +285,59 @@ def _merge_scores(a: ScoredChunk, b: ScoredChunk) -> ScoredChunk:
 
 
 class _Fusion:
+    """Every fusion: scale each ranked list (`_norm`), weight it, add the parts up per chunk.
+
+    A list's weight comes from `list_weights` when the caller gives one per list (the ensemble
+    retriever does), else from `weights` by where the list came from ("dense", "sparse")."""
+
     stage = "fusion"
 
     def __init__(self, weights: dict[str, float]) -> None:
         self.weights = weights
 
-    def _norm(self, hits: Sequence[ScoredChunk]) -> list[float]:
+    def _norm(self, hits: Sequence[ScoredChunk], longest: int) -> list[float]:
         raise NotImplementedError
 
-    def fuse(self, ranked: Sequence[Sequence[ScoredChunk]]) -> list[ScoredChunk]:
+    def _combine(self, total: float, lists: int) -> float:
+        return total  # CombMNZ multiplies by the number of lists that found the chunk
+
+    def fuse(self, ranked: Sequence[Sequence[ScoredChunk]],
+             list_weights: Sequence[float] | None = None) -> list[ScoredChunk]:  # fmt: skip
+        if list_weights is not None and len(list_weights) != len(ranked):
+            raise ValueError("one weight per ranked list")
         total: dict[str, float] = {}
+        found: dict[str, int] = {}
         best: dict[str, ScoredChunk] = {}
-        for hits in ranked:
-            w = self.weights.get(source_of(hits), 1.0)
-            for h, v in zip(hits, self._norm(hits), strict=True):
+        longest = max((len(h) for h in ranked), default=0)
+        for i, hits in enumerate(ranked):
+            w = (
+                list_weights[i]
+                if list_weights is not None
+                else self.weights.get(source_of(hits), 1.0)
+            )
+            for h, v in zip(hits, self._norm(hits, longest), strict=True):
                 total[h.chunk.id] = total.get(h.chunk.id, 0.0) + w * v
+                found[h.chunk.id] = found.get(h.chunk.id, 0) + 1
                 best[h.chunk.id] = _merge_scores(best[h.chunk.id], h) if h.chunk.id in best else h
-        out = [best[i].with_score(round(s, 6), self.stage) for i, s in total.items()]
+        out = [
+            best[i].with_score(round(self._combine(s, found[i]), 6), self.stage)
+            for i, s in total.items()
+        ]
         return sorted(out, key=lambda h: (-h.score, h.chunk.id))
+
+
+def _minmax(hits: Sequence[ScoredChunk]) -> list[float]:
+    s = [h.score for h in hits]
+    lo, hi = (min(s), max(s)) if s else (0.0, 0.0)
+    return [1.0 if hi == lo else (x - lo) / (hi - lo) for x in s]
+
+
+def _zscore(hits: Sequence[ScoredChunk]) -> list[float]:
+    s = [h.score for h in hits]
+    if len(s) < 2 or statistics.pstdev(s) == 0:
+        return [1.0] * len(s)
+    mu, sd = statistics.fmean(s), statistics.pstdev(s)
+    return [(x - mu) / sd for x in s]
 
 
 class ReciprocalRankFusion(_Fusion):
@@ -297,7 +348,7 @@ class ReciprocalRankFusion(_Fusion):
         super().__init__(weights or {})
         self.k = k
 
-    def _norm(self, hits: Sequence[ScoredChunk]) -> list[float]:
+    def _norm(self, hits: Sequence[ScoredChunk], longest: int) -> list[float]:
         return [1.0 / (self.k + rank) for rank in range(1, len(hits) + 1)]
 
 
@@ -305,17 +356,21 @@ class WeightedFusion(_Fusion):
     """Scores scaled to 0-1 per list (min-max), then a weighted sum ("alpha" blending). Uses how
     MUCH better a hit is, not only its position; sensitive to outliers and list length."""
 
-    def _norm(self, hits: Sequence[ScoredChunk]) -> list[float]:
-        s = [h.score for h in hits]
-        lo, hi = (min(s), max(s)) if s else (0.0, 0.0)
-        return [1.0 if hi == lo else (x - lo) / (hi - lo) for x in s]
+    def _norm(self, hits: Sequence[ScoredChunk], longest: int) -> list[float]:
+        return _minmax(hits)
+
+
+class RelativeScoreFusion(WeightedFusion):
+    """Weaviate's "relative score fusion": the SAME arithmetic as `weighted` (min-max per list,
+    weighted sum), configured the Weaviate way with one `alpha` (1 = vectors only, 0 = keywords
+    only). A chunk found by one list only gets nothing from the other (0, not the list's minimum)."""
 
 
 class DistributionFusion(_Fusion):
     """DBSF (as in Qdrant): scale each list by its own spread (mean ± 3 standard deviations), so one
     extreme score doesn't squash the rest."""
 
-    def _norm(self, hits: Sequence[ScoredChunk]) -> list[float]:
+    def _norm(self, hits: Sequence[ScoredChunk], longest: int) -> list[float]:
         s = [h.score for h in hits]
         if len(s) < 2:
             return [1.0] * len(s)
@@ -324,6 +379,39 @@ class DistributionFusion(_Fusion):
             return [1.0] * len(s)
         lo, hi = mu - 3 * sd, mu + 3 * sd
         return [min(1.0, max(0.0, (x - lo) / (hi - lo))) for x in s]
+
+
+class CombSum(_Fusion):
+    """CombSUM (Fox & Shaw, 1994): each list's scores normalised (min-max by default), summed.
+    A chunk several lists agree on rises; one list's high score alone rises less."""
+
+    def __init__(self, weights: dict[str, float], normalize: str = "minmax") -> None:
+        super().__init__(weights)
+        self.normalize = normalize
+
+    def _norm(self, hits: Sequence[ScoredChunk], longest: int) -> list[float]:
+        if self.normalize == "zscore":
+            return _zscore(hits)
+        if self.normalize == "none":
+            return [h.score for h in hits]
+        return _minmax(hits)
+
+
+class CombMnz(CombSum):
+    """CombMNZ: CombSUM times the number of lists that found the chunk. Rewards agreement much
+    more strongly: the classic choice when several similar retrievers vote."""
+
+    def _combine(self, total: float, lists: int) -> float:
+        return total * lists
+
+
+class BordaCount(_Fusion):
+    """Borda count (a vote): in each list the top chunk gets N points, the next N-1, …, where N is
+    the length of the longest list. Uses positions only, like RRF, but gives the middle of a list
+    much more weight than RRF does."""
+
+    def _norm(self, hits: Sequence[ScoredChunk], longest: int) -> list[float]:
+        return [float(longest - rank) for rank in range(len(hits))]
 
 
 @register(
@@ -347,10 +435,45 @@ def _weighted(p: WeightedParams, c: Container) -> WeightedFusion:
     return WeightedFusion(p.weights)
 
 
+class RelativeScoreParams(_Strict):
+    alpha: float = Field(0.5, ge=0, le=1)  # weight of vector search; keyword search gets 1 - alpha
+    weights: dict[str, float] | None = None  # or explicit weights per source (overrides alpha)
+
+
+@register("fusion", "relative-score", params=RelativeScoreParams,
+          summary="Weaviate-style relative score fusion: min-max per list, alpha-weighted sum (= weighted)")  # fmt: skip
+def _relative(p: RelativeScoreParams, c: Container) -> RelativeScoreFusion:
+    return RelativeScoreFusion(
+        p.weights if p.weights is not None else {"dense": p.alpha, "sparse": 1 - p.alpha}
+    )
+
+
 @register("fusion", "dbsf", params=FusionParams,
           summary="distribution-based score fusion (mean +/- 3 std devs), as in Qdrant")  # fmt: skip
 def _dbsf(p: FusionParams, c: Container) -> DistributionFusion:
     return DistributionFusion(p.weights)
+
+
+class CombParams(FusionParams):
+    normalize: Literal["minmax", "zscore", "none"] = "minmax"  # none: only for scores of one kind
+
+
+@register("fusion", "combsum", params=CombParams,
+          summary="CombSUM: normalised scores summed across lists")  # fmt: skip
+def _combsum(p: CombParams, c: Container) -> CombSum:
+    return CombSum(p.weights, p.normalize)
+
+
+@register("fusion", "combmnz", params=CombParams,
+          summary="CombMNZ: CombSUM x number of lists that found the chunk (rewards agreement)")  # fmt: skip
+def _combmnz(p: CombParams, c: Container) -> CombMnz:
+    return CombMnz(p.weights, p.normalize)
+
+
+@register("fusion", "borda", params=FusionParams,
+          summary="Borda count: N points for first place, N-1 for second, … summed (ranks only)")  # fmt: skip
+def _borda(p: FusionParams, c: Container) -> BordaCount:
+    return BordaCount(p.weights)
 
 
 # ================================================================ retrievers

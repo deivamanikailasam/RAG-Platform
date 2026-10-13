@@ -20,14 +20,16 @@ profiles:
     chunker: {use: structure, max_tokens: 400, overlap_tokens: 40, min_tokens: 60}
     enrichers: [context-header]
     embedder: {use: hashing, dimensions: 256}
-    vector_store: memory
+    vector_store: memory              # {use: memory, metric: cosine}: cosine | dot | l2 | l1 (extension 01)
     keyword_index: memory-bm25
     manifest: memory
     queue: memory
     # search (Step 32)
-    query_transformer: with-history   # identity | expand-terms | with-history | rewrite | multi-query | hyde | decompose | step-back | chain
-    retriever: {use: hybrid, candidates: 30}     # dense | keyword | hybrid
-    fusion: {use: rrf, k: 60}                    # rrf | weighted | dbsf
+    query_transformer: with-history   # identity | expand-terms | with-history | rewrite | multi-query | hyde | decompose | step-back | self-query | chain
+    retriever: {use: hybrid, candidates: 30}     # dense | keyword | hybrid | ensemble | router
+    fusion: {use: rrf, k: 60}                    # rrf | weighted | relative-score | dbsf | combsum | combmnz | borda
+    # search_cache: {use: memory, ttl_seconds: 600}   # cached search results: memory | valkey (extension 01)
+    # metadata filters: `rag search --filter department=hr`, or "filter" in /v1/search (docs/extensions/01-…)
     reranker: {use: term-overlap, top_n: 30}     # offline stand-in for a cross-encoder
     postprocessors:
       - {use: dedupe, threshold: 0.85}

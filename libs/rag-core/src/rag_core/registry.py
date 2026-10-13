@@ -90,6 +90,7 @@ SLOTS: dict[str, str] = {
     "reranker": "reranker", "postprocessors": "postprocessor", "context_builder": "context_builder",
     "generator": "generator", "guards": "guard", "cache": "cache", "memory": "memory",
     "queue": "queue", "manifest": "manifest", "pipeline": "pipeline", "graph_store": "graph_store",
+    "search_cache": "search_cache",
 }  # fmt: skip
 PLURAL = {"parsers", "normalizers", "enrichers", "postprocessors", "guards"}
 
@@ -190,6 +191,27 @@ class Container:
     def build_all(self) -> dict[str, Any]:
         """Build every configured slot: what `rag config check` does."""
         return {slot: self.get(slot) for slot in self.config if slot in SLOTS}
+
+
+class Overlay(Container):
+    """Another container with some slots changed, sharing every other (already built) component:
+    the ensemble retriever's members and the router's routes (extension 01) use one to search a
+    second collection with the same embedder, or the same store with another retriever."""
+
+    def __init__(self, parent: Container, overrides: Mapping[str, Any], name: str) -> None:
+        own = {k: v for k, v in overrides.items() if k != "extends"}
+        unknown = sorted(set(own) - set(SLOTS))
+        if unknown:
+            raise ComponentError(f"{name}: unknown slot(s) {', '.join(map(repr, unknown))}")
+        merged = {**parent.config, **own}
+        super().__init__({k: v for k, v in merged.items() if v not in ("none", None)}, name)
+        self.parent, self.own = parent, set(own)
+
+    def get(self, slot: str) -> Any:
+        return super().get(slot) if slot in self.own else self.parent.get(slot)
+
+    def has(self, slot: str) -> bool:
+        return super().has(slot) if slot in self.own else self.parent.has(slot)
 
 
 def describe() -> list[dict[str, Any]]:

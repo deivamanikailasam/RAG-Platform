@@ -61,7 +61,8 @@ def test_access_is_enforced_through_the_sdk(app: RagApp) -> None:
 def test_check_validate_and_components() -> None:
     assert RagApp.load(ROOT / "rag.yaml", "production", env={}).check() == []
     assert RagApp.load(ROOT / "rag.yaml", "offline", env={}).validate() == []
-    assert {r["name"] for r in RagApp.components("fusion")} == {"rrf", "weighted", "dbsf"}
+    assert {r["name"] for r in RagApp.components("fusion")} == {
+        "rrf", "weighted", "dbsf", "relative-score", "combsum", "combmnz", "borda"}  # fmt: skip
     inline = RagApp.from_dict({"embedder": {"use": "hashing", "dimensions": 32}})
     assert inline.validate() == []
 

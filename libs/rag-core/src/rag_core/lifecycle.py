@@ -181,6 +181,12 @@ def erase_subject(container: Container, subject: Principal | None, identifiers: 
         if apply:
             container.get("cache").invalidate()
         report.items.append({"what": "cached answers", "action": "all invalidated (new epoch)"})
+    if container.has("search_cache"):  # extension 01: cached results may hold their chunks
+        if apply:
+            container.get("search_cache").invalidate()
+        report.items.append(
+            {"what": "cached search results", "action": "all invalidated (new epoch)"}
+        )
     needles = [i for i in identifiers if i.strip()]
     if container.has("pii"):  # the pseudonyms ingestion would have written for these identifiers
         pii = container.get("pii")

@@ -8,13 +8,16 @@ result.trace     # which components ran, the search texts, counts and millisecon
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from opentelemetry import trace
 
+from rag_core import filters as _filters
 from rag_core.components.retrieval import (
     DenseRetriever,
     HybridRetriever,
@@ -22,6 +25,7 @@ from rag_core.components.retrieval import (
     Passage,
     RetrieverParams,
 )
+from rag_core.components.searchcache import search_key
 from rag_core.registry import ComponentError, Container
 from rag_core.types import Query, ScoredChunk
 
@@ -52,6 +56,11 @@ class SearchPipeline:
         )
         self.reranker = container.get("reranker") if container.has("reranker") else None
         self.post = container.get("postprocessors") if container.has("postprocessors") else []
+        # extension 01: cached results, keyed by access, question, filter and index epoch
+        self.cache = container.get("search_cache") if container.has("search_cache") else None
+        self._settings = hashlib.sha256(
+            json.dumps(dict(container.config), sort_keys=True, default=str).encode()
+        ).hexdigest()[:12]
         self.leaks = 0  # chunks a store returned that the caller may not see (should stay 0)
 
     def _default_retriever(self) -> Any:
@@ -65,9 +74,38 @@ class SearchPipeline:
             return KeywordRetriever(self.c, RetrieverParams())
         raise ComponentError("search needs a vector_store and/or a keyword_index")
 
+    def _transform(self, query: Query) -> tuple[list[str], dict[str, Any]]:
+        """The search texts, and the metadata filter a self-query transformer found (or {})."""
+        if self.transformer is None:
+            return [query.text], {}
+        if hasattr(self.transformer, "analyze"):
+            texts, found = self.transformer.analyze(query)
+            return list(texts), dict(found or {})
+        return list(self.transformer.transform(query)), {}
+
     def search(self, query: Query) -> SearchResult:
+        # extension 01: an invalid metadata filter fails HERE, with a clear message, before any
+        # model or store is called (rag-api turns it into a 422)
+        _filters.parse(query.filters)
+        key = None
+        if self.cache is not None:
+            key = search_key(query.principal, query.text, query.history, query.filters, query.k,
+                             f"{self._settings}|{self.cache.epoch()}")  # fmt: skip
+            cached = self.cache.get(key)
+            if cached is not None:
+                hits, texts = cached
+                return SearchResult(hits, texts, {"cache": "hit", "texts": texts, "counts": {"returned": len(hits)},
+                                                  "components": {"search_cache": _name(self.cache)}, "ms": {}})  # fmt: skip
+        result = self._search(query)
+        if self.cache is not None and key is not None:
+            result.trace["cache"] = "miss"
+            self.cache.put(key, result.hits, result.texts)
+        return result
+
+    def _search(self, query: Query) -> SearchResult:
         ms: dict[str, float] = {}
         counts: dict[str, int] = {}
+        info: dict[str, Any] = {}
 
         def timed(stage: str, t0: float) -> None:
             ms[stage] = round((time.perf_counter() - t0) * 1000, 1)
@@ -75,18 +113,29 @@ class SearchPipeline:
         with tracer.start_as_current_span("rag.search", attributes={"rag.k": query.k}) as span:
             t0 = time.perf_counter()
             with tracer.start_as_current_span("rag.search.transform"):
-                texts = self.transformer.transform(query) if self.transformer else [query.text]
+                texts, found = self._transform(query)
             texts = [t for t in texts if str(t).strip()][:MAX_TEXTS] or [query.text]
             timed("transform", t0)
+            asked = query
+            if found:  # self-query: ANDed with the caller's filter (never replacing it)
+                query = replace(query, filters=_filters.combine(query.filters, found))
+                info["filters"] = {"request": dict(asked.filters), "self_query": found}
 
             t0 = time.perf_counter()
             with tracer.start_as_current_span(
                 "rag.search.retrieve", attributes={"rag.texts": len(texts)}
             ) as s:
                 hits = self.retriever.retrieve(query, texts)
+                if not hits and found and getattr(self.transformer, "fallback_on_empty", True):
+                    # the extracted filter matched nothing: a wrong guess costs recall, not the answer
+                    hits = self.retriever.retrieve(asked, texts)
+                    info["filters"]["fallback"] = True
+                    query = asked
                 s.set_attribute("rag.candidates", len(hits))
             counts["retrieved"] = len(hits)
             timed("retrieve", t0)
+            if hasattr(self.retriever, "last_info"):  # ensemble members, router's route
+                info["retriever"] = self.retriever.last_info()
 
             # Defence in depth: every store filters by access already. If one ever returns a chunk
             # this caller may not see (a bug, a misconfigured plugin), it's dropped and counted.
@@ -129,5 +178,10 @@ class SearchPipeline:
             "reranker": _name(self.reranker) if self.reranker else None,
             "postprocessors": [_name(p) for p in self.post],
         }
-        return SearchResult(hits, [str(t) for t in texts],
-                            {"components": components, "texts": [str(t) for t in texts], "counts": counts, "ms": ms})  # fmt: skip
+        trace_data = {
+            "components": components,
+            "texts": [str(t) for t in texts],
+            "counts": counts,
+            "ms": ms,
+        }
+        return SearchResult(hits, [str(t) for t in texts], trace_data | info)

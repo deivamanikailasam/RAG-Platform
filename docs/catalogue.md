@@ -2,7 +2,7 @@
 
 # Catalogue of switchable components
 
-94 components in 24 kinds. Switch any of them with one line in rag.yaml: `<slot>: {use: <name>, <setting>: <value>}`. `rag components --kind <kind>` shows the same.
+103 components in 25 kinds. Switch any of them with one line in rag.yaml: `<slot>: {use: <name>, <setting>: <value>}`. `rag components --kind <kind>` shows the same.
 
 ## token_counter: Counting tokens (Step 30)
 
@@ -70,17 +70,17 @@
 
 | Name | What it does | Settings (default) | Tested |
 |---|---|---|---|
-| `memory` | exact cosine search in memory (dev, tests, small corpora) | none | live |
-| `opensearch-knn` | OpenSearch k-NN (Lucene HNSW) with filtering during the search | `url` ('https://opensearch:9200'), `index` ('rag-chunks'), `user_env` ('OPENSEARCH_USER'), `password_env` ('OPENSEARCH_PASSWORD'), `verify` ('/run/secrets/opensearch_…), `vector_field` ('embedding'), `dimensions` (1024), `timeout` (30.0) | mocked |
-| `pgvector` | Postgres + pgvector HNSW on Step 11's tables; permissions joined in SQL Needs extra: `postgres`. | `dsn_env` ('RAG_DB_DSN'), `host` ('rag-db'), `port` (5432), `dbname` ('rag'), `credentials_file` (None), `collection` ('default'), `embedding_model` ('embedder'), `dimensions` (1024), `vector_type` ('halfvec'), `query_instruction` (''), `max_chunk_tokens` (512), `ef_search` (80), `text_search_config` ('english'), `pool_size` (4) | live |
-| `qdrant` | Qdrant over REST: Step 12's collection, payload-filtered by tenant, classification and groups | `url` ('http://qdrant:6333'), `collection` ('rag_chunks'), `api_key_env` ('QDRANT_API_KEY'), `vector_name` ('dense'), `dimensions` (1024), `create_if_missing` (False), `hnsw_ef` (128), `timeout` (30.0) | live |
+| `memory` | exact search in memory, any metric (cosine/dot/l2/l1); dev, tests, small corpora | `metric` ('cosine') | live |
+| `opensearch-knn` | OpenSearch k-NN with filtering during the search; metric cosine/dot/l2/l1, engine lucene/faiss/nmslib, hnsw/flat | `metric` ('cosine'), `index_type` ('hnsw'), `hnsw_m` (16), `ef_construction` (100), `ef_search` (100), `url` ('https://opensearch:9200'), `index` ('rag-chunks'), `user_env` ('OPENSEARCH_USER'), `password_env` ('OPENSEARCH_PASSWORD'), `verify` ('/run/secrets/opensearch_…), `vector_field` ('embedding'), `dimensions` (1024), `timeout` (30.0), `keyword_suffix` (''), `engine` ('lucene'), `create_if_missing` (False) | live |
+| `pgvector` | Postgres + pgvector on Step 11's tables; metric cosine/dot/l2/l1, hnsw/ivfflat/flat, binary quantization; permissions joined in SQL Needs extra: `postgres`. | `metric` ('cosine'), `index_type` ('hnsw'), `hnsw_m` (16), `ef_construction` (64), `ef_search` (80), `dsn_env` ('RAG_DB_DSN'), `host` ('rag-db'), `port` (5432), `dbname` ('rag'), `credentials_file` (None), `collection` ('default'), `embedding_model` ('embedder'), `dimensions` (1024), `vector_type` ('halfvec'), `query_instruction` (''), `max_chunk_tokens` (512), `text_search_config` ('english'), `pool_size` (4), `lists` (100), `probes` (10), `iterative_scan` ('relaxed_order'), `quantization` ('none'), `oversample` (4.0), `create_index` (False) | live |
+| `qdrant` | Qdrant over REST: Step 12's collection; metric cosine/dot/l2/l1, hnsw/flat, scalar/binary quantization; payload-filtered by tenant, classification and groups | `metric` ('cosine'), `index_type` ('hnsw'), `hnsw_m` (16), `ef_construction` (100), `ef_search` (128), `url` ('http://qdrant:6333'), `collection` ('rag_chunks'), `api_key_env` ('QDRANT_API_KEY'), `vector_name` ('dense'), `dimensions` (1024), `create_if_missing` (False), `quantization` ('none'), `oversampling` (2.0), `metadata_indexes` ({}), `timeout` (30.0) | live |
 
 ## keyword_index: Keyword search (Step 31)
 
 | Name | What it does | Settings (default) | Tested |
 |---|---|---|---|
 | `memory-bm25` | BM25 keyword ranking in memory (dev, tests) | `k1` (1.5), `b` (0.75) | live |
-| `opensearch` | OpenSearch BM25 with Step 13's analyzers and synonyms; permission-filtered | `url` ('https://opensearch:9200'), `index` ('rag-chunks'), `user_env` ('OPENSEARCH_USER'), `password_env` ('OPENSEARCH_PASSWORD'), `verify` ('/run/secrets/opensearch_…), `vector_field` ('embedding'), `dimensions` (1024), `timeout` (30.0) | mocked |
+| `opensearch` | OpenSearch BM25 with Step 13's analyzers and synonyms; permission-filtered | `url` ('https://opensearch:9200'), `index` ('rag-chunks'), `user_env` ('OPENSEARCH_USER'), `password_env` ('OPENSEARCH_PASSWORD'), `verify` ('/run/secrets/opensearch_…), `vector_field` ('embedding'), `dimensions` (1024), `timeout` (30.0), `keyword_suffix` ('') | live |
 | `postgres-fts` | Postgres full-text search on the same tables (no extra service) Needs extra: `postgres`. | `dsn_env` ('RAG_DB_DSN'), `host` ('rag-db'), `port` (5432), `dbname` ('rag'), `credentials_file` (None), `collection` ('default'), `embedding_model` ('embedder'), `dimensions` (1024), `vector_type` ('halfvec'), `query_instruction` (''), `max_chunk_tokens` (512), `ef_search` (80), `text_search_config` ('english'), `pool_size` (4) | live |
 
 ## manifest: Remembering what was ingested (Step 31)
@@ -108,6 +108,7 @@
 | `identity` | search with the question exactly as asked | none | live |
 | `multi-query` | LLM: n paraphrases, searched separately and fused (better recall) | `n` (3), `include_original` (True), `llm_slot` ('llm'), `max_tokens` (300), `system` (None) | mocked |
 | `rewrite` | LLM: turn a follow-up ('and for part-timers?') into a standalone query | `n` (3), `include_original` (True), `llm_slot` ('llm'), `max_tokens` (300), `system` (None) | mocked |
+| `self-query` | extract a metadata filter from the question against a declared schema (rules offline, or LLM) | `fields`, `mode` ('rules'), `llm_slot` ('llm'), `max_tokens` (300), `date_field` (None), `fallback_on_empty` (True), `system` (None) | live |
 | `step-back` | LLM: add a more general 'principle' question | `n` (3), `include_original` (True), `llm_slot` ('llm'), `max_tokens` (300), `system` (None) | mocked |
 | `with-history` | no-LLM follow-ups: prepend the last user turns to the question | `turns` (2) | live |
 
@@ -116,14 +117,20 @@
 | Name | What it does | Settings (default) | Tested |
 |---|---|---|---|
 | `dense` | vector search (embedder + vector_store) | `candidates` (30), `parallel` (True) | live |
+| `ensemble` | N retrievers in parallel (other collections, models, profiles), fused with per-member weights | `members`, `parallel` (True) | live |
 | `hybrid` | vector + keyword search, merged by the fusion slot (default rrf) | `candidates` (30), `parallel` (True) | live |
 | `keyword` | keyword search (keyword_index) | `candidates` (30), `parallel` (True) | live |
+| `router` | route each question to a named collection/profile/retriever (keyword rules, or an LLM) | `routes`, `default` (None), `mode` ('rules'), `llm_slot` ('llm'), `multi` (False) | live |
 
 ## fusion: Combining result lists (Step 32)
 
 | Name | What it does | Settings (default) | Tested |
 |---|---|---|---|
+| `borda` | Borda count: N points for first place, N-1 for second, … summed (ranks only) | `weights` ({}) | live |
+| `combmnz` | CombMNZ: CombSUM x number of lists that found the chunk (rewards agreement) | `weights` ({}), `normalize` ('minmax') | live |
+| `combsum` | CombSUM: normalised scores summed across lists | `weights` ({}), `normalize` ('minmax') | live |
 | `dbsf` | distribution-based score fusion (mean +/- 3 std devs), as in Qdrant | `weights` ({}) | live |
+| `relative-score` | Weaviate-style relative score fusion: min-max per list, alpha-weighted sum (= weighted) | `alpha` (0.5), `weights` (None) | live |
 | `rrf` | reciprocal rank fusion: ranks only, no tuning (default) | `weights` ({}), `k` (60) | live |
 | `weighted` | min-max normalised scores, weighted sum | `weights` ({'dense': 0.5, 'sparse': …) | live |
 
@@ -176,6 +183,13 @@
 | `memory` | exact-match answer cache in process (LRU + TTL) | `ttl_seconds` (3600), `max_items` (10000) | live |
 | `semantic` | reuse answers to near-identical questions (embedding similarity), per access set | `ttl_seconds` (3600), `max_items` (2000), `threshold` (0.95) | live |
 | `valkey` | exact-match answer cache in Valkey: shared by replicas, epoch invalidation Needs extra: `valkey`. | `ttl_seconds` (3600), `max_items` (10000), `url_env` ('RAG_VALKEY_URL'), `url_file` (None), `prefix` ('rag:answer:') | mocked |
+
+## search_cache: Retrieval-result cache (extension 01)
+
+| Name | What it does | Settings (default) | Tested |
+|---|---|---|---|
+| `memory` | retrieval results cached in process (LRU + TTL), keyed by access, query, filter and index epoch | `ttl_seconds` (600), `max_items` (5000) | live |
+| `valkey` | retrieval results cached in Valkey: shared by replicas, epoch invalidation on ingest Needs extra: `valkey`. | `ttl_seconds` (600), `max_items` (5000), `url_env` ('RAG_VALKEY_URL'), `url_file` (None), `prefix` ('rag:search:') | mocked |
 
 ## guard: Guardrails (Step 34)
 
