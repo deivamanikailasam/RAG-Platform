@@ -2,6 +2,17 @@
 
 Local-first, enterprise-grade RAG platform (Project 0 of the RAG curriculum).
 
+## Documentation
+
+Start with the **[documentation map](docs/README.md)**: who should read what. The two hands-on guides:
+
+- **[Local setup](docs/guides/local-setup.md)**: from an empty Apple Silicon Mac to the whole platform running, step by step, with checks after each stage.
+- **[Production promotion](docs/guides/production-promotion.md)**: from the laptop to staging and production: signed images, GitOps, gates, canaries, HA/DR and the pre-production checklist.
+
+And to understand it: [architecture overview](docs/architecture/overview.md) ·
+[RAG handbook](docs/concepts/rag-handbook.md) · [quality and operations](docs/guides/quality-and-operations.md) ·
+[new RAG project](docs/guides/new-rag-project.md) · [contributing](CONTRIBUTING.md) · [security](SECURITY.md).
+
 ## Quick start
     just bootstrap     # install system tools from bootstrap/Brewfile
     just sync          # install Python packages for every workspace member
