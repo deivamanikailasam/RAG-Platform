@@ -21,6 +21,10 @@ Answers (Step 33):
 rag ask "question" ["follow-up" …] --group hr [--corpus dataset.yaml] [--stream] [--no-memory] [--json]
                                                           cited answers, as someone, as a conversation
 
+Guardrails (Step 34):
+rag eval-guards guards.yaml [--profile p] [--min-catch-rate 0.95] [--max-false-positive-rate 0.05] [--json]
+                                                          attacks caught, ordinary questions spared, known gaps
+
 A URI is file:///abs/path, s3://bucket/key, or a local path (turned into a file:// URI).
 """
 
@@ -104,6 +108,19 @@ def main(argv: list[str] | None = None) -> int:
         metavar="METRIC=VALUE",
         help="exit 1 if a variant scores below, e.g. recall=0.8 (CI gate)",
     )
+    p = sub.add_parser(
+        "eval-guards", help="measure the guards on attacks and ordinary cases (Step 34)"
+    )
+    p.add_argument("dataset")
+    p.add_argument("--file", default=os.environ.get("RAG_CONFIG", "rag.yaml"))
+    p.add_argument("--profile")
+    p.add_argument("--min-catch-rate", type=float, help="exit 1 below this share of attacks caught")
+    p.add_argument(
+        "--max-false-positive-rate",
+        type=float,
+        help="exit 1 above this share of benign cases stopped",
+    )
+    p.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
     try:
         if a.cmd == "components":
@@ -124,6 +141,8 @@ def main(argv: list[str] | None = None) -> int:
         if a.cmd == "eval-search":
             return _eval_search(a)
         container = cfg.load(a.file, a.profile)
+        if a.cmd == "eval-guards":
+            return _eval_guards(a, container)
         if a.cmd == "search":
             return _search(a, container)
         if a.cmd == "ask":
@@ -247,7 +266,9 @@ def _ask(a: argparse.Namespace, c: Container) -> int:
             print()
             if done is None:  # pragma: no cover - the pipeline always ends with "done"
                 return 1
-            if done.text != streamed.strip():  # the citation check changed the draft
+            if done.blocked:  # an output guard stopped it after (live) streaming: Step 34
+                print(f"   [blocked] {done.blocked}")
+            elif done.text != streamed.strip():  # the citation check changed the draft
                 print(f"   checked: {done.text}")
             _print_details(done, ms="-")
             continue
@@ -258,7 +279,8 @@ def _ask(a: argparse.Namespace, c: Container) -> int:
                               "prompt": answer.trace.get("prompt")}, indent=2))  # fmt: skip
             continue
         print(
-            f"Q: {question}\nA: {answer.text if not answer.blocked else '(blocked: ' + answer.blocked + ')'}"
+            # the CLI shows the reason; rag-api shows people only the fixed message (Step 34)
+            f"Q: {question}\nA: {answer.text if not answer.blocked else '[blocked] ' + answer.blocked}"
         )
         _print_details(answer, ms=str(answer.trace.get("ms", "-")))
         print()
@@ -301,6 +323,21 @@ def _eval_search(a: argparse.Namespace) -> int:
         failed += [
             f"{r.variant}: {r.leaks} forbidden document(s) returned" for r in rows if r.leaks
         ]
+    for f in failed:
+        print(f"FAIL: {f}", file=sys.stderr)
+    return 1 if failed else 0
+
+
+def _eval_guards(a: argparse.Namespace, c: Container) -> int:
+    from rag_core import evaluate as ev
+
+    s = ev.eval_guards(c, ev.load_dataset(Path(a.dataset)))
+    print(json.dumps(s.row(), indent=2) if a.json else ev.format_guard_scores(s))
+    failed = []
+    if a.min_catch_rate is not None and s.catch_rate < a.min_catch_rate:
+        failed.append(f"catch rate {s.catch_rate} < {a.min_catch_rate}")
+    if a.max_false_positive_rate is not None and s.false_positive_rate > a.max_false_positive_rate:
+        failed.append(f"false positive rate {s.false_positive_rate} > {a.max_false_positive_rate}")
     for f in failed:
         print(f"FAIL: {f}", file=sys.stderr)
     return 1 if failed else 0

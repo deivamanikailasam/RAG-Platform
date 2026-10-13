@@ -174,3 +174,104 @@ def format_table(rows: list[Scores], k: int) -> str:
             f"{s.variant:34} {s.recall:9.3f} {s.mrr:6.3f} {s.ndcg:8.3f} {s.leaks:6d} {s.p50_ms:7.1f}"
         )
     return "\n".join(lines)
+
+
+# ================================================================ guardrails (Step 34)
+
+
+@dataclass
+class GuardScores:
+    cases: int
+    attacks: int
+    caught: int  # attacks the guards stopped, redacted or flagged
+    benign: int
+    false_positives: int  # benign cases the guards did NOT allow
+    wrong: list[dict[str, Any]] = field(default_factory=list)
+    known_gaps: list[dict[str, Any]] = field(
+        default_factory=list
+    )  # attacks we KNOW these guards miss
+
+    @property
+    def catch_rate(self) -> float:
+        return round(self.caught / self.attacks, 3) if self.attacks else 1.0
+
+    @property
+    def false_positive_rate(self) -> float:
+        return round(self.false_positives / self.benign, 3) if self.benign else 0.0
+
+    def row(self) -> dict[str, Any]:
+        return {"cases": self.cases, "attacks": self.attacks, "caught": self.caught,
+                "catch_rate": self.catch_rate, "benign": self.benign,
+                "false_positives": self.false_positives, "false_positive_rate": self.false_positive_rate,
+                "wrong": self.wrong, "known_gaps": self.known_gaps}  # fmt: skip
+
+
+def eval_guards(container: Container, doc: dict[str, Any]) -> GuardScores:
+    """Run every case through the configured guards of its stage. `expect` is what at least one
+    guard must do: block, redact, flag, or allow (= no guard may object)."""
+    from dataclasses import replace
+
+    from rag_core.components.generation import is_abstention
+    from rag_core.components.guards import GeneratedAnswer
+    from rag_core.types import Access, Answer, Chunk, ScoredChunk
+
+    guards = container.get("guards") if container.has("guards") else []
+    who = Principal("eval", ("all-staff",), ("public", "internal"))
+    s = GuardScores(0, 0, 0, 0, 0)
+    for case in doc["cases"]:
+        stage, expect = case["stage"], case["expect"]
+        sources = tuple(ScoredChunk(Chunk(f"s{i}", f"doc://source-{i}", i, t, len(t.split()), Access("public")), 1.0)
+                        for i, t in enumerate(case.get("sources", [])))  # fmt: skip
+        if stage == "output":
+            payload: Any = GeneratedAnswer(
+                Answer(case["text"], abstained=is_abstention(case["text"])), sources
+            )
+        elif stage == "context":
+            payload = list(sources)
+        else:
+            payload = case["text"]
+        actions = []
+        for g in guards:
+            if g.stage == stage:
+                v = g.check(Query(case.get("question", case.get("text", "")), who), payload)
+                if v.action != "allow":
+                    actions.append(v.action)
+                    if v.action == "redact" and v.replacement is not None:
+                        # as in the pipeline: a corrected Answer keeps its sources
+                        if isinstance(payload, GeneratedAnswer) and isinstance(
+                            v.replacement, Answer
+                        ):
+                            payload = replace(payload, answer=v.replacement)
+                        else:
+                            payload = v.replacement
+        if case.get("known_gap"):  # documented weakness: reported, not scored
+            s.known_gaps.append({"id": case["id"], "caught": bool(actions)})
+            continue
+        s.cases += 1
+        if expect == "allow":
+            s.benign += 1
+            ok = not actions
+            s.false_positives += 0 if ok else 1
+        else:
+            s.attacks += 1
+            ok = expect in actions
+            s.caught += 1 if actions else 0
+        if not ok:
+            s.wrong.append(
+                {"id": case["id"], "stage": stage, "expected": expect, "got": actions or ["allow"]}
+            )
+    return s
+
+
+def format_guard_scores(s: GuardScores) -> str:
+    lines = [
+        f"{s.cases} cases: {s.attacks} attacks, {s.benign} benign",
+        f"{'caught':20} {f'{s.caught}/{s.attacks}':12} catch rate {s.catch_rate:.3f}",
+        f"{'false alarms ' + f'{s.false_positives}/{s.benign}':33} false positive rate {s.false_positive_rate:.3f}",
+    ]  # fmt: skip
+    for w in s.wrong:
+        lines.append(f"   wrong {w['id']:34} expected {w['expected']}, got {', '.join(w['got'])}")
+    for g in s.known_gaps:
+        status = "now CAUGHT" if g["caught"] else "still missed (needs a model-based guard)"
+        lines.append(f"   known gap {g['id']:38} {status}")
+    return "\n".join(lines)

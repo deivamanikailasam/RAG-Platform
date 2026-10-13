@@ -382,6 +382,7 @@ ci-config:
     just vault-check
     just rag-config-check
     just search-eval
+    just guard-eval
 
 # rag.yaml: every profile names real components with valid settings (Step 30), no services needed
 rag-config-check:
@@ -391,6 +392,10 @@ rag-config-check:
 # and must never return a forbidden document. Offline: no models or stores needed.
 search-eval *args:
     uv run rag eval-search examples/eval/handbook.yaml --profile offline --variant all-together --fail-under recall=0.9 --fail-under mrr=0.8 {{args}}
+
+# Guardrail gate (Step 34): every listed attack caught, no ordinary question stopped
+guard-eval:
+    uv run rag eval-guards examples/eval/guards.yaml --profile offline --min-catch-rate 0.95 --max-false-positive-rate 0.05
 
 # Secrets, workflows, dependencies, licences, Dockerfile, Kubernetes manifests
 ci-supply-chain:
