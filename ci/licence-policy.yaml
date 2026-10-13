@@ -1,0 +1,37 @@
+# Which open-source licences our Python dependencies may use (Step 27). SPDX ids.
+# Checked by `just licences` in CI against what is actually installed from uv.lock.
+allowed:                  # permissive: use, change and ship freely, keeping the notices
+  - MIT
+  - MIT-0
+  - BSD-2-Clause
+  - BSD-3-Clause
+  - Apache-2.0
+  - ISC
+  - PSF-2.0
+  - MPL-2.0               # file-level copyleft: fine for unmodified use; changes to its files must be shared
+  - 0BSD
+  - Unlicense
+  - Zlib
+  - CC0-1.0               # public-domain dedication; numpy ships small CC0 parts (added in this repo)
+review_required:          # allowed only with a recorded reason (who decided, and why it's fine for us)
+  LGPL-3.0-only: >-
+    psycopg (Step 11): used unmodified as a separately installed library, never copied into our
+    code. LGPL obligations (keep it replaceable, ship its licence) are met by the container image.
+denied:                   # strong copyleft or source-available: never without legal sign-off
+  - GPL-2.0-only
+  - GPL-2.0-or-later
+  - GPL-3.0-only
+  - GPL-3.0-or-later
+  - AGPL-3.0-only
+  - AGPL-3.0-or-later
+  - SSPL-1.0
+  - BUSL-1.1
+exceptions:               # metadata is missing or ambiguous: the licence a person verified by reading it
+  Events: {licence: BSD-3-Clause, verified: 2026-10-13}   # opensearch-py dependency; declares just "BSD"
+  nodeenv: {licence: BSD-3-Clause, verified: 2026-10-12}
+  python-dateutil: {licence: Apache-2.0 OR BSD-3-Clause, verified: 2026-10-12}
+  python-discovery: {licence: MIT, verified: 2026-10-12}
+ignore:                   # our own workspace packages
+  - rag-api
+  - rag-common
+  - rag-evals

@@ -40,3 +40,6 @@ backups/
 
 # --- Evaluation runs (Step 26): runs are local; baselines and datasets are committed ---
 evals/runs/
+
+# --- Pinned CI tools (Step 27): `just tools` downloads them here, checksum-verified ---
+.tools/
