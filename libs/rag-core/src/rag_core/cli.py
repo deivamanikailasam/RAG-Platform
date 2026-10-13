@@ -49,6 +49,10 @@ rag online-eval (--events audit.jsonl | --dsn-file F | --dsn-env V) [--since-hou
                                                           answer quality per release from the audit log
                                                           exit 0 pass, 1 fail, 3 not enough data yet
 
+Reuse (Step 38):
+rag doctor [PATH] [--json]                                does a project meet the platform's standards?
+                                                          (docs/standards/rag-standards.md; exit 1 on a MUST)
+
 A URI is file:///abs/path, s3://bucket/key, or a local path (turned into a file:// URI).
 """
 
@@ -163,6 +167,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--json", action="store_true")
     _lifecycle_parsers(sub)
     _online_parser(sub)
+    p = sub.add_parser("doctor", help="check a project against the platform standards (Step 38)")
+    p.add_argument("path", nargs="?", default=".", help="the project folder (default: here)")
+    p.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
     try:
         if a.cmd == "components":
@@ -186,6 +193,8 @@ def main(argv: list[str] | None = None) -> int:
             return _eval_answers(a)
         if a.cmd == "online-eval":
             return _online_eval(a)
+        if a.cmd == "doctor":
+            return _doctor(a)
         container = cfg.load(a.file, a.profile)
         if a.cmd in LIFECYCLE:
             return _lifecycle(a, container)
@@ -235,6 +244,23 @@ def _readiness(container: Container) -> int:
     errors = sum(f.level == "error" for f in findings)
     print(f"profile {container.profile!r}: {errors} error(s), {len(findings) - errors} warning(s)")
     return 1 if errors else 0
+
+
+def _doctor(a: argparse.Namespace) -> int:
+    """Step 38: the automatable standards. Reads files only; MUST failures exit 1."""
+    from rag_core import doctor
+
+    root = Path(a.path)
+    if not root.is_dir():
+        raise ComponentError(f"{root} is not a folder")
+    results = doctor.run(root)
+    if a.json:
+        print(json.dumps(doctor.as_dicts(results), indent=2))
+    else:
+        for r in results:
+            print(r)
+        print(f"\n{doctor.summary(results)}")
+    return 1 if any(not r.ok and r.level == "MUST" for r in results) else 0
 
 
 def _online_parser(sub: Any) -> None:
