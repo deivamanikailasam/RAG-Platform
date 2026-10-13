@@ -89,3 +89,16 @@ profiles:
     keyword_index: {use: opensearch, url: "https://opensearch:9200", index: rag-chunks,
                     user_env: OPENSEARCH_INDEXER_USER, password_env: OPENSEARCH_INDEXER_PASSWORD}
     # the manifest stays in Postgres: it records what is in the engines
+
+  # ---- Step 36: a profile for the NEXT collection (blue/green re-index) ----
+  # `rag reindex --profile local --to local-v2 --apply` rebuilds every source from its original into
+  # default_v2 with a new embedder; compare with eval-search, then switch RAG_API_RAG_PROFILE by PR.
+  local-v2:
+    extends: local
+    embedder:
+      use: cached
+      inner: {use: gateway, model: embedder-v2, dimensions: 1024, base_url: "http://litellm:4000/v1",
+              api_key_file: /run/bao/rag_api_gateway_key, query_prompt: query-instruction, prompts_dir: /app/prompts}
+    vector_store: {use: pgvector, dsn_env: null, credentials_file: /run/bao/rag_db.json, collection: default_v2}
+    keyword_index: {use: postgres-fts, dsn_env: null, credentials_file: /run/bao/rag_db.json, collection: default_v2}
+    manifest: {use: postgres, dsn_env: null, credentials_file: /run/bao/rag_db.json, collection: default_v2}

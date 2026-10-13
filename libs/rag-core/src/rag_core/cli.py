@@ -31,6 +31,15 @@ rag eval-answers dataset.yaml [--variant naive --variant standard …] [--no-ing
                                                           compare RAG architectures end to end
 Switch the architecture with `pipeline: {use: corrective}` in rag.yaml or RAG__PIPELINE__USE=adaptive.
 
+Data lifecycle (Step 36), every command a DRY RUN unless --apply (reacl acts at once):
+rag retention --rules retention.yaml [--apply] [--json]   delete what has outlived its rule
+rag erase-source URI… [--apply]                           every store, the manifest, every S3 version
+rag erase-subject [--subject SUB] [--tenant t] [--identifier jane@…] [--apply]
+                                                          conversations, cached answers, mentions listed
+rag reacl URI --group hr --classification confidential [--tenant t]
+                                                          new permissions in every store, now
+rag reindex --profile local --to local-v2 [--apply]       rebuild from the originals into a new collection
+
 A URI is file:///abs/path, s3://bucket/key, or a local path (turned into a file:// URI).
 """
 
@@ -143,6 +152,7 @@ def main(argv: list[str] | None = None) -> int:
         help="exit 1 above this share of benign cases stopped",
     )
     p.add_argument("--json", action="store_true")
+    _lifecycle_parsers(sub)
     a = ap.parse_args(argv)
     try:
         if a.cmd == "components":
@@ -165,6 +175,8 @@ def main(argv: list[str] | None = None) -> int:
         if a.cmd == "eval-answers":
             return _eval_answers(a)
         container = cfg.load(a.file, a.profile)
+        if a.cmd in LIFECYCLE:
+            return _lifecycle(a, container)
         if a.cmd == "eval-guards":
             return _eval_guards(a, container)
         if a.cmd == "search":
@@ -197,6 +209,82 @@ def main(argv: list[str] | None = None) -> int:
     except ComponentError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
+
+
+LIFECYCLE = ("retention", "erase-source", "erase-subject", "reacl", "reindex")
+
+
+def _lifecycle_parsers(sub: Any) -> None:
+    """Step 36: the data lifecycle commands."""
+    for name, help_ in (("retention", "delete sources that outlived their retention rule"),
+                        ("erase-source", "forget sources everywhere, including every S3 object version"),
+                        ("erase-subject", "a person's erasure request: conversations, cache, mentions"),
+                        ("reacl", "change a source's access in every store at once"),
+                        ("reindex", "rebuild the profile's collection into another profile's")):  # fmt: skip
+        p = sub.add_parser(name, help=help_)
+        p.add_argument("--file", default=os.environ.get("RAG_CONFIG", "rag.yaml"))
+        p.add_argument("--profile")
+        p.add_argument("--json", action="store_true")
+        if name != "reacl":
+            p.add_argument("--apply", action="store_true", help="act (the default is a dry run)")
+        if name == "retention":
+            p.add_argument(
+                "--rules", required=True, help="a retention YAML (examples/retention.yaml)"
+            )
+        if name == "erase-source":
+            p.add_argument("uris", nargs="+")
+        if name == "erase-subject":
+            p.add_argument("--subject", help="the person's token subject: their conversations go")
+            p.add_argument("--tenant", default="default")
+            p.add_argument("--identifier", "--email", action="append", default=[], dest="identifiers",
+                           help="text that identifies them in documents (email, employee number)")  # fmt: skip
+        if name == "reacl":
+            p.add_argument("uri")
+            p.add_argument("--group", action="append", default=[])
+            p.add_argument("--classification", default="internal")
+            p.add_argument("--tenant", default="default")
+        if name == "reindex":
+            p.add_argument(
+                "--to", required=True, help="the profile with the new collection/embedder"
+            )
+
+
+def _lifecycle(a: argparse.Namespace, c: Container) -> int:
+    from rag_core import lifecycle as lc
+    from rag_core.ingest import IngestionPipeline
+    from rag_core.types import Access, Classification, Principal
+
+    if a.cmd == "retention":
+        report = lc.apply_retention(
+            IngestionPipeline(c), lc.load_retention(Path(a.rules)), apply=a.apply
+        )
+    elif a.cmd == "erase-source":
+        pipe = IngestionPipeline(c)
+        report = lc.LifecycleReport("erase-source", a.apply)
+        for uri in (_uri(u) for u in a.uris):
+            report.items += lc.erase_source(pipe, uri, apply=a.apply).items
+    elif a.cmd == "erase-subject":
+        if not a.subject and not a.identifiers:
+            raise ComponentError("erase-subject needs --subject and/or --identifier")
+        who = Principal(a.subject, (), ("public",), a.tenant) if a.subject else None
+        report = lc.erase_subject(c, who, a.identifiers, apply=a.apply)
+    elif a.cmd == "reacl":
+        level: Classification = a.classification
+        if level not in ("public", "internal", "confidential", "restricted"):
+            raise ComponentError(f"unknown classification {level!r}")
+        report = lc.change_access(
+            IngestionPipeline(c), _uri(a.uri), Access(level, tuple(a.group), a.tenant)
+        )
+    else:
+        report = lc.reindex(c, cfg.load(a.file, a.to), apply=a.apply)
+    if a.json:
+        print(json.dumps({"action": report.action, "applied": report.applied, "items": report.items},
+                         indent=2, default=str))  # fmt: skip
+    else:
+        for item in report.items:
+            print("   " + "   ".join(f"{k}={v}" for k, v in item.items()))
+        print(report.summary())
+    return 1 if any(i.get("status") == "failed" for i in report.items) else 0
 
 
 def _uri(u: str) -> str:

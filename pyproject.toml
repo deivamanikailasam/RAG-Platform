@@ -60,6 +60,7 @@ ignore = ["E501"]                   # line length is the formatter's job
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**" = ["S101"]            # assert is normal in tests
 "scripts/**"  = ["T20"]             # scripts may print
+"examples/**" = ["T20"]             # runnable demos print what they show (Step 36)
 "libs/rag-core/src/rag_core/cli.py" = ["T20"]               # the `rag` command prints (Step 30)
 "libs/rag-core/src/rag_core/testing/**" = ["S101"]          # the conformance kit asserts (Step 30)
 
