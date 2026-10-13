@@ -811,9 +811,9 @@ platform becomes the system of record, or sources can publish change events.
 
 ## Notes for this repository
 
-- **Example bucket:** the chapter's examples use `s3://rag-originals/…`, a bucket nothing creates. Step 14's
-  `scripts/s3_setup.py` creates `rag-raw-docs` for originals, and the `rag-ingest` / `rag-reader` identities may
-  only touch that bucket, so the commands, docstrings and tests here use `s3://rag-raw-docs/…`
+- **Example bucket:** the chapter's examples name a `rag-originals` bucket, which nothing creates. Step 14's
+  `scripts/s3_setup.py` creates `rag-raw-docs` for originals, and the `rag-ingest` / `rag-reader` identities are
+  granted no other originals bucket, so the commands, docstrings and tests here use `s3://rag-raw-docs/…`
   (`tests/test_object_storage.py` checks that every example names a bucket that exists).
 - **Code reconstructed from the PDF.** Indentation and line wraps were rebuilt and `ruff format` re-wrapped a
   few long lines. The guide shows only the new methods of the stores, the pipeline and the memory; where the rest

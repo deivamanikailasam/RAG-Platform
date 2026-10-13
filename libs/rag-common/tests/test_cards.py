@@ -103,7 +103,8 @@ def test_fallbacks_are_part_of_the_lineage() -> None:
 def test_upstream_of_the_audit_log() -> None:
     assert load(REPO).upstream("dataset:audit-log") == [
         "dataset:company-chunks", "dataset:company-documents", "model:embedder",
-        "prompt:query-instruction", "system:rag-api",
+        "model:qwen-fast", "model:qwen-quality", "model:reranker",
+        "prompt:query-instruction", "prompt:rag-answer", "system:rag-api",
     ]  # fmt: skip
 
 

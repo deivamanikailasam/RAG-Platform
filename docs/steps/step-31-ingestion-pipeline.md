@@ -749,9 +749,9 @@ needs a dedicated stream processor.
 
 ## Notes for this repository
 
-- **Example bucket:** the chapter's examples use `s3://rag-originals/…`, a bucket nothing creates. Step 14's
-  `scripts/s3_setup.py` creates `rag-raw-docs` for originals, and the `rag-ingest` / `rag-reader` identities may
-  only touch that bucket, so the commands, docstrings and tests here use `s3://rag-raw-docs/…`
+- **Example bucket:** the chapter's examples name a `rag-originals` bucket, which nothing creates. Step 14's
+  `scripts/s3_setup.py` creates `rag-raw-docs` for originals, and the `rag-ingest` / `rag-reader` identities are
+  granted no other originals bucket, so the commands, docstrings and tests here use `s3://rag-raw-docs/…`
   (`tests/test_object_storage.py` checks that every example names a bucket that exists).
 - **Code reconstructed from the PDF.** The guide's listings were extracted from the PDF and their
   indentation and line wraps rebuilt; the conftest's HTML sample lost its tags in extraction and was rebuilt
