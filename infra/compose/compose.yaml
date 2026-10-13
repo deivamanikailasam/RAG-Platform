@@ -467,6 +467,10 @@ services:
       # Step 28: database logins issued by OpenBao, kept fresh by rag-api-agent, read per connection
       RAG_API_DB_CREDENTIALS_FILE: /run/bao/rag_db.json
       RAG_API_AUDIT_DB_CREDENTIALS_FILE: /run/bao/audit_db.json
+      # Step 32: /v1/search through rag-core (hybrid + rerank), profile `local` of /app/rag.yaml.
+      # Roll back: RAG_API_SEARCH_BACKEND: legacy (Step 11's single SQL query)
+      RAG_API_SEARCH_BACKEND: core
+      RAG_API_RAG_PROFILE: local
     volumes:
       - rag-api-bao:/run/bao:ro                               # Step 28: also holds rag_api_gateway_key and rag_api_opa_token
     secrets:
@@ -557,11 +561,9 @@ services:
       AWS_ENDPOINT_URL_S3: http://object-store:8333
       OTEL_SERVICE_NAME: ingestion-worker
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
-      # The two values the `local` profile reads from environment variables (api_key_env, key_env),
-      # passed from SOPS by `just with-secrets docker compose up -d` until Step 37 gives the worker its
-      # own OpenBao identity: the ingestion gateway key (Step 10) and the PII pseudonymisation key.
-      LLM_GATEWAY_KEY: ${INGESTION_GATEWAY_KEY:-}
-      RAG_PII_HMAC_KEY: ${RAG_PII_HMAC_KEY:-}
+      # Step 32: the gateway key and the PII pseudonymisation key are no longer environment variables:
+      # the `local` profile reads them from files the agent writes (/run/bao/rag_api_gateway_key,
+      # /run/bao/pii_hmac_key), re-read on every use, until Step 37 gives the worker its own identity.
     volumes:
       - rag-api-bao:/run/bao:ro                               # Step 28's agent files (shared identity until Step 37)
     depends_on:

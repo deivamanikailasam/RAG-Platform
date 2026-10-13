@@ -50,6 +50,9 @@ OpenBao refuses to answer when it can't record the request. That is deliberate.
   sessions are ended immediately. The agent fetches a new one.
 - **A static secret** (gateway key, OPA token): rotate it at its source, then
   `just vault-put rag-api gateway_key=…` and `just vault-agent-start` (rag-api reads these at start).
+  A KV write replaces the whole secret: put every rag-api value again (since Step 32 that includes
+  `pii_hmac_key`, without which the agent renders nothing). Never rotate `pii_hmac_key` on its own:
+  pseudonyms change with it, so it rotates only together with a full re-index (Step 36).
 - **The secret ID or rag-api's token**: `bao write auth/approle/role/rag-api/secret-id-accessor/destroy
   secret_id_accessor=…` (accessors are in the audit log), then
   `bao lease revoke -prefix auth/approle/login`.

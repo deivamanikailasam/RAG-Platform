@@ -218,6 +218,8 @@ def configured(env: Env) -> Env:
         "gateway_key": "gw-key-from-bao", "opa_token": "opa-token-from-bao",
         # Step 31: the ingestion worker's queue URL and object-store keys
         "valkey_url": "redis://rag_app:pw@valkey:6379/0", "s3_access_key": "AK", "s3_secret_key": "SK",
+        # Step 32: the PII pseudonymisation key (the agent refuses to render anything without it)
+        "pii_hmac_key": "pii-key-from-bao",
     })  # fmt: skip
     return env
 
@@ -465,6 +467,8 @@ def test_agent_renders_files_and_rotates_credentials(configured: Env) -> None:
         assert (out / "aws_credentials").read_text() == (
             "[default]\naws_access_key_id = AK\naws_secret_access_key = SK\n"
         )
+        # Step 32: the PII key, read by the `local` profile's pii key_file
+        assert (out / "pii_hmac_key").read_text() == "pii-key-from-bao"
 
         audit_creds = CredentialsFile(audit_file)
         first_user = audit_creds()[0]

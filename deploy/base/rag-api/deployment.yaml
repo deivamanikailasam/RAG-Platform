@@ -57,6 +57,9 @@ spec:
             - { name: RAG_API_OPA_URL, value: "http://opa:8181" }
             - { name: RAG_API_DB_CREDENTIALS_FILE, value: /run/bao/rag_db.json }
             - { name: RAG_API_AUDIT_DB_CREDENTIALS_FILE, value: /run/bao/audit_db.json }
+            # Step 32: /v1/search through rag-core (hybrid + rerank). Roll back: value "legacy".
+            - { name: RAG_API_SEARCH_BACKEND, value: core }
+            - { name: RAG_API_RAG_PROFILE, value: local }
             - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://otel-collector:4317" }
             - { name: OTEL_SERVICE_NAME, value: rag-api }
           securityContext: *locked-down

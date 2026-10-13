@@ -67,3 +67,13 @@ template {
   perms                = "0400"
   error_on_missing_key = true
 }
+
+# Step 32: the PII pseudonymisation key (the `local` profile's pii key_file). error_on_missing_key:
+# a missing key stops the agent, so ingestion can't silently run without pseudonymisation.
+# Keep it for as long as the index: a new key gives every person a new token (Step 36 re-index).
+template {
+  contents             = "{{ with secret \"secret/data/rag-api\" }}{{ .Data.data.pii_hmac_key }}{{ end }}"
+  destination          = "/openbao/out/pii_hmac_key"
+  perms                = "0400"
+  error_on_missing_key = true
+}
