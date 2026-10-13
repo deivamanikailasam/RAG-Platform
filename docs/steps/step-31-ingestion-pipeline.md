@@ -310,7 +310,7 @@ saying "It is 18 weeks." embeds far better as "Leave policy > Parental leave: It
 
 ### 5 · Postgres: one migration, two components
 
-**File: `infra/db/rag/migrations/20261013090000_rag_core.sql`** (the guide names it
+**File: `infra/db/rag/migrations/20261013000000_rag_core.sql`** (the guide names it
 `<timestamp>_rag_core.sql`). On top of Step 11's tables it adds:
 
 - `rag.documents.tenant` (default `'default'`) with a partial index on live documents;
@@ -731,7 +731,7 @@ needs a dedicated stream processor.
 | `libs/rag-core/tests/test_cli_ingest.py` | 3 extra tests: the corpus matches its generator; `rag ingest/delete/enqueue/worker` on it |
 | `libs/rag-core/tests/test_registry.py` (changed) | Step 30's two stand-in tests switched back to the guide's `pgvector` and `pii: regex` |
 | `libs/rag-core/tests/test_core_contracts.py` (changed) | The embedder list now includes `cached` and `gateway` |
-| `infra/db/rag/migrations/20261013090000_rag_core.sql` | Tenants, chunk keys, embedded text, parent keys, models, FTS over embedded text, `rag.ingest_manifest` |
+| `infra/db/rag/migrations/20261013000000_rag_core.sql` | Tenants, chunk keys, embedded text, parent keys, models, FTS over embedded text, `rag.ingest_manifest` |
 | `rag.yaml` (changed) | The `offline`, `local` and `local-engines` profiles with every ingestion slot |
 | `examples/corpus/*` | The sample corpus: Markdown, HTML, CSV, PDF, Word and a corrupt PDF |
 | `scripts/make_corpus.py` | Writes `examples/corpus/` reproducibly (fixed dates) |

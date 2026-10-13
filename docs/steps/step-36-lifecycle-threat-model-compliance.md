@@ -179,7 +179,7 @@ part of the contract for **any** store a project writes. It indexes the five sam
 
 ### 2 · Tenants isolated inside the database
 
-The migration `infra/db/rag/migrations/20261014090000_lifecycle_and_tenants.sql` does two things:
+The migration `infra/db/rag/migrations/20261014000000_lifecycle_and_tenants.sql` does two things:
 
 1. **The manifest remembers each source's access and metadata** (`access` and `source_metadata` jsonb columns
    on `rag.ingest_manifest`), so retention, erasure and a re-index can rebuild a source from its original
@@ -790,7 +790,7 @@ platform becomes the system of record, or sources can publish change events.
 | `libs/rag-core/src/rag_core/testing/conformance.py` (changed) | `check_access_update`: the new store contract |
 | `libs/rag-core/src/rag_core/testing/postgres.py` | `apply_migrations` / `pgvector_version`: a throwaway Postgres with the real migrations, for tests |
 | `libs/rag-core/src/rag_core/cli.py` (changed) | `rag retention`, `erase-source`, `erase-subject`, `reacl`, `reindex` (dry run by default, `--apply`, `--json`) |
-| `infra/db/rag/migrations/20261014090000_lifecycle_and_tenants.sql` | Manifest `access` / `source_metadata` columns; row-level security on documents and chunks |
+| `infra/db/rag/migrations/20261014000000_lifecycle_and_tenants.sql` | Manifest `access` / `source_metadata` columns; row-level security on documents and chunks |
 | `services/rag-api/src/rag_api/search.py` (changed) | The legacy search sets the tenant for RLS |
 | `scripts/pg_demo.py`, `qdrant_sync.py`, `os_demo.py`, `s3_demo.py` (changed) | Maintenance scripts set `rag.tenant = '*'` for their session |
 | `rag.yaml` (changed) | The `local-v2` profile (new embedder, collection `default_v2`) for blue/green re-indexing |

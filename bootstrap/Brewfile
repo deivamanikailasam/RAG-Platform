@@ -34,3 +34,11 @@ brew "regal"                # Rego linter and language server (editor support)
 
 # ---- Audit log tests (Step 23) ----
 brew "libpq"                # psql and pg_isready without a full Postgres server (keg-only: /opt/homebrew/opt/libpq/bin)
+
+# ---- Secrets manager (Step 28) ----
+# OpenBao's `bao` (server, agent, CLI) comes from `just tools bao`: pinned and checksum-verified
+
+# ---- Kubernetes and GitOps (Step 29) ----
+brew "kubectl"              # the Kubernetes CLI; includes kustomize (`kubectl kustomize`)
+brew "argocd"               # Argo CD CLI (optional: the web UI does the same)
+# Tests and CI use pinned kubectl / kube-apiserver / etcd from `just tools` (Kubernetes 1.36.2)

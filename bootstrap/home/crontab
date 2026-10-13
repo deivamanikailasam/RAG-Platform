@@ -7,3 +7,6 @@
 
 # ---- Cards (Step 25): weekly strict check, Monday 08:00, until CI does it in Step 27 ----
 0 8 * * 1   cd ~/dev/rag-platform && just cards lint --strict >> ~/Library/Logs/cards-weekly.log 2>&1
+
+# ---- Langfuse (Step 22): nightly retention (self-hosted retention is Enterprise-only) ----
+15 3 * * *  cd ~/dev/rag-platform && just langfuse-retention >> ~/Library/Logs/langfuse-retention.log 2>&1
