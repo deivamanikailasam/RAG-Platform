@@ -1,0 +1,36 @@
+# {{ project_name }}: which component fills each slot of the RAG pipeline.
+# The platform's tested profiles come with rag-core; this file only says what differs.
+#   rag components                          everything you can switch, and to what
+#   rag config readiness --profile production
+version: 1
+include: {platform: "rag-core:platform.yaml"}
+
+profiles:
+  # Runs anywhere with nothing else running: tests, CI, a new laptop
+  offline:
+    extends: platform/offline
+    pipeline: {use: {{ architecture }}, search_k: 8, uncited: flag}
+
+  # The platform on your Mac (Compose / OrbStack)
+  local:
+    extends: platform/{{ 'local' if search_engine == 'postgres' else 'local-engines' }}
+    pipeline: {use: {{ architecture }}, search_k: 8, uncited: flag}
+{%- if search_engine == 'postgres' %}
+    vector_store: {collection: {{ slug }}}
+    keyword_index: {collection: {{ slug }}}
+    manifest: {collection: {{ slug }}}
+{%- else %}
+    vector_store: {collection: {{ module }}_chunks}
+    keyword_index: {index: {{ slug }}-chunks}
+    manifest: {collection: {{ slug }}}
+{%- endif %}
+
+  # Staging and production (Kubernetes): must pass `rag config readiness`
+  production:
+    extends: platform/production
+    pipeline: {use: {{ architecture }}, search_k: 8, uncited: abstain, stream: checked}
+{%- if search_engine == 'postgres' %}
+    vector_store: {collection: {{ slug }}}
+    keyword_index: {collection: {{ slug }}}
+    manifest: {collection: {{ slug }}}
+{%- endif %}

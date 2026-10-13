@@ -1,0 +1,31 @@
+# {{ project_name }}: the same checks on your Mac and in CI.
+set dotenv-load := false
+
+# Everything CI runs
+check: lint test config evals doctor
+
+lint:
+    uv run ruff check .
+    uv run ruff format --check .
+
+test:
+    uv run pytest -q
+
+# Every profile builds; production is fit for production (platform Steps 30, 37)
+config:
+    for p in offline local production; do uv run rag config validate --profile $p; done
+    uv run rag config readiness --profile production
+
+# Quality gates (platform Steps 32-35): raise the thresholds as your questions grow
+evals:
+    uv run rag eval-search eval/questions.yaml --profile offline --fail-under recall=0.8
+    uv run rag eval-guards eval/guards.yaml --profile offline
+    uv run rag eval-answers eval/questions.yaml --profile offline --variant {{ architecture }} --fail-under abstain_ok=1
+
+# The platform's standards (platform Step 38)
+doctor:
+    uv run rag doctor .
+
+# Try it: ingest the corpus in memory and ask
+ask question:
+    uv run rag ask "{{ '{{' }}question{{ '}}' }}" --profile offline --corpus eval/questions.yaml --group all-staff --classification internal

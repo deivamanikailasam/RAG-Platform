@@ -1,0 +1,11 @@
+# {{ project_name }}'s own namespace (platform Steps 29, 37): restricted pod security, and the
+# platform's admission policies (signed images, digests, non-root) apply here too.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rag-{{ slug }}
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.36
+    rag-platform/policy: enforced   # the platform's admission policies apply here too
+    rag-platform/owner: {{ owner }}

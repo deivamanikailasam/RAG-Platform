@@ -1,0 +1,7 @@
+# {{ project_name }}: how long indexed documents may stay (platform Steps 36-37). First matching
+# rule wins; legal holds win over every rule. Agree these with your records manager.
+#   uv run rag retention --rules retention.yaml            (a dry run; --apply deletes)
+version: 1
+rules: []
+default_keep_days: {{ retention_days if retention_days else 'null' }}
+legal_holds: []

@@ -1,0 +1,14 @@
+# {{ project_name }} on the platform's Kubernetes setup (platform Steps 29, 37). The platform's prod
+# overlay at a released tag, in this project's own namespace, with this project's image.
+# Before the first deploy the platform team: creates OpenBao roles for this namespace's service
+# accounts (scripts/vault_setup.py K8S_ROLES), a database and collection, and the Argo CD app.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: rag-{{ slug }}
+resources:
+  - namespace.yaml
+  - https://github.com/owner/rag-platform//deploy/envs/prod?ref=v{{ platform_version }}
+images:
+  - name: ghcr.io/owner/rag-platform/rag-api
+    newName: ghcr.io/owner/{{ slug }}/rag-api
+    digest: sha256:<digest>   # set by your promotion pull request (platform `just promote`)

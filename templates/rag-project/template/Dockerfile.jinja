@@ -1,0 +1,7 @@
+# {{ project_name }}: the platform's rag-api image (built, scanned and signed by the platform, Step 27)
+# plus this project's configuration and components. Nothing else is installed here.
+FROM ghcr.io/owner/rag-platform/rag-api@sha256:<digest>   # the platform release for rag-core {{ platform_version }}
+COPY rag.yaml /app/rag.yaml
+COPY src/ /app/project/
+ENV PYTHONPATH=/app/project \
+    RAG_PLUGINS={{ module }}.components

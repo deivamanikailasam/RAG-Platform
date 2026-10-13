@@ -1,0 +1,41 @@
+# {{ project_name }} (system card)
+
+<!-- Platform Step 25. Fill in every section before the production readiness review. -->
+
+## Summary
+{{ purpose }}
+
+## Intended use
+<who asks what, in which situations>
+
+## Out of scope
+- Legal, medical and investment advice (refused by the topics guard)
+- Decisions about individuals: answers inform a person, who decides
+- <anything else people might try>
+
+## Data
+- Sources: <systems, owners>; highest classification: **{{ highest_classification }}**
+- Personal data: **{{ 'yes: pseudonymised at ingestion, masked in questions and answers' if personal_data else 'not expected; masking stays on as a safety net' }}**
+- Retention: see `retention.yaml` (default: {{ retention_days ~ ' days' if retention_days else 'kept until the source deletes it' }})
+
+## Architecture
+rag-core {{ platform_version }}, `{{ architecture }}` architecture (platform Step 35); search in
+{{ 'Postgres (pgvector + full text)' if search_engine == 'postgres' else 'Qdrant and OpenSearch' }}.
+
+## Human oversight
+Cited sources on every answer; "I don't know" instead of guesses; thumbs up/down reviewed weekly
+by {{ owner }}; rollback by reverting the promotion pull request.
+
+## Evaluation
+`eval/questions.yaml` (search and answers) and `eval/guards.yaml` (guardrails), run in CI with
+thresholds in the justfile. Online evaluation per release in staging and prod (platform Step 37).
+
+## Known limitations
+<what it gets wrong, which document types it handles poorly>
+
+## Approvals
+| Role | Name | Date |
+|---|---|---|
+| Owner ({{ owner }}) | | |
+| Privacy | | |
+| Security | | |

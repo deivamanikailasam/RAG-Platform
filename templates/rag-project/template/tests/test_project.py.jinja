@@ -1,0 +1,45 @@
+"""{{ project_name }}: the configuration, the project's components and the quality gates."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from rag_core import config
+from rag_core.registry import spec
+from rag_core.sdk import Access, Principal, RagApp
+
+ROOT = Path(__file__).resolve().parents[1]
+STAFF = Principal("someone", ("all-staff",), ("public", "internal"))
+
+
+def test_every_profile_builds_and_production_is_ready() -> None:
+    for profile in ("offline", "local", "production"):
+        assert config.load(ROOT / "rag.yaml", profile, env={}).validate() == [], profile
+    production = RagApp.load(ROOT / "rag.yaml", "production", env={})
+    assert [f for f in production.check() if f.level == "error"] == []
+
+
+def test_our_component_is_registered() -> None:
+    import {{ module }}.components  # noqa: F401 - registers on import (installed: via the entry point)
+
+    summary = spec("enricher", "{{ slug }}-glossary").summary
+    assert summary.startswith("{{ project_name }}")
+
+
+def test_answers_from_the_sample_corpus_with_citations() -> None:
+    app = RagApp.load(ROOT / "rag.yaml", "offline", env={})
+    app.ingest_folder(ROOT / "corpus/sample", access=Access("internal", ("all-staff",)))
+    answer = app.answer("How many days of annual leave do full-time staff get?", STAFF)
+    assert not answer.abstained
+    assert answer.citations
+    assert "20 days" in answer.text
+
+
+def test_restricted_documents_stay_restricted() -> None:
+    app = RagApp.load(ROOT / "rag.yaml", "offline", env={})
+    app.ingest(
+        (ROOT / "corpus/sample/salaries-restricted.md").as_uri(),
+        Access("restricted", ("remuneration-committee",)),
+    )
+    hits = app.search("executive bonus pool", STAFF).hits
+    assert all("salaries-restricted" not in h.chunk.document_uri for h in hits)
