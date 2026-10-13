@@ -58,7 +58,8 @@ def install(name: str, spec: dict[str, Any], dest: Path, plat: str) -> Path:
             f"{name}: SHA-256 mismatch (expected {entry['sha256'][:12]}…, got {actual[:12]}…): "
             "refusing to install"
         )
-    if member := spec.get("member"):
+    # Step 37: an archive whose folder is named per platform (promtool) names its member per platform
+    if member := entry.get("member") or spec.get("member"):
         with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tar:
             try:
                 info = tar.getmember(member)

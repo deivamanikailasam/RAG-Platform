@@ -116,3 +116,13 @@ tools:
     darwin-arm64:
       url: https://github.com/qdrant/qdrant/releases/download/v1.19.2/qdrant-aarch64-apple-darwin.tar.gz
       sha256: d24dfd25f4584684b337dd30ee016472cd25f53fc2501f1cd058ab3d7ee0b019
+  promtool:  # Step 37: checks and unit-tests the Prometheus alert rules (same version as the image)
+    version: 3.13.4
+    linux-amd64:
+      url: https://github.com/prometheus/prometheus/releases/download/v3.13.4/prometheus-3.13.4.linux-amd64.tar.gz
+      sha256: 87f21a66f96c597a189cef8d640e8921b621fc17a9feff707c332c4f3b3ddd56
+      member: prometheus-3.13.4.linux-amd64/promtool  # the archive's folder is named per platform
+    darwin-arm64:
+      url: https://github.com/prometheus/prometheus/releases/download/v3.13.4/prometheus-3.13.4.darwin-arm64.tar.gz
+      sha256: 0714a2812b2880078eeb10244d684981905fda568b50351ad6eea29397e55996
+      member: prometheus-3.13.4.darwin-arm64/promtool

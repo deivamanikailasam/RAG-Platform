@@ -1,0 +1,84 @@
+# Answer quality in production (Step 37). Offline evaluation can't see a new kind of question, a
+# poisoned document or a model the gateway quietly swapped. These watch the live signals.
+# Every alert compares the last minutes with the same environment's own last day, so "normal"
+# is learned per environment rather than guessed.
+groups:
+  - name: rag-answer-recordings
+    rules:
+      # Share of answers by outcome (answered, abstained, blocked, error), per environment
+      - record: rag:answer_outcome:ratio_rate15m
+        expr: |
+          sum by (deployment_environment_name, outcome) (rate(rag_answer_requests_total[15m]))
+          / ignoring (outcome) group_left
+          sum by (deployment_environment_name) (rate(rag_answer_requests_total[15m]))
+      - record: rag:answer_outcome:ratio_rate1d
+        expr: |
+          sum by (deployment_environment_name, outcome) (rate(rag_answer_requests_total[1d]))
+          / ignoring (outcome) group_left
+          sum by (deployment_environment_name) (rate(rag_answer_requests_total[1d]))
+      - record: rag:answer_latency:p95_15m
+        expr: |
+          histogram_quantile(0.95,
+            sum by (deployment_environment_name, le) (rate(rag_answer_duration_seconds_bucket[15m])))
+      # Thumbs down as a share of all ratings in the last hour
+      - record: rag:feedback_down:ratio_rate1h
+        expr: |
+          sum by (deployment_environment_name) (rate(rag_feedback_total{rating="down"}[1h]))
+          / sum by (deployment_environment_name) (rate(rag_feedback_total[1h]))
+
+  - name: rag-answer-alerts
+    rules:
+      # Guards suddenly block far more than usual: an attack, or a change that trips them.
+      - alert: RagGuardBlocksSpike
+        expr: |
+          rag:answer_outcome:ratio_rate15m{outcome="blocked"} > 0.05
+          and rag:answer_outcome:ratio_rate15m{outcome="blocked"}
+            > 3 * rag:answer_outcome:ratio_rate1d{outcome="blocked"}
+        for: 10m
+        labels: { severity: warning, service: rag-api }
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of answers blocked in {{ $labels.deployment_environment_name }} (3x the daily rate)"
+          runbook: docs/runbooks/answer-quality.md
+      # "I don't know" much more than usual: a broken index, a failed ingestion, an embedder change.
+      - alert: RagAbstentionSpike
+        expr: |
+          rag:answer_outcome:ratio_rate15m{outcome="abstained"} > 0.20
+          and rag:answer_outcome:ratio_rate15m{outcome="abstained"}
+            > 2 * rag:answer_outcome:ratio_rate1d{outcome="abstained"}
+        for: 15m
+        labels: { severity: warning, service: rag-api }
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of answers are abstentions in {{ $labels.deployment_environment_name }}"
+          runbook: docs/runbooks/answer-quality.md
+      # People dislike the answers: at least 20 ratings in the hour and over 30% thumbs down.
+      - alert: RagThumbsDownHigh
+        expr: |
+          rag:feedback_down:ratio_rate1h > 0.30
+          and sum by (deployment_environment_name) (increase(rag_feedback_total[1h])) >= 20
+        for: 30m
+        labels: { severity: warning, service: rag-api }
+        annotations:
+          summary: "{{ $value | humanizePercentage }} thumbs down in the last hour ({{ $labels.deployment_environment_name }})"
+          runbook: docs/runbooks/answer-quality.md
+      # Answers are slow: p95 over 10 s for 15 minutes (the model gateway is the usual cause).
+      - alert: RagAnswerLatencyHigh
+        expr: rag:answer_latency:p95_15m > 10
+        for: 15m
+        labels: { severity: warning, service: rag-api }
+        annotations:
+          summary: "p95 answer time {{ $value | humanizeDuration }} in {{ $labels.deployment_environment_name }}"
+          runbook: docs/runbooks/answer-quality.md
+      # A scheduled job (retention, online evaluation) failed. Needs kube-state-metrics.
+      - alert: RagScheduledJobFailed
+        expr: sum by (namespace, job_name) (kube_job_status_failed{namespace="rag"}) > 0
+        labels: { severity: warning, service: rag-ingest }
+        annotations:
+          summary: "Job {{ $labels.job_name }} failed: retention or evaluation didn't run"
+          runbook: docs/runbooks/answer-quality.md
+      # A canary was aborted by its analysis: someone should look at why before trying again.
+      - alert: RagCanaryAborted
+        expr: sum by (namespace, name) (rollout_info{phase="Degraded"}) > 0
+        labels: { severity: warning, service: rag-api }
+        annotations:
+          summary: "Rollout {{ $labels.name }} aborted: the canary failed its analysis and was scaled to zero"
+          runbook: docs/runbooks/canary.md

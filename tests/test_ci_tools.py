@@ -67,6 +67,13 @@ def test_member_is_extracted_from_an_archive(tmp_path: Path) -> None:
     assert ct.install("trivy", s, tmp_path / "bin", "linux-amd64").read_bytes() == BINARY
 
 
+def test_member_can_be_named_per_platform(tmp_path: Path) -> None:
+    """Step 37: promtool's archive folder carries the platform name, so each build names its member."""
+    s = spec(tmp_path, tarball("prometheus-3.13.4.linux-amd64/promtool", BINARY))
+    s["linux-amd64"]["member"] = "prometheus-3.13.4.linux-amd64/promtool"
+    assert ct.install("promtool", s, tmp_path / "bin", "linux-amd64").read_bytes() == BINARY
+
+
 def test_checksum_mismatch_installs_nothing(tmp_path: Path) -> None:
     s = spec(tmp_path, BINARY, sha="0" * 64)
     with pytest.raises(ct.ToolError, match=r"SHA-256 mismatch .* refusing to install"):
@@ -112,6 +119,7 @@ def test_manifest_is_complete_and_strict() -> None:
         "kube-apiserver",
         "etcd",
         "qdrant",  # Step 31: the real Qdrant server, for the vector-store conformance tests
+        "promtool",  # Step 37: the alert rules and their unit tests, without Docker
     }
     for name, t in tools.items():
         for plat in ("linux-amd64", "darwin-arm64"):

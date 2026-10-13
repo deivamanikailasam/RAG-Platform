@@ -47,7 +47,7 @@ jobs:
       - name: Install just and the pinned tools (checksums verified)
         run: |
           uv tool install rust-just==1.58.0
-          uv run --frozen python scripts/ci_tools.py opa regal dbmate bao kubectl kube-apiserver etcd qdrant
+          uv run --frozen python scripts/ci_tools.py opa regal dbmate bao kubectl kube-apiserver etcd qdrant promtool
           echo "$PWD/.tools/bin" >> "$GITHUB_PATH"
       - run: sudo apt-get install -y --no-install-recommends postgresql-client  # psql for the audit bootstrap test
       - run: just ci-static

@@ -79,10 +79,11 @@ policy-check:
     opa test policies --coverage --threshold 90 > /dev/null
     opa test policies
 
-# Validate Prometheus config + rules and run the alert unit tests (same versions as production)
+# Validate Prometheus config + rules and run the alert unit tests (same versions as production).
+# Step 37: promtool is a pinned, checksum-verified tool (just tools promtool), so no Docker needed.
 alerts-test:
-    docker run --rm -v "$PWD/infra/config/prometheus:/p:ro" -w /p --entrypoint promtool {{prom_image}} check rules rules/slo-rag-search.yml rules/security.yml rules/platform.yml
-    docker run --rm -v "$PWD/infra/config/prometheus:/p:ro" -w /p --entrypoint promtool {{prom_image}} test rules tests/rules_test.yml
+    cd infra/config/prometheus && promtool check rules rules/*.yml
+    cd infra/config/prometheus && promtool test rules tests/rules_test.yml tests/rag_answers_test.yml
     docker run --rm -v "$PWD/infra/config/alertmanager:/a:ro" --entrypoint amtool {{am_image}} check-config /a/alertmanager.yml
 
 # Regenerate dashboards from scripts/build_dashboards.py / check they're up to date

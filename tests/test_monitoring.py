@@ -145,6 +145,9 @@ def test_search_slo_uses_multi_window_burn_rates() -> None:
         "rag:search_errors:ratio_rate5m", "rag:search_errors:ratio_rate30m",
         "rag:search_errors:ratio_rate1h", "rag:search_errors:ratio_rate6h",
         "rag:search_latency:p95_5m",
+        # Step 37: answer quality (rules/rag-answers.yml)
+        "rag:answer_outcome:ratio_rate15m", "rag:answer_outcome:ratio_rate1d",
+        "rag:answer_latency:p95_15m", "rag:feedback_down:ratio_rate1h",
     }  # fmt: skip
 
 
@@ -155,6 +158,8 @@ def test_every_alert_has_a_severity_a_summary_and_an_existing_runbook() -> None:
         "RagPolicyQueryMismatch", "KeycloakLoginFailuresHigh", "TargetDown",
         "OtelCollectorLosingData", "RagAuditWriteFailing",  # Step 23
         "OpenBaoSealed", "OpenBaoAuditFailing",  # Step 28
+        "RagGuardBlocksSpike", "RagAbstentionSpike", "RagThumbsDownHigh",  # Step 37
+        "RagAnswerLatencyHigh", "RagScheduledJobFailed", "RagCanaryAborted",
     }  # fmt: skip
     for name, rule in alerts.items():
         assert rule["labels"]["severity"] in {"critical", "warning"}, name
@@ -183,7 +188,9 @@ def test_collector_counters_are_named_explicitly_without_total() -> None:
 
 def test_unit_tests_cover_every_rule_file_with_eleven_cases() -> None:
     tests = _yaml(PROM / "tests" / "rules_test.yml")
-    files = {(PROM / "tests" / f).resolve() for f in tests["rule_files"]}
+    # Step 37: the answer-quality rules have their own test file (tests/rag_answers_test.yml)
+    files = {(PROM / "tests" / f).resolve()
+             for path in sorted((PROM / "tests").glob("*.yml")) for f in _yaml(path)["rule_files"]}  # fmt: skip
     assert files == {p.resolve() for p in RULES.glob("*.yml")}
     # Step 23 adds RagAuditWriteFailing, Step 24 a PromQL test, Step 28 the two OpenBao alerts
     assert len(tests["tests"]) == 11
@@ -436,11 +443,13 @@ def _tool(image: str, tool: str, mount: str, *args: str) -> subprocess.Completed
 def test_promtool_accepts_the_rules_and_every_alert_test_passes() -> None:
     _image(PROM_IMAGE)
     mount = f"{PROM}:/p:ro"
-    rules = ["rules/slo-rag-search.yml", "rules/security.yml", "rules/platform.yml"]
+    rules = ["rules/slo-rag-search.yml", "rules/security.yml", "rules/platform.yml",
+             "rules/rag-answers.yml"]  # fmt: skip
     checked = _tool(PROM_IMAGE, "promtool", mount, "check", "rules", *rules)
     assert checked.returncode == 0, checked.stdout + checked.stderr
-    assert checked.stdout.count("SUCCESS") == 3
-    tested = _tool(PROM_IMAGE, "promtool", mount, "test", "rules", "tests/rules_test.yml")
+    assert checked.stdout.count("SUCCESS") == 4
+    tested = _tool(PROM_IMAGE, "promtool", mount, "test", "rules", "tests/rules_test.yml",
+                   "tests/rag_answers_test.yml")  # fmt: skip
     assert tested.returncode == 0, tested.stdout + tested.stderr
 
 
