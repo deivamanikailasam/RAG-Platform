@@ -40,3 +40,4 @@ Phases: **A** Workstation · **B** Model serving · **C** Data stores · **D** I
 | 26 | An evaluation harness | G · Quality & delivery | [step-26-evaluation-harness.md](step-26-evaluation-harness.md) |
 | 27 | A CI pipeline and a secured supply chain | G · Quality & delivery | [step-27-ci-pipeline-and-supply-chain.md](step-27-ci-pipeline-and-supply-chain.md) |
 | 28 | Vault: secrets issued on demand, short-lived and audited | G · Quality & delivery | [step-28-vault-dynamic-secrets.md](step-28-vault-dynamic-secrets.md) |
+| 29 | Kubernetes and GitOps with Argo CD | G · Quality & delivery | [step-29-kubernetes-gitops-argo-cd.md](step-29-kubernetes-gitops-argo-cd.md) |

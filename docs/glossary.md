@@ -14,6 +14,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Action (GitHub) | A reusable workflow step published by someone else (`actions/checkout`): third-party code that runs inside your job with its token, so it is pinned by commit SHA. | 27 |
 | Active parameters | In a Mixture of Experts model, the parameters actually used for each token (about 3B in Qwen3.6-35B-A3B, the "A3B"); they set the speed. | 7 |
 | Admin events (Keycloak) | Keycloak's record of every administrative change (user created, group membership added, lockout cleared), with the full details when enabled; audit evidence for "who changed what". | 16 |
+| Admission control | Checks the Kubernetes API server runs on every object (after authentication and authorization, before storing it); mutating admission fills defaults, validating admission refuses what breaks the rules. | 29 |
 | ADR (Architecture Decision Record) | A short Markdown file recording one significant decision: context, decision, alternatives and consequences. | 4 |
 | age | A small, modern encryption tool with short keys (`age1…`); makes the key pair SOPS uses. A simpler, safer replacement for GPG. | 6 |
 | Alert rule | A PromQL condition Prometheus checks every evaluation; when it has stayed true for the rule's `for` duration, the alert fires and goes to Alertmanager with its labels (e.g. `severity`) and annotations (summary, runbook). | 20 |
@@ -28,8 +29,13 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Anchoring (audit log) | Copying the newest hash of a chain (and the events) somewhere the database's administrators can't change, such as an object-locked bucket, so a later rewrite of the chain becomes visible. | 23 |
 | ANN (approximate nearest neighbour) | Finding nearly the closest vectors very fast, instead of exactly the closest by checking every one. | 11 |
 | Annotation (Grafana) | A marker drawn on Grafana graphs at the moment something happened, such as a new prompt version going live, so you can see whether quality or latency changed then. | 24 |
+| API server (Kubernetes) | The cluster's front desk: every change, from `kubectl` or Argo CD, goes through it and is checked there. | 29 |
+| App of apps | One Argo CD Application (`deploy/argocd/root.yaml`) whose folder holds the other Applications; adding an app is a pull request. | 29 |
 | Append-only | Rows may be added, never changed or removed; enforced here by a trigger that refuses `UPDATE`, `DELETE` and `TRUNCATE`, even for the table's owner. | 23 |
+| Application (Argo CD) | Argo CD's "this folder of git, at this revision, goes to that namespace", kept in sync automatically. | 29 |
+| AppProject (Argo CD) | Argo CD's permission boundary: which repository, namespaces and kinds of objects its Applications may touch. | 29 |
 | AppRole (role ID, secret ID) | OpenBao's login method for machines: the role ID says which role (like a username, not secret); the secret ID is the password. rag-api's agent gets its secret ID wrapped and single-use. | 28 |
+| Argo CD | A CNCF-graduated GitOps controller with a web UI: it pulls git and makes the cluster match it, continuously. | 29 |
 | arm64 / aarch64 vs amd64 / x86_64 | Processor families; Apple Silicon is arm64, amd64-only images need slower emulation. | 3 |
 | Asymmetric retrieval | Embedding questions and documents differently (queries get a task instruction, documents don't), because a short question and a long passage are different kinds of text. | 8 |
 | At-least-once delivery | Every job is delivered at least once, but may be delivered twice after a crash (the worker finished but died before acknowledging). | 15 |
@@ -72,6 +78,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Card status | Where a component is in its life: `planned → candidate → approved → deprecated → retired`; only approved or candidate models may be served. | 25 |
 | Cardinality | How many distinct values a label has. User ids as metric labels create one time series per user: slow dashboards and big bills; keep labels to small fixed sets like `outcome` = ok or error. | 19 |
 | Cask | A Homebrew package that is a normal Mac app with a window. | 1 |
+| CEL (Common Expression Language) | A small, safe expression language (no endless loops, no network calls) used by ValidatingAdmissionPolicies. | 29 |
 | Chat template | The model-specific recipe that turns a list of messages into the exact text format the model was trained on. | 7 |
 | CI (continuous integration) | Automatically checking every change (lint, types, tests, scans) on a fresh machine, so problems are found before they're merged. | 27 |
 | Ciphertext | The scrambled, encrypted version of a value; unreadable without the right key. | 6 |
@@ -83,6 +90,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Client credentials | The flow where a machine signs in with its own client id and secret, with no person involved; it gets an access token but no refresh token. | 16 |
 | Client scope | A reusable bundle of protocol mappers (and other token settings) that can be attached to many clients instead of repeating the mappers on each. | 16 |
 | Clock skew / leeway | Small differences between machines' clocks; a tolerance (30 s here) stops a verifier from rejecting a token that is only just fresh or only just expired. | 17 |
+| Cluster / node | A group of machines (nodes) Kubernetes runs containers on; OrbStack gives you a cluster of one node. | 29 |
 | CODEOWNERS | A GitHub file naming who must review changes to which folders. | 4 |
 | Collection (Qdrant) | Qdrant's equivalent of a table: a set of points sharing vector settings. | 12 |
 | Collector (OpenTelemetry) | A service that receives, processes and exports telemetry; our single governance point that limits memory, scrubs secrets, redacts values, labels and batches (`otel-collector`). | 19 |
@@ -91,13 +99,17 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Commit | A save point in git history, with a message explaining what changed and why. | 4 |
 | Compiler | A program that turns human-written source code into a program the computer can run. | 1 |
 | Compose project | The group of containers, networks and volumes one Compose file starts, sharing a name (`name: rag-platform`) that prefixes every container (`rag-platform-litellm-1`). | 9 |
+| ConfigMap | A Kubernetes object holding non-secret configuration, e.g. the OpenBao Agent's config file. | 29 |
 | Consumer group | A set of workers sharing one stream; each message goes to exactly one worker in the group, and the group remembers what was delivered and acknowledged. | 15 |
+| Container orchestration | Running containers across machines automatically: placing, restarting, scaling and updating them; what Kubernetes does. | 29 |
 | Container | A running copy of an image: a self-contained "apartment" with a program and everything it needs. | 3 |
 | Container runtime | The software that downloads images and runs containers (OrbStack, Docker Desktop, Colima, Podman). | 3 |
 | Content addressing | Naming an object by a hash of its content (`sha256`), so identical files share a name and changes are detectable. | 14 |
 | Content hash | A fingerprint (here SHA-256) computed from every byte of a file; any edit, even one character or a line ending, changes it. | 24 |
 | Context propagation | Passing the trace id from one service to the next (in the `traceparent` HTTP header) so their spans join one trace. | 19 |
 | Context window | The maximum number of tokens (prompt + answer) a model can handle at once. | 7 |
+| Control plane | The parts of Kubernetes that decide (API server, etcd, scheduler, controllers), as opposed to the nodes that run the containers. | 29 |
+| Controller / reconciliation | A loop that compares desired state with actual state and fixes the difference, forever; Kubernetes is made of them, and Argo CD is one too. | 29 |
 | Conventional Commits | A commit-message format `type(scope)!: description` (e.g. `feat(gateway): …`) readable by people and tools. | 4 |
 | Cooldown | Temporarily skipping a backend that keeps failing (LiteLLM: 30 s after 3 failures in a minute), so requests stop piling onto it. | 10 |
 | CORS | Browser rules for which websites may call a server from inside a web page; too open (`*`) and any site you visit could call your local model. | 7 |
@@ -128,7 +140,9 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Dependency group | A named set of extra dependencies in `pyproject.toml` (PEP 735), e.g. `dev` for test tools not needed in production. | 2 |
 | Dependency injection (FastAPI) | FastAPI runs helper functions ("get the caller", "require this role") before an endpoint and passes their results in; tests swap them for fakes with `dependency_overrides`. | 17 |
 | Deployment (LiteLLM) | One real backend behind a model alias; an alias can have several, for load-balancing or failover. | 9 |
+| Deployment / ReplicaSet (Kubernetes) | "Keep N copies of this pod template running and change versions gradually"; the Deployment manages ReplicaSets, which manage Pods. | 29 |
 | Derived index | A copy organised for fast lookup, always rebuildable from the source of truth. | 12 |
+| Desired state | What you have written down should exist ("two copies of rag-api, this digest, these limits"); controllers make reality match it. | 29 |
 | Deterministic check | A rule a program can check exactly, such as "cites document 2" or "contains no 'PWNED'": cheap, repeatable and explainable, so these form the evaluation gate. | 26 |
 | Dev dependency | A package needed only while developing (e.g. pytest), not when the app runs in production. | 2 |
 | Device flow | The sign-in flow for terminals and TVs: the app shows a link and a short code, you approve in a browser (with password and MFA), and the app receives tokens without ever seeing your password. | 16 |
@@ -151,6 +165,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Envelope encryption | Values are locked with a random data key, and the data key is locked separately for each recipient, so adding a person never means re-encrypting every value by hand. | 6 |
 | Environment variable | A named value handed to a program when it starts (`DB_PASSWORD=…`); fine for settings, easy to leak for secrets. | 6 |
 | Error budget | The amount of failure an SLO allows: with 99% of searches succeeding over 28 days, 1% may fail. Budget left: ship features; budget burning: prioritise reliability. | 20 |
+| etcd | The key-value database where Kubernetes stores every object. | 29 |
 | Evaluation (eval) | Running a system on test cases and scoring the results. | 26 |
 | Eviction / maxmemory policy | What a memory-capped store deletes when it is full. `volatile-lru` removes the least-recently-used keys that have a TTL; `allkeys-lru` may remove any key, including queued jobs. | 15 |
 | Exemplar | A sample trace id attached to one metric data point, so a dot on a graph links straight to a real request's trace. | 21 |
@@ -178,6 +193,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | .gitattributes | Rules for how git treats file types (line endings, binary files, generated files). | 4 |
 | `GITHUB_TOKEN` / permissions | The short-lived token every GitHub Actions job gets automatically; the workflow's `permissions:` block limits what it may do (read-only by default here). | 27 |
 | .gitignore | A "do not pack" list of files git must never track (secrets, `.venv`, data, models). | 4 |
+| GitOps | Git holds the declarative desired state; an agent in the cluster pulls it and continuously reconciles the cluster to it (OpenGitOps principles). | 29 |
 | Golden dataset | Test cases with known good answers (or expected documents), written and checked by people, versioned and pinned by hash. | 26 |
 | Graceful degradation | Continuing with reduced quality or features instead of failing completely, e.g. skipping reranking and flagging the answer when the reranker is down. | 10 |
 | Grant / flow | A standard recipe for getting a token: authorization code + PKCE (web apps), device flow (CLIs), client credentials (machines). The password grant (ROPC) is switched off. | 16 |
@@ -189,6 +205,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Head (hash chain) | The newest hash of a chain; it summarises the entire chain up to that point. | 23 |
 | Headless initialisation | Creating an application's organisation, project, API keys and first admin from configuration at first start, with no clicking (Langfuse's `LANGFUSE_INIT_*` variables). | 22 |
 | Healthcheck | A command Compose runs inside a container every few seconds to ask "are you working?"; failures mark it unhealthy. | 9 |
+| Helm (chart, values, release) | Kubernetes' package format: templated manifests (a chart) filled in from values; an installed instance is a release. | 29 |
 | Histogram (metric) | A metric that records a distribution of values (e.g. latencies), from which p50/p95/p99 are computed. | 19 |
 | `histogram_quantile` | The PromQL function that estimates a percentile (e.g. p95) from histogram buckets; it can only be as precise as the bucket edges allow. | 20 |
 | HMAC (keyed hash) | A one-way fingerprint of a value made with a secret key. OpenBao's audit log stores HMACs instead of secret values; `sys/audit-hash` computes one so you can search the log for a value you hold. | 28 |
@@ -226,6 +243,8 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Key rotation | The identity provider switching to a new signing key; APIs must pick up the new key automatically (a JWKS re-fetch on an unknown `kid`) while old tokens expire. | 17 |
 | Keyless signing | Signing with a minutes-long certificate tied to the CI job's identity (via OIDC and Sigstore) instead of a long-lived private key, so there's no key to steal or rotate. | 27 |
 | `kid` (key id) | A label in a JWT's header naming which of the identity provider's keys signed it, so the verifier knows which public key to check with. | 17 |
+| kubelet | The agent on each node that starts containers, runs probes and writes service account tokens into pods. | 29 |
+| Kustomize (base, overlay, component) | Plain Kubernetes YAML plus declared changes: a base, per-environment overlays, and reusable components; built into `kubectl`. | 29 |
 | KV cache | The model's working memory of everything read so far; grows with prompt and answer length and is a big part of memory use. | 7 |
 | KV v2 | OpenBao's key/value secrets engine, version 2: stores fixed secrets (here the gateway key and OPA token) with a version history. Data lives under `secret/data/…`, versions under `secret/metadata/…`. | 28 |
 | Label (metric) | A key=value pair that identifies one slice of a metric, e.g. `outcome="error"`, `job="opa"`, `service_version="0.1.0"`. Every distinct label combination is its own time series. | 20 |
@@ -236,6 +255,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Legal basis (GDPR) | The reason that makes processing personal data lawful (contract, legal obligation, legitimate interest…); required on every dataset card with personal data. | 25 |
 | Legal hold | An indefinite object lock with no date, applied during investigations, until someone explicitly removes it. | 14 |
 | Lifecycle rule | An automatic action on objects by age, e.g. "delete temp files after 1 day" or "expire old versions after 90 days". | 14 |
+| LimitRange | Per-container defaults and maximums for a namespace (here: 256 MiB default memory limit, 2 GiB max). | 29 |
 | Line filter (LogQL) | A LogQL step that keeps only lines containing (`|=`), not containing (`!=`) or matching (`|~`) some text, e.g. `|= "4bf92f35…"` to find one request's lines. | 21 |
 | Lineage | The recorded chain from an output (an answer) back to its inputs (chunks → document → exact file version). | 14 |
 | Linter / static analysis | A tool (e.g. `ruff check`) that reads code without running it and flags likely bugs and risky patterns, each as a coded rule like `B006`. | 5 |
@@ -281,8 +301,11 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Multi-window alert | A burn-rate alert that requires both a long window (1 h or 6 h: a real trend) and a short one (5 min or 30 min: still happening) to be over the threshold, so blips don't page and alerts clear quickly after recovery. | 20 |
 | Named vectors | Several vectors stored per point under different names, e.g. `dense` and `sparse`. | 12 |
 | Named volume | Docker-managed storage inside the VM that survives container deletion; use it for database data. | 3 |
+| Namespace (Kubernetes) | A folder for objects, with its own rules, quotas and permissions. | 29 |
+| Native sidecar | An init container with `restartPolicy: Always` (Kubernetes 1.33+): starts first, keeps running beside the app. | 29 |
 | nDCG (normalised discounted cumulative gain) | A score from 0 to 1 that rewards relevant documents near the top of a ranked list; 1.0 is the perfect order. | 26 |
 | Network interface | A way your machine connects to networks: Wi-Fi, Ethernet, or localhost. | 3 |
+| NetworkPolicy | A firewall rule between pods, enforced only if the cluster's network plugin supports it (`just k8s-netpol-check`). | 29 |
 | no-new-privileges | A container security option that stops any process inside it gaining extra privileges, e.g. through setuid programs. | 9 |
 | --no-verify | A git flag that skips local hooks; the reason CI must repeat the same checks. | 5 |
 | Non-root container | A container whose process runs as an ordinary user (uid 10001 here), so a compromised app can't change system files or its own code. | 17 |
@@ -325,6 +348,9 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Pipeline (Collector) | One signal's path through the Collector: receivers → processors (in order) → exporters. | 19 |
 | Placeholder | A slot like `{{question}}` in a prompt template that is filled in for each request; every one must be declared in `variables`. | 24 |
 | Plaintext | Readable, unencrypted text. | 6 |
+| Pod Security Standards | Kubernetes' built-in profiles (privileged, baseline, restricted), enforced per namespace by a label. | 29 |
+| Pod | One or more containers that run together and share network and volumes; the unit Kubernetes schedules. | 29 |
+| PodDisruptionBudget | "Never voluntarily take away more than this many pods", e.g. during node maintenance. | 29 |
 | Point | One item stored in Qdrant: an ID, one or more vectors, and a payload. Here, one chunk. | 12 |
 | Policy (OpenBao) | A list of paths and what a token may do with them (read, create, update, delete, list, sudo). Anything not listed is denied. | 28 |
 | Policy as code | Access rules written in a real language, versioned in Git, reviewed by pull request and tested like code. | 18 |
@@ -339,7 +365,10 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Presigned URL | A link with a built-in signature and expiry that grants temporary access to one object (or one version) without the opener needing credentials. | 14 |
 | Primary key / foreign key | A row's unique ID / a column pointing to another table's row (a chunk → its document). | 11 |
 | Principal | The verified caller as the code sees it after token validation: user id (`sub`), username, calling app (`azp`), groups and roles. | 17 |
+| Probe (startup, readiness, liveness) | Checks the kubelet runs on a container: has it started, should it get traffic, should it be restarted. | 29 |
 | Project and API keys (Langfuse) | A Langfuse project holds traces; its public key (`pk-lf-…`) identifies it and its secret key (`sk-lf-…`) authorises writes. | 22 |
+| Projected service account token | A short-lived token the kubelet writes into a pod for one audience only (here `openbao`, 10 minutes) and refreshes automatically. | 29 |
+| Promotion (deployment) | Moving a tested, signed build to an environment; here a one-line digest change by pull request (`just promote`). | 29 |
 | Promotion / rollback | Moving a prompt label to a newer version / back to an older one: a one-number change in `labels.yaml`, reviewed as a pull request. | 24 |
 | Prompt | The text given to a model: instructions plus the material to work on. | 24 |
 | Prompt cache | Reusing the KV cache of a prompt start sent before (e.g. the same system prompt), which makes TTFT much faster. | 7 |
@@ -389,6 +418,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Required action | Something a user must do at their next sign-in: change a temporary password, set up MFA (`CONFIGURE_TOTP`), verify an email. | 16 |
 | Rescoring | After a fast search on compressed vectors, re-ranking the top candidates using the original vectors to recover accuracy. | 12 |
 | Resource (OpenTelemetry) | Facts about the process sending telemetry (`service.name`, version, environment), attached to every span and metric. | 19 |
+| ResourceQuota | A ceiling for a whole namespace: total CPU and memory requests and limits, number of pods. | 29 |
 | Response wrapping | OpenBao hands out a secret inside a single-use envelope (a wrapping token with a short TTL). If someone opened it first, the real recipient's unwrap fails, so the theft is noticed. | 28 |
 | Restart policy | The rule Docker uses to restart a container that stops or crashes (`restart: unless-stopped`). | 9 |
 | Retention | How long a store keeps data before deleting it: 7 days for traces (Tempo `block_retention`) and logs (Loki `retention_period` plus `compactor.retention_enabled`). | 21 |
@@ -401,6 +431,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | RFC 3161 timestamp | A signed statement from a timestamping authority that some hash existed at a given time. | 23 |
 | Role / privilege (database) | A database identity / what it's allowed to do (connect, read, write, create tables). | 11 |
 | Role mapping | The link in OpenSearch's security plugin that gives a user (or backend role) the permissions of a role. | 13 |
+| Rolling update | Replacing pods a few at a time; with `maxUnavailable: 0`, a new pod must be ready before an old one goes. | 29 |
 | Root token | An all-powerful OpenBao login created at initialisation. Used once for setup, then revoked; a new one needs 2 key shares (break-glass). | 28 |
 | rotate-root | OpenBao changes the password of its own database admin login to a random value, so no person knows it any more. | 28 |
 | Rotation | Replacing a secret with a new value on a schedule, or immediately after a suspected leak. | 6 |
@@ -432,8 +463,10 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Security plugin | OpenSearch's built-in TLS, users, roles and permissions; never disable it. | 13 |
 | Semantic conventions | Agreed attribute names (`http.request.method`, `gen_ai.request.model`) so every tool understands the data. | 19 |
 | Semantic Versioning | MAJOR.MINOR.PATCH version numbers: breaking change → major, `feat` → minor, `fix` → patch. | 4 |
+| Service (Kubernetes) | A stable name and address for a set of pods, found by labels and a selector; an ExternalName Service is just a DNS alias. | 29 |
 | Service account | A non-human identity tied to a confidential client, used with client credentials (e.g. `service-account-ingestion-worker`). | 16 |
 | Service graph | Who-calls-whom metrics (`traces_service_graph_request_total{client, server}`) that Tempo computes from client/server spans; Grafana draws them as boxes and arrows. | 21 |
+| ServiceAccount (Kubernetes) | A pod's identity inside the cluster; OpenBao trusts tokens issued for `rag:rag-api`. | 29 |
 | Session / user / tags | Ways to group LLM traces: a conversation, a (pseudonymous) person, free-form labels. | 22 |
 | SHA-256 | A hash function producing a 32-byte fingerprint: the same input always gives the same output, one changed bit changes it completely, and it can't be reversed or collided in practice. | 23 |
 | Shadow price | An internal, notional price for something with no bill (your own GPU time), so usage can be compared and budgeted; here $2/hour ÷ tokens per second. | 10 |
@@ -476,6 +509,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Structured metadata (Loki) | Extra per-line key/value facts (such as OTLP attributes) that Loki stores and can search without turning them into labels, so they don't create new streams. | 21 |
 | Supersede | Replace an accepted ADR with a newer ADR that points back to it; the old one is never edited. | 4 |
 | Supply-chain attack | Poisoning something your software is built from (a library, an action, a tool binary, a base image) instead of attacking the application itself. | 27 |
+| Sync / prune / self-heal / sync wave | Argo CD's verbs: apply git; delete what git no longer has; undo hand-made changes; order syncs (lower waves first). | 29 |
 | Synonyms (search) | Rules treating different terms as equivalent ("wfh" = "work from home" = "remote work"), best applied at query time with `synonym_graph`. | 13 |
 | System card | A short document about an application built from models and data: purpose, users, human oversight, risk assessment. | 25 |
 | Table lock | A lock on a whole table; `LOCK TABLE … IN EXCLUSIVE MODE` lets only one writer append at a time (so the chain can't fork) while readers carry on. | 23 |
@@ -521,6 +555,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Unified memory | Apple Silicon memory shared by the CPU and GPU; every GB given to the container VM is a GB the models lose. | 3 |
 | Upstream | Everything a component was built from, directly or indirectly (`just cards lineage`). | 25 |
 | uv | Astral's all-in-one Python tool: interpreters, virtual environments, locking and tool installs. | 2 |
+| ValidatingAdmissionPolicy | Your own admission rule, written in CEL and run inside the API server (GA since Kubernetes 1.30): no extra controller needed. | 29 |
 | Valkey | The open-source (BSD), Redis-compatible in-memory store maintained under the Linux Foundation, forked from Redis in 2024 after Redis's licence change. | 15 |
 | Vault (HashiCorp) | The best-known secrets manager. Its licence changed to BUSL-1.1 in 2023 (not open source); we say "Vault" for the idea and use OpenBao, its open-source fork. | 28 |
 | Version (prompt) | One frozen edition of a prompt, a file `prompts/<name>/v<N>.yaml`; `rag-answer@2` always means the same text. | 24 |
