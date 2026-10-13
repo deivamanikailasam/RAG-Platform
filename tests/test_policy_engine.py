@@ -138,13 +138,18 @@ def test_policies_compile_strictly_and_are_formatted() -> None:
 
 
 @needs_opa
-def test_all_24_policy_tests_pass_with_coverage_over_90() -> None:
+def test_all_policy_tests_pass_with_coverage_over_90() -> None:
     run = _opa("test", "policies", "--coverage", "--threshold", "90")
     assert run.returncode == 0, run.stdout + run.stderr
     report = json.loads(run.stdout)
     assert report["coverage"] >= 90
     verbose = _opa("test", "policies")
-    assert "PASS: 24/24" in verbose.stdout  # 21 from Step 18 + 3 metrics tests (Step 20)
+    # 21 from Step 18 + 3 metrics tests (Step 20) + 3 answer tests (Step 33); later steps add more,
+    # so check "every test passed and there are at least 27" instead of an exact count.
+    match = re.search(r"PASS: (\d+)/(\d+)", verbose.stdout)
+    assert match, verbose.stdout
+    passed, total = int(match.group(1)), int(match.group(2))
+    assert passed == total >= 27, verbose.stdout
 
 
 # --- OPA in Compose ---------------------------------------------------------------------------
