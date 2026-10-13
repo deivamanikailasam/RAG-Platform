@@ -658,9 +658,9 @@ gates env digest evidence="release-evidence" alertmanager="":
 gates-record name digest status summary="":
     uv run python scripts/gates.py record {{name}} {{digest}} {{status}} --summary "{{summary}}"
 
-# Answer quality per release from the audit log (needs AUDIT_READER_DSN); --candidate/--baseline compare
+# Answer quality per release from the audit log (as audit_reader); --candidate/--baseline compare
 online-eval *args:
-    sops exec-env secrets/dev.enc.env 'uv run rag online-eval --dsn-env AUDIT_READER_DSN {{args}}'
+    sops exec-env secrets/dev.enc.env 'AUDIT_READER_DSN="{{audit_reader_dsn}}" uv run rag online-eval --dsn-env AUDIT_READER_DSN {{args}}'
 
 # Restore production's backups into a NEW cluster at a point in time, compare, delete (monthly)
 dr-drill target="":

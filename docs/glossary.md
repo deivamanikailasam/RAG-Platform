@@ -28,6 +28,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Algorithm confusion | An attack that re-signs a token with HS256 using the server's PUBLIC key as the HMAC password; blocked by allowing only RS256. | 17 |
 | Alias (Qdrant) | A stable name (`rag_chunks`) pointing at a real collection; applications use it, and it can be switched to another collection instantly and atomically. | 12 |
 | Allow-list | The only models a key may use; a request for anything else is refused (401/403). | 10 |
+| Analysis run | The checks Argo Rollouts runs while a canary is live: Prometheus queries and a Job, each one pass or fail; a failure aborts the release. | 37 |
 | Analytics | Anonymous usage statistics a tool sends back to its makers. | 1 |
 | Analyzer | The recipe a search engine uses to turn text into searchable terms: a tokenizer plus token filters (lowercase, synonyms, stemming). | 13 |
 | Anchoring (audit log) | Copying the newest hash of a chain (and the events) somewhere the database's administrators can't change, such as an object-locked bucket, so a later rewrite of the chain becomes visible. | 23 |
@@ -60,6 +61,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Baseline (evaluation) | The summary of the last accepted evaluation run, committed in `evals/baselines/`; a new run mustn't fall below it by more than a small tolerance. | 26 |
 | Blue/green re-index | Rebuilding the search index into a new collection beside the live one, comparing the two, then switching by a one-line change; the old collection stays until the switch is proven. | 36 |
 | Boilerplate | Text that repeats everywhere and means nothing (running headers, footers, "Page 3 of 9", cookie banners); removed before chunking so it doesn't match every search. | 31 |
+| Break glass | The recorded emergency path around the normal rules, e.g. `just promote prod sha256:… "INC-1234: why"` skips the gates but writes the reason into the commit and still needs review. | 37 |
 | Break-glass | Emergency super-powers (here the database superuser), used rarely, deliberately and visibly. | 23 |
 | B-tree | The default Postgres index, for exact values and ranges (an ID, a date); like a sorted phone book. | 11 |
 | Batch | Several texts sent together and embedded in one GPU pass; much faster per text than one at a time. | 8 |
@@ -84,12 +86,14 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Cache invalidation, epoch | Making old cached answers unusable when documents change; here, by bumping a counter (the epoch) that is part of every cache key, after every ingest or delete. | 33 |
 | Cache key | The value a cache looks answers up by. It must include everything that changes the answer (prompt with retrieved context, model, parameters, user's permission scope, tenant), or answers leak between users. | 15 |
 | Cache poisoning | A wrong, stale or someone-else's answer stored in a cache and then served to other requests, e.g. because the cache key left out the permission scope. | 15 |
+| Canary release | Giving a new release a small share of traffic first (10%, 25%, 50%, then 100%), comparing it with the old one, and rolling it back by itself if it's worse. | 37 |
 | Cap (deny overrides) | A limit that beats any grant: a contractor in `executives` still only reaches `internal`, because caps in `capped_groups` always win over group clearances. | 18 |
 | Card status | Where a component is in its life: `planned → candidate → approved → deprecated → retired`; only approved or candidate models may be served. | 25 |
 | Cardinality | How many distinct values a label has. User ids as metric labels create one time series per user: slow dashboards and big bills; keep labels to small fixed sets like `outcome` = ok or error. | 19 |
 | Cask | A Homebrew package that is a normal Mac app with a window. | 1 |
 | Catch rate | The share of known attacks a set of guards stops, redacts or flags. Only meaningful next to the false positive rate: a guard that blocks everything catches 100%. | 34 |
 | CEL (Common Expression Language) | A small, safe expression language (no endless loops, no network calls) used by ValidatingAdmissionPolicies. | 29 |
+| Change freeze | A period (e.g. year-end) in which no promotions happen; written in deploy/envs/promotion.yaml and checked by the gates. | 37 |
 | Chat template | The model-specific recipe that turns a list of messages into the exact text format the model was trained on. | 7 |
 | Chunk | A piece of a document that is embedded, retrieved and cited on its own; it carries a stable id, its text, what was embedded, its access rules and metadata. | 31 |
 | Chunking strategy | The rule that decides where a document is cut into chunks: every N tokens, by paragraphs then sentences, along headings, by sentence, where the topic changes, or small children inside big parents. | 31 |
@@ -184,6 +188,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Digest (image) | `sha256:…` of an image's content. Unlike a tag, it can't later point at different content, so scanning, signing and deploying all use it. | 27 |
 | Dimensions (of an embedding) | How many numbers an embedding vector has (Qwen3-Embedding-0.6B: up to 1,024); more can hold more nuance but costs storage and search time. | 8 |
 | direnv | A tool that loads a project's settings automatically when you enter its folder. | 1 |
+| Disaster recovery (DR) | Getting back after something high availability can't absorb: a region lost, or data destroyed by mistake; here a point-in-time restore into a new cluster, practised monthly. | 37 |
 | Distance operator | pgvector's comparison symbols: `<=>` cosine distance, `<#>` negative inner product, `<->` Euclidean (L2), `<+>` L1. | 11 |
 | Distributed lock | A short-lived "I'm working on this" marker shared by all workers (`SET key token NX PX 30000`): only one holder, expires on its own, released only with the owner's token. | 15 |
 | Docker Compose | A file (`compose.yaml`) listing many containers and how they connect; `docker compose up` starts them all. | 3 |
@@ -201,6 +206,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Enrichment (ingestion) | Adding context to what is embedded for a chunk (its title and section, an LLM-written context, the questions it answers) without changing the text that is shown and cited. | 31 |
 | Entry point | A standard Python packaging hook: a package declares "my components live in this module" under `rag_core.components`, and rag-core loads them. | 30 |
 | Envelope encryption | Values are locked with a random data key, and the data key is locked separately for each recipient, so adding a person never means re-encrypting every value by hand. | 6 |
+| Environment parity | Staging is built from the same parts as production (same base, same production component), so "it worked in staging" means something. | 37 |
 | Environment variable | A named value handed to a program when it starts (`DB_PASSWORD=…`); fine for settings, easy to leak for secrets. | 6 |
 | Error budget | The amount of failure an SLO allows: with 99% of searches succeeding over 28 days, 1% may fail. Budget left: ship features; budget burning: prioritise reliability. | 20 |
 | etcd | The key-value database where Kubernetes stores every object. | 29 |
@@ -217,6 +223,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Fail open | The opposite of fail closed: when something breaks or a fact is missing, let the request through. Never acceptable for security; an undefined Rego value can cause it silently. | 18 |
 | Fail open (search helpers) | For helpers that only improve results (a reranker, a query rewriter): when one fails, continue without it and record that, instead of failing the whole search. Never used for access checks, which always fail closed. | 32 |
 | Fail open / fail closed (guards) | What a guard does when its service or model can't be reached: flag and let the other guards decide (open, the default here) or block (closed). A per-project policy choice. | 34 |
+| Failover | Switching to a standby automatically when the active part fails, e.g. CloudNativePG promoting a replica to primary. | 37 |
 | Faithfulness | Every claim in an answer is supported by the documents it was given (nothing invented). | 26 |
 | Fallback | Sending a request to a different model when the first one fails; fine between chat models, never between embedders (different vector spaces). | 10 |
 | False positive | A check flags something that is actually fine; silence it narrowly, with a comment explaining why. | 5 |
@@ -254,6 +261,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Headless initialisation | Creating an application's organisation, project, API keys and first admin from configuration at first start, with no clicking (Langfuse's `LANGFUSE_INIT_*` variables). | 22 |
 | Healthcheck | A command Compose runs inside a container every few seconds to ask "are you working?"; failures mark it unhealthy. | 9 |
 | Helm (chart, values, release) | Kubernetes' package format: templated manifests (a chart) filled in from values; an installed instance is a release. | 29 |
+| High availability (HA) | Staying up when a part fails: several replicas spread over zones, so losing one machine or zone isn't an outage. | 37 |
 | Histogram (metric) | A metric that records a distribution of values (e.g. latencies), from which p50/p95/p99 are computed. | 19 |
 | `histogram_quantile` | The PromQL function that estimates a percentile (e.g. p95) from histogram buckets; it can only be as precise as the bucket edges allow. | 20 |
 | HMAC (keyed hash) | A one-way fingerprint of a value made with a secret key. OpenBao's audit log stores HMACs instead of secret values; `sys/audit-hash` computes one so you can search the log for a value you hold. | 28 |
@@ -309,6 +317,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Least privilege | Giving each identity only the access it needs and nothing more. | 10 |
 | Legal basis (GDPR) | The reason that makes processing personal data lawful (contract, legal obligation, legitimate interest…); required on every dataset card with personal data. | 25 |
 | Legal hold | An indefinite object lock with no date, applied during investigations, until someone explicitly removes it. | 14 |
+| Legal hold (retention) | An instruction to keep matching records whatever the retention rules say while a matter is open; in `legal_holds:` of the retention file, it beats `rag retention` and makes `rag erase-source` need a recorded override. | 37 |
 | Lifecycle rule | An automatic action on objects by age, e.g. "delete temp files after 1 day" or "expire old versions after 90 days". | 14 |
 | LimitRange | Per-container defaults and maximums for a namespace (here: 256 MiB default memory limit, 2 GiB max). | 29 |
 | Line filter (LogQL) | A LogQL step that keeps only lines containing (`|=`), not containing (`!=`) or matching (`|~`) some text, e.g. `|= "4bf92f35…"` to find one request's lines. | 21 |
@@ -382,6 +391,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Observation (Langfuse) | One step inside a Langfuse trace, with a type: `chain`, `retriever`, `embedding`, `generation`, `tool`, `agent` … | 22 |
 | OCR (optical character recognition) | Reading text out of an image, such as a scanned page that has no text layer. | 31 |
 | OIDC token (CI) | A signed statement from GitHub saying "this job is repo X, workflow Y, branch Z"; Sigstore's Fulcio trusts it to issue a signing certificate. | 27 |
+| Online evaluation | Measuring answer quality from real use (outcomes, citations, guard flags, thumbs up/down) per release, rather than from labelled test questions. | 37 |
 | Opaque token | A token that is just a random reference, not a readable JWT; only the identity provider can say what it means, via introspection. | 17 |
 | Open core | A free (here MIT-licensed) core product plus paid Enterprise features; Langfuse's model. | 22 |
 | OpenAI-compatible API | The same request and response format as OpenAI's API, so any tool that speaks "OpenAI" can call a local model. | 7 |
@@ -394,6 +404,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | OrbStack | A lightweight macOS container runtime: Linux VM + Docker engine + Compose + single-node Kubernetes. | 3 |
 | OTLP | The OpenTelemetry protocol that carries all three signals: gRPC on port 4317, HTTP on 4318. | 19 |
 | Overlap (chunking) | Repeating the end of one chunk at the start of the next, so a thought cut at the boundary appears whole in one of them. | 31 |
+| Overlay (Kustomize) | One small file per environment that layers names, sizes and settings on top of a shared base (and reusable components). | 37 |
 | Override (configuration) | Changing one setting for one deployment without editing the file, e.g. `RAG__RERANKER__TOP_N=5`; double underscores mean nesting, values are YAML. | 30 |
 | Package manager | A program that installs, updates and removes other software and tracks what's installed. | 1 |
 | PAP (Policy Administration Point) | Where the rules are written and changed; here Git and pull requests on `policies/`. | 18 |
@@ -424,6 +435,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Pod | One or more containers that run together and share network and volumes; the unit Kubernetes schedules. | 29 |
 | PodDisruptionBudget | "Never voluntarily take away more than this many pods", e.g. during node maintenance. | 29 |
 | Point | One item stored in Qdrant: an ID, one or more vectors, and a payload. Here, one chunk. | 12 |
+| Point-in-time recovery (PITR) | Restoring a database to any second inside a window (30 days here) from a base backup plus the archived write-ahead log. | 37 |
 | Policy (OpenBao) | A list of paths and what a token may do with them (read, create, update, delete, list, sudo). Anything not listed is denied. | 28 |
 | Policy as code | Access rules written in a real language, versioned in Git, reviewed by pull request and tested like code. | 18 |
 | Policy engine | A service whose only job is to evaluate authorisation rules against facts and answer yes/no plus details; here OPA. | 18 |
@@ -438,7 +450,9 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Primary key / foreign key | A row's unique ID / a column pointing to another table's row (a chunk → its document). | 11 |
 | Principal | The verified caller as the code sees it after token validation: user id (`sub`), username, calling app (`azp`), groups and roles. | 17 |
 | Probe (startup, readiness, liveness) | Checks the kubelet runs on a container: has it started, should it get traffic, should it be restarted. | 29 |
+| Production readiness | Whether a configuration should run in production, not just whether it can: no in-memory stores or stand-in models, required guards, no secrets in the file (`rag config readiness`). | 37 |
 | Profile (rag.yaml) | A named set of component choices (`offline`, `local`, …); `extends` copies another profile and changes some parts. | 30 |
+| Progressive delivery | Releasing a change gradually with automatic checks at each step (canaries, analysis), instead of to everyone at once. | 37 |
 | Project and API keys (Langfuse) | A Langfuse project holds traces; its public key (`pk-lf-…`) identifies it and its secret key (`sk-lf-…`) authorises writes. | 22 |
 | Projected service account token | A short-lived token the kubelet writes into a pod for one audience only (here `openbao`, 10 minutes) and refreshes automatically. | 29 |
 | Promotion (deployment) | Moving a tested, signed build to an environment; here a one-line digest change by pull request (`just promote`). | 29 |
@@ -470,6 +484,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Query rewriting | Turning the question into a better search query; for a follow-up ("how do I fix it?"), rewriting it as a standalone question using the conversation. | 32 |
 | Query transformation | Changing what is searched for before retrieval: expanding acronyms, rewriting, paraphrasing, imagining an answer, splitting or generalising the question. | 32 |
 | `rate()` / `increase()` | PromQL functions for counters: `rate` is the per-second speed over a window, `increase` the total growth over it. Both handle counter resets when a process restarts; neither can see a counter's first appearance as growth. | 20 |
+| Quorum (replication) | "Any N of the replicas" must confirm: with `method: any, number: 1`, a commit waits for one replica, whichever is fastest. | 37 |
 | RAG architecture | The overall design of how a RAG system gathers context and checks its answer (naive, advanced, corrective, agentic…); here, the component in the `pipeline` slot. | 35 |
 | Rate limit (RPM / TPM) | How many requests per minute / tokens per minute a key may use; going over returns 429 Too Many Requests. | 10 |
 | Raw zone (bronze) | The part of a data platform holding immutable original data, from which everything else can be rebuilt. | 14 |
@@ -515,6 +530,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Retry | Trying the same model again after a temporary error, before any fallback. | 10 |
 | Reverse proxy | A server that sits in front of other servers, receives every request, applies rules and forwards it. | 9 |
 | Review interval | How often a card must be re-read and re-confirmed (e.g. every 90 or 180 days); overdue reviews warn and fail the weekly strict run. | 25 |
+| Review queue | The answer ids online evaluation flags for a person to read (thumbs down, groundedness flags); real problems become new labelled questions. | 37 |
 | Revocation | Making an old secret stop working, e.g. deleting an API token. | 6 |
 | Revocation (access) | Taking access to a document away. It must reach every copy (every store, the graph, the manifest, cached answers) or it hasn't happened: `rag reacl`. | 36 |
 | Revoke (lease) | Ending a lease early. For a database login: end its sessions and drop the user, immediately (`bao lease revoke`). | 28 |
@@ -578,6 +594,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Side door | A way to read data around the access policy, for example a trace viewer showing documents the reader isn't cleared for. | 22 |
 | Signal | One kind of telemetry: traces, metrics or logs. | 19 |
 | Signed commit | A commit stamped with your private key so GitHub can show it as Verified (really from you). | 4 |
+| Significance test | A check that a difference between two rates is bigger than chance would explain given how many answers you have (here a one-sided two-proportion z-test). | 37 |
 | Sigstore (cosign, Fulcio, Rekor) | Free signing infrastructure: cosign signs and verifies, Fulcio issues short-lived certificates for an OIDC identity, Rekor is the public transparency log of signatures. | 27 |
 | Silence | A deliberate, time-limited mute of matching alerts in Alertmanager, e.g. during planned maintenance; stored so it survives restarts. | 20 |
 | Single source of truth | Each fact lives in exactly one file; other places check it rather than copy it. | 25 |
@@ -588,6 +605,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Smoke test vs benchmark | A handful of cases that catch obvious breakage, vs hundreds that measure quality reliably. Eight cases is a smoke test: one case moves the score by 12.5 points. | 26 |
 | Snapshot | A point-in-time backup file of a collection. | 12 |
 | Soak period | How long the old version is kept after a switch (e.g. the previous collection after a re-index), so rolling back stays a simple revert. | 36 |
+| Soak time | How long a release must run in one environment (24 hours in staging here) before it may be promoted further. | 37 |
 | Software supply chain | Everything your software is made from and with: dependencies, tools, CI actions, base images and the build itself. | 27 |
 | SOPS | "Secrets OPerationS": encrypts the values in YAML, JSON or `.env` files while leaving the names readable. | 6 |
 | Source of truth | The one authoritative store that decides what exists and who may see it; every other copy is derived from it. | 12 |
@@ -617,6 +635,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Supersede | Replace an accepted ADR with a newer ADR that points back to it; the old one is never edited. | 4 |
 | Supply-chain attack | Poisoning something your software is built from (a library, an action, a tool binary, a base image) instead of attacking the application itself. | 27 |
 | Sync / prune / self-heal / sync wave | Argo CD's verbs: apply git; delete what git no longer has; undo hand-made changes; order syncs (lower waves first). | 29 |
+| Synchronous replication | A write counts as committed only when a replica also has it, so losing the primary loses no committed write. | 37 |
 | Synonyms (search) | Rules treating different terms as equivalent ("wfh" = "work from home" = "remote work"), best applied at query time with `synonym_graph`. | 13 |
 | System card | A short document about an application built from models and data: purpose, users, human oversight, risk assessment. | 25 |
 | Table lock | A lock on a whole table; `LOCK TABLE … IN EXCLUSIVE MODE` lets only one writer append at a time (so the chain can't fork) while readers carry on. | 23 |
@@ -675,9 +694,11 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Virtual environment | A private folder of packages (`.venv`) for one project, tied to one interpreter. | 2 |
 | Virtual key | A per-app or per-person key issued by the gateway, with its own budget, limits and allowed models; needs a database (Step 10). | 9 |
 | Virtual machine (VM) | A computer simulated inside your computer; on a Mac, containers run inside a small Linux VM. | 3 |
+| WAL archiving | Copying Postgres's write-ahead log to object storage continuously, so the database can be replayed to any second. | 37 |
 | Wheel | A pre-built Python package, ready to install, like flat-pack furniture. | 2 |
 | Wired memory / GPU working-set limit | The share of unified memory macOS lets the GPU lock for itself (`iogpu.wired_limit_mb`); large models need it big enough. | 7 |
 | Workflow / job / step | GitHub Actions' structure: a workflow (YAML file) has jobs that run in parallel on fresh machines, and each job has steps (commands or actions). | 27 |
+| Workload identity | Each program logs in as itself (its own Kubernetes service account and OpenBao role), with only its own permissions. | 37 |
 | Workspace (uv) | Several Python packages in one repository sharing one `uv.lock` and one `.venv`. | 4 |
 | WORM (write once, read many) | Storage where data can be written once and then never changed or deleted until its retention ends; what object lock provides. | 14 |
 | `WWW-Authenticate` | The response header on a 401 telling the client a bearer token is required, or (with `error="invalid_token"`) that the one sent was not accepted. | 17 |

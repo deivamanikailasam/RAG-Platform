@@ -48,3 +48,4 @@ Phases: **A** Workstation · **B** Model serving · **C** Data stores · **D** I
 | 34 | Guardrails: checks before and after the model | H · RAG core | [step-34-guardrails.md](step-34-guardrails.md) |
 | 35 | RAG architectures: one slot, many designs | H · RAG core | [step-35-rag-architectures.md](step-35-rag-architectures.md) |
 | 36 | Data lifecycle, threat model and compliance | I · Production & reuse | [step-36-lifecycle-threat-model-compliance.md](step-36-lifecycle-threat-model-compliance.md) |
+| 37 | Production: environments, canaries, HA/DR and online evaluation | I · Production & reuse | [step-37-production-environments-canaries-ha-dr.md](step-37-production-environments-canaries-ha-dr.md) |
