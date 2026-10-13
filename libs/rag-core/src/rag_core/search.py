@@ -102,7 +102,17 @@ class SearchPipeline:
             self.cache.put(key, result.hits, result.texts)
         return result
 
-    def _search(self, query: Query) -> SearchResult:
+    def search_with(self, query: Query, texts: list[str] | None = None,
+                    retriever: Any = None) -> SearchResult:  # fmt: skip
+        """The same search with the architecture's own search texts and/or retriever (extension
+        03: rag-fusion's variants, hyde's passage, `vector`'s dense-only retriever). Access
+        checks, the reranker and the post-processors run exactly as in `search`; not cached."""
+        _filters.parse(query.filters)
+        return self._search(query, texts, retriever)
+
+    def _search(self, query: Query, given: list[str] | None = None,
+                retriever: Any = None) -> SearchResult:  # fmt: skip
+        retriever = retriever if retriever is not None else self.retriever
         ms: dict[str, float] = {}
         counts: dict[str, int] = {}
         info: dict[str, Any] = {}
@@ -113,7 +123,7 @@ class SearchPipeline:
         with tracer.start_as_current_span("rag.search", attributes={"rag.k": query.k}) as span:
             t0 = time.perf_counter()
             with tracer.start_as_current_span("rag.search.transform"):
-                texts, found = self._transform(query)
+                texts, found = (list(given), {}) if given else self._transform(query)
             texts = [t for t in texts if str(t).strip()][:MAX_TEXTS] or [query.text]
             timed("transform", t0)
             asked = query
@@ -125,17 +135,17 @@ class SearchPipeline:
             with tracer.start_as_current_span(
                 "rag.search.retrieve", attributes={"rag.texts": len(texts)}
             ) as s:
-                hits = self.retriever.retrieve(query, texts)
+                hits = retriever.retrieve(query, texts)
                 if not hits and found and getattr(self.transformer, "fallback_on_empty", True):
                     # the extracted filter matched nothing: a wrong guess costs recall, not the answer
-                    hits = self.retriever.retrieve(asked, texts)
+                    hits = retriever.retrieve(asked, texts)
                     info["filters"]["fallback"] = True
                     query = asked
                 s.set_attribute("rag.candidates", len(hits))
             counts["retrieved"] = len(hits)
             timed("retrieve", t0)
-            if hasattr(self.retriever, "last_info"):  # ensemble members, router's route
-                info["retriever"] = self.retriever.last_info()
+            if hasattr(retriever, "last_info"):  # ensemble members, router's route
+                info["retriever"] = retriever.last_info()
 
             # Defence in depth: every store filters by access already. If one ever returns a chunk
             # this caller may not see (a bug, a misconfigured plugin), it's dropped and counted.
@@ -169,12 +179,12 @@ class SearchPipeline:
             counts["returned"] = len(hits)
             span.set_attribute("rag.returned", len(hits))
         components = {
-            "query_transformer": _name(self.transformer) if self.transformer else None,
-            "retriever": _name(self.retriever),
-            # set once fusion was actually needed (several lists); a plugin retriever may not have one
-            "fusion": _name(f)
-            if (f := getattr(self.retriever, "_fusion", None)) is not None
+            "query_transformer": _name(self.transformer)
+            if self.transformer and not given
             else None,
+            "retriever": _name(retriever),
+            # set once fusion was actually needed (several lists); a plugin retriever may not have one
+            "fusion": _name(f) if (f := getattr(retriever, "_fusion", None)) is not None else None,
             "reranker": _name(self.reranker) if self.reranker else None,
             "postprocessors": [_name(p) for p in self.post],
         }

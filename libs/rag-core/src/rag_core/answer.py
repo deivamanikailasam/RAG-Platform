@@ -9,7 +9,9 @@ Order of work, and why:
    guards   → input checks (Step 34) before anything is spent: a block returns a fixed message
    cache    → same question, same access, same index and prompt: reuse
    retrieve → the architecture in the `pipeline` slot (Step 35) gathers context: by default
-              Step 32's search; naive, corrective, adaptive, agentic, graph or sql otherwise
+              Step 32's search; naive, corrective, adaptive, agentic, graph or sql otherwise, and
+              extension 03's vector, keyword, pageindex, rag-fusion, hyde, flare, speculative,
+              graph-global, long-context, table and conversational
    check    → the caller's own post-check (e.g. OPA in rag-api), via context_for
    guards   → context checks (Step 34): documents that give orders are dropped
    compress → extension 02: keep only what matters for the question (token savings in the trace)
@@ -212,7 +214,14 @@ class AnswerPipeline:
         with tracer.start_as_current_span(
             "rag.generate", attributes={"gen_ai.operation.name": "chat"}
         ) as g:
-            generated = self.generator.generate(query, context)
+            # extension 03: an architecture may write the answer itself (speculative: drafts from
+            # evidence subsets, a verifier picks one); citations and guards below still apply
+            draft = getattr(self.arch, "draft", None)
+            generated = (
+                draft(self, query, context, trace_data)
+                if draft is not None
+                else self.generator.generate(query, context)
+            )
             g.set_attribute("gen_ai.request.model", str(getattr(self.generator, "model", "?")))
             for k, v in generated.usage.items():
                 g.set_attribute(f"gen_ai.usage.{k}", v)

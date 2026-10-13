@@ -38,8 +38,12 @@ profiles:
     # extension 02 post-processors: auto-merge | section-expand | summary-expand (with the matching chunker/enricher)
     # answers (Step 33)
     # the architecture (Step 35): naive | standard | corrective | self-reflective | adaptive | agentic | graph | sql
-    #   graph also needs  graph_store: memory  and  enrichers: [context-header, graph-entities]
-    #   sql needs tables: {expense_limits: {path: examples/tables/expense_limits.csv, groups: [all-staff]}}
+    #   extension 03 adds: vector | keyword | pageindex (= vectorless) | rag-fusion (= multi-query) | hyde
+    #   | conversational | long-context | table | flare | speculative | graph-global
+    #   graph / graph-global also need  graph_store: memory (or postgres)  and  enrichers: [context-header, graph-entities]
+    #     (llm-entities instead of graph-entities: a model extracts entities AND relations)
+    #   pageindex needs  toc_store: memory  (each document's headings, kept at ingestion; no embedder needed)
+    #   sql / table need tables: {expense_limits: {path: examples/tables/expense_limits.csv, groups: [all-staff]}}
     #   compare them on your own questions: uv run rag eval-answers examples/eval/handbook.yaml
     pipeline: {use: standard, search_k: 8, uncited: flag}
     # compressors: [{use: extractive, threshold: 0.3}]   # extractive | embedding-filter | llm-extract | summarize | llmlingua

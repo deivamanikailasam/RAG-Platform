@@ -57,6 +57,17 @@ architectures:
   self-reflective:  {pipeline: self-reflective}
   adaptive:         {pipeline: adaptive}
   graph:            {pipeline: graph, graph_store: memory, enrichers: [context-header, graph-entities]}
+  # extension 03 (docs/extensions/03-more-rag-architectures.md): offline, the model-based steps
+  # use their heuristic (no model) mode, so these rows compare the plumbing, not a model
+  vector:           {pipeline: vector}
+  keyword:          {pipeline: keyword}
+  pageindex:        {pipeline: {use: pageindex, navigator: heuristic}, toc_store: memory}
+  rag-fusion:       {pipeline: {use: rag-fusion, variant_source: heuristic}}
+  conversational:   {pipeline: {use: conversational, rewriter: heuristic}}
+  long-context:     {pipeline: long-context}
+  flare:            {pipeline: flare}
+  speculative:      {pipeline: {use: speculative, drafter: generator, verifier: support}}
+  graph-global:     {pipeline: graph-global, graph_store: memory, enrichers: [context-header, llm-entities]}
 
 questions:
   - {id: leave-days, question: "How many days of annual leave do full-time staff get?", relevant: [annual-leave.md], tags: [paraphrase]}

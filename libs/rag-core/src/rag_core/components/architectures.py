@@ -11,8 +11,13 @@ switching architecture never switches off a control.
     graph            entities and their links add related chunks            (GraphRAG, local search)
     sql              a model writes read-only SQL over tables               (structured / text-to-SQL RAG)
 
-Conversational RAG, RAG-Fusion and HyDE are configurations, not architectures: memory + a rewrite
-transformer, multi-query + RRF, and the hyde transformer (Steps 32-33).
+Extension 03 adds more, each one word in the same slot (docs/extensions/03-more-rag-architectures.md):
+    vector, keyword                      one retriever only, with the configured reranker   (presets.py)
+    rag-fusion (multi-query), hyde,      named presets of Step 32's transformers            (presets.py)
+    conversational, long-context, table
+    pageindex (vectorless)               an LLM walks a table of contents; no embeddings    (pageindex.py)
+    flare, speculative                   active retrieval; drafts checked by a verifier     (active.py)
+    graph-global                         communities of entities for "big picture" questions (graphrag.py)
 """
 
 from __future__ import annotations
@@ -26,6 +31,7 @@ import re
 import sqlite3
 import threading
 from collections import defaultdict
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Literal
@@ -42,7 +48,7 @@ from rag_core.components.retrieval import (
     RetrieverParams,
 )
 from rag_core.registry import Container, register
-from rag_core.types import Access, Answer, Chunk, Document, Query, ScoredChunk
+from rag_core.types import Access, Answer, Chunk, Document, Principal, Query, ScoredChunk
 
 log = logging.getLogger("rag_core.architectures")
 
@@ -460,39 +466,104 @@ def _agentic(p: AgenticParams, c: Container) -> Agentic:
 # ================================================================ graph
 
 
+Relation = tuple[str, str, str]  # (source entity, relation, target entity)
+
+
+@dataclass
+class GraphSnapshot:
+    """What one person may see of the graph (extension 03's global search works on this)."""
+
+    chunks: dict[str, Chunk]
+    entities_of: dict[str, set[str]]  # chunk id -> the entities it mentions
+    relations: list[tuple[str, str, str, str]]  # (source, relation, target, chunk id)
+    types: dict[str, str]
+    version: str
+
+
 class MemoryGraphStore:
-    """Entities and the chunks that mention them, plus which entities appear together.
-    In memory: for one process (tests, demos, an API replica that ingests itself)."""
+    """Entities and the chunks that mention them, plus which entities appear together (and, with
+    the `llm-entities` enricher, typed relations between them). In memory: for one process
+    (tests, demos, an API replica that ingests itself); `postgres` keeps it durable."""
 
     def __init__(self) -> None:
         self.chunks: dict[str, Chunk] = {}
         self.by_entity: defaultdict[str, set[str]] = defaultdict(set)
         self.links: defaultdict[str, defaultdict[str, int]] = defaultdict(lambda: defaultdict(int))
+        self.entities_of: dict[str, set[str]] = {}
+        self.relations: dict[str, list[Relation]] = {}
+        self.types: dict[str, str] = {}
+        self.version = 0
         self._lock = threading.Lock()
 
-    def add(self, chunk: Chunk, entities: set[str]) -> None:
+    def _unlink(self, chunk_id: str) -> None:
+        ents = self.entities_of.pop(chunk_id, set())
+        for e in ents:
+            self.by_entity[e].discard(chunk_id)
+            for other in ents - {e}:
+                self.links[e][other] -= 1
+                if self.links[e][other] <= 0:
+                    del self.links[e][other]
+        self.relations.pop(chunk_id, None)
+        self.chunks.pop(chunk_id, None)
+
+    def add(self, chunk: Chunk, entities: set[str], relations: Sequence[Relation] = (),
+            types: Mapping[str, str] | None = None) -> None:  # fmt: skip
         with self._lock:
+            self._unlink(chunk.id)  # re-adding a chunk replaces what it said before
             self.chunks[chunk.id] = chunk
+            self.entities_of[chunk.id] = set(entities)
             for e in entities:
                 self.by_entity[e].add(chunk.id)
                 for other in entities - {e}:
                     self.links[e][other] += 1
+            if relations:
+                self.relations[chunk.id] = list(relations)
+            self.types.update(types or {})
+            self.version += 1
 
     def delete_document(self, uri: str) -> int:
         with self._lock:
             gone = {i for i, c in self.chunks.items() if c.document_uri == uri}
             for i in gone:
-                del self.chunks[i]
-            for ids in self.by_entity.values():
-                ids -= gone
+                self._unlink(i)
+            self.version += 1
             return len(gone)
 
-    def entities_in(self, text: str) -> set[str]:
+    def update_access(self, uri: str, access: Access) -> int:
+        with self._lock:
+            ids = [i for i, c in self.chunks.items() if c.document_uri == uri]
+            for i in ids:
+                self.chunks[i] = replace(self.chunks[i], access=access)
+            self.version += 1
+            return len(ids)
+
+    def _visible(self, ids: set[str], principal: Principal | None) -> list[Chunk]:
+        found = [self.chunks[i] for i in ids if i in self.chunks]
+        return [c for c in found if principal is None or c.access.allows(principal)]
+
+    def entities_in(self, text: str, principal: Principal | None = None) -> set[str]:
+        """The known entities named in the text. With a principal: only entities mentioned in a
+        chunk that person may see (a hidden document's names are not even matched)."""
         low = f" {' '.join(words(text))} "
-        return {e for e, ids in self.by_entity.items() if ids and f" {e} " in low}
+        return {e for e, ids in self.by_entity.items()
+                if ids and f" {e} " in low and self._visible(ids, principal)}  # fmt: skip
 
     def neighbours(self, entity: str, n: int = 3) -> list[str]:
-        return [e for e, _ in sorted(self.links[entity].items(), key=lambda kv: -kv[1])[:n]]
+        return [
+            e for e, _ in sorted(self.links[entity].items(), key=lambda kv: (-kv[1], kv[0]))[:n]
+        ]
+
+    def chunks_for(self, entity: str, principal: Principal | None = None) -> list[Chunk]:
+        return sorted(
+            self._visible(set(self.by_entity.get(entity, ())), principal), key=lambda c: c.id
+        )
+
+    def snapshot(self, principal: Principal) -> GraphSnapshot:
+        with self._lock:
+            chunks = {i: c for i, c in self.chunks.items() if c.access.allows(principal)}
+            return GraphSnapshot(chunks, {i: set(self.entities_of.get(i, ())) for i in chunks},
+                                 [(s, r, t, i) for i in chunks for s, r, t in self.relations.get(i, ())],
+                                 dict(self.types), str(self.version))  # fmt: skip
 
 
 @register("graph_store", "memory", summary="entities, mentions and co-occurrence links in memory")
@@ -518,7 +589,7 @@ class EntityExtractor:
     list) and records them in the graph store. Chunks pass through unchanged; an LLM extractor
     (entities AND relations) is the higher-quality option for real GraphRAG."""
 
-    def __init__(self, p: EntityParams, graph: MemoryGraphStore) -> None:
+    def __init__(self, p: EntityParams, graph: Any) -> None:
         self.p, self.graph = p, graph
 
     def entities(self, text: str) -> set[str]:
@@ -559,27 +630,25 @@ class Graph(Standard):
 
     name = "graph"
 
-    def __init__(self, params: GraphParams, graph: MemoryGraphStore) -> None:
+    def __init__(self, params: GraphParams, graph: Any) -> None:
         super().__init__(params)
         self.gp, self.graph = params, graph
 
     def retrieve(self, pipe: Any, query: Query) -> Retrieval:
         base = pipe.search.search(query)
-        ents = self.graph.entities_in(query.text)
-        related = {n for e in ents for n in self.graph.neighbours(e, self.gp.neighbours)} - ents
+        ents = self.graph.entities_in(query.text, query.principal)
+        related = {
+            n for e in sorted(ents) for n in self.graph.neighbours(e, self.gp.neighbours)
+        } - ents
         scored: dict[str, float] = {}
-        for e in ents:
-            for cid in self.graph.by_entity.get(e, ()):
-                scored[cid] = scored.get(cid, 0) + 1.0
-        for e in related:
-            for cid in self.graph.by_entity.get(e, ()):
-                scored[cid] = scored.get(cid, 0) + 0.3
-        graph_hits = [
-            ScoredChunk(self.graph.chunks[i], s, {"graph": s})
-            for i, s in scored.items()
-            if i in self.graph.chunks
-        ]
-        graph_hits = _allowed(query, sorted(graph_hits, key=lambda h: -h.score))[
+        chunks: dict[str, Chunk] = {}
+        for weight, group in ((1.0, ents), (0.3, related)):
+            for e in group:
+                for ch in self.graph.chunks_for(e, query.principal):
+                    chunks[ch.id] = ch
+                    scored[ch.id] = scored.get(ch.id, 0) + weight
+        graph_hits = [ScoredChunk(chunks[i], s, {"graph": s}) for i, s in scored.items()]
+        graph_hits = _allowed(query, sorted(graph_hits, key=lambda h: (-h.score, h.chunk.id)))[
             : self.gp.max_graph_chunks
         ]
         hits = (

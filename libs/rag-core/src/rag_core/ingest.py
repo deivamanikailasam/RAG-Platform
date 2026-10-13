@@ -84,8 +84,13 @@ class IngestionPipeline:
         self.pii = container.get("pii") if container.has("pii") else None
         self.chunker = container.get("chunker")
         self.enrichers = container.get("enrichers") if container.has("enrichers") else []
-        self.embedder = container.get("embedder")
         self.vectors = container.get("vector_store") if container.has("vector_store") else None
+        # extension 03: a vectorless profile (keyword index and/or table of contents) needs no embedder
+        self.embedder = (
+            container.get("embedder")
+            if self.vectors is not None or container.has("embedder")
+            else None
+        )
         self.keywords = container.get("keyword_index") if container.has("keyword_index") else None
         self.manifest = container.get("manifest") if container.has("manifest") else None
         if self.vectors is None and self.keywords is None:
@@ -100,6 +105,8 @@ class IngestionPipeline:
         self.search_cache = container.get("search_cache") if container.has("search_cache") else None
         # Step 35: GraphRAG's entity store is one more place a document lives
         self.graph = container.get("graph_store") if container.has("graph_store") else None
+        # extension 03: PageIndex-style navigation keeps each document's table of contents
+        self.toc = container.get("toc_store") if container.has("toc_store") else None
 
     def ingest(self, source: Source, force: bool = False) -> IngestResult:
         start = time.monotonic()
@@ -141,11 +148,18 @@ class IngestionPipeline:
                     "rag.ingest.embed", attributes={"rag.chunks": len(chunks)}
                 ):
                     vectors = None
-                    if self.vectors is not None and hasattr(self.embedder, "embed_chunks"):
+                    embedder = self.embedder
+                    if self.vectors is not None and embedder is None:  # pragma: no cover
+                        raise ValueError("a vector_store needs an embedder")
+                    if (
+                        self.vectors is not None
+                        and embedder is not None
+                        and hasattr(embedder, "embed_chunks")
+                    ):
                         # extension 02: document-aware embedders (late chunking) see the whole document
-                        vectors = self.embedder.embed_chunks(doc, chunks)
-                    elif self.vectors is not None:
-                        vectors = self.embedder.embed_documents([c.indexed_text for c in chunks])
+                        vectors = embedder.embed_chunks(doc, chunks)
+                    elif self.vectors is not None and embedder is not None:
+                        vectors = embedder.embed_documents([c.indexed_text for c in chunks])
                 with tracer.start_as_current_span("rag.ingest.index"):
                     # replace, don't append: chunks of the old version that no longer exist must go
                     self._delete_everywhere(source.uri)
@@ -153,6 +167,8 @@ class IngestionPipeline:
                         self.vectors.upsert(chunks, vectors)
                     if self.keywords is not None:
                         self.keywords.index(chunks)
+                    if self.toc is not None:  # replaces the document's previous contents
+                        self.toc.add(doc, chunks)
             except ParseError as e:
                 return self._done(source, IngestResult(source.uri, "failed", 0, str(e)), start)
             span.set_attribute("rag.ingest.chunks", len(chunks))
@@ -169,9 +185,11 @@ class IngestionPipeline:
         return n
 
     def _forget_graph(self, uri: str) -> None:
-        """The graph store (Step 35) keeps chunks too: a deleted document leaves it as well."""
-        if self.graph is not None:
-            self.graph.delete_document(uri)
+        """The graph store (Step 35) and the table of contents (extension 03) keep chunks too: a
+        deleted document leaves them as well."""
+        for store in (self.graph, self.toc):
+            if store is not None:
+                store.delete_document(uri)
 
     def delete(self, uri: str) -> IngestResult:
         """A source was deleted or must be forgotten: remove it from every store (Step 36: erasure)."""
@@ -196,10 +214,13 @@ class IngestionPipeline:
                         f"{type(store).__name__} can't change access in place: re-ingest instead"
                     )
                 n = max(n, store.update_access(uri, access))
-        if self.graph is not None:
-            for cid, ch in list(self.graph.chunks.items()):
-                if ch.document_uri == uri:
-                    self.graph.chunks[cid] = replace(ch, access=access)
+        for side in (self.graph, self.toc):
+            if side is not None and hasattr(side, "update_access"):
+                side.update_access(uri, access)
+            elif side is not None:  # a plugin graph store with only a `chunks` mapping
+                for cid, ch in list(side.chunks.items()):
+                    if ch.document_uri == uri:
+                        side.chunks[cid] = replace(ch, access=access)
         if self.manifest is not None and (entry := self.manifest.get(uri)) is not None:
             self.manifest.put(replace(entry, access=_access_dict(access)))
         self._invalidate()  # cached answers and results may rest on what was just revoked

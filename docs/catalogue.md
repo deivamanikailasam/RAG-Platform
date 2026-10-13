@@ -2,7 +2,7 @@
 
 # Catalogue of switchable components
 
-128 components in 27 kinds. Switch any of them with one line in rag.yaml: `<slot>: {use: <name>, <setting>: <value>}`. `rag components --kind <kind>` shows the same.
+144 components in 28 kinds. Switch any of them with one line in rag.yaml: `<slot>: {use: <name>, <setting>: <value>}`. `rag components --kind <kind>` shows the same.
 
 ## token_counter: Counting tokens (Step 30)
 
@@ -59,6 +59,7 @@
 | `context-header` | embeds "Title > Section" with each chunk (free, strong) | `template` ('{header}\n\n{text}') | live |
 | `graph-entities` | record named things (codes, acronyms, phrases, terms) per chunk in the graph store | `terms` ([]), `codes` (True), `acronyms` (True), `title_phrases` (True) | live |
 | `llm-context` | contextual retrieval: an LLM situates each chunk in its document (one call per chunk) | `max_document_chars` (24000) | live |
+| `llm-entities` | GraphRAG indexing: a model extracts entities and typed relations (schema-checked); offline extractor as fallback | `llm_slot` ('llm'), `entity_types` (['person', 'team', 'organ…), `relation_types` ([]), `max_entities` (20), `max_chars` (4000), `fallback` (EntityParams(terms=[], co…) | mocked |
 | `llm-metadata` | an LLM fills a declared metadata schema (per document or chunk); values type- and enum-checked | `fields`, `scope` ('document'), `llm_slot` ('llm'), `max_chars` (8000), `retries` (1), `prefix` ('') | mocked |
 | `metadata` | rule-based metadata for filters: dates, language, doc type, keywords (TF-IDF/YAKE), entities (regex) | `extract` (['dates', 'language', 'do…), `keywords` (5), `keyword_method` ('tfidf'), `entity_kinds` (['code', 'money', 'percen…), `doc_types` (None), `day_first` (True), `prefix` (''), `overwrite` (False) | live |
 | `questions` | adds the questions each chunk answers to what is embedded (one LLM call per chunk) | `n` (3) | live |
@@ -247,18 +248,38 @@
 |---|---|---|---|
 | `adaptive` | Adaptive RAG: no retrieval for small talk, split compound questions, else standard | `search_k` (8), `abstain_without_hits` (True), `uncited` ('flag'), `abstain_text` ("I don't know based on th…), `history_turns` (6), `blocked_text` ("I can't help with that r…), `stream` ('live'), `router` ('heuristic'), `greeting_reply` ("Hello! Ask me about comp…), `max_parts` (3), `llm_slot` ('llm') | live |
 | `agentic` | agentic RAG: a model plans searches step by step (multi-hop) | `search_k` (8), `abstain_without_hits` (True), `uncited` ('flag'), `abstain_text` ("I don't know based on th…), `history_turns` (6), `blocked_text` ("I can't help with that r…), `stream` ('live'), `max_steps` (4), `llm_slot` ('llm') | mocked |
+| `conversational` | conversational RAG: rewrite a follow-up into a standalone question (with memory), then standard | `search_k` (8), `abstain_without_hits` (True), `uncited` ('flag'), `abstain_text` ("I don't know based on th…), `history_turns` (6), `blocked_text` ("I can't help with that r…), `stream` ('live'), `rewriter` ('llm'), `llm_slot` ('llm') | mocked |
 | `corrective` | CRAG: grade retrieved chunks; broaden the search or abstain when they're poor | `search_k` (8), `abstain_without_hits` (True), `uncited` ('flag'), `abstain_text` ("I don't know based on th…), `history_turns` (6), `blocked_text` ("I can't help with that r…), `stream` ('live'), `grader` ('auto'), `min_relevance` (0.25), `min_coverage` (0.34), `broaden_factor` (3), `llm_slot` ('judge_llm') | live |
+| `flare` | FLARE-style active retrieval: search for the answer's uncited, unsupported or hedged sentences; regenerate | `search_k` (8), `abstain_without_hits` (True), `uncited` ('flag'), `abstain_text` ("I don't know based on th…), `history_turns` (6), `blocked_text` ("I can't help with that r…), `stream` ('live'), `min_support` (0.5), `hedges` (['might', 'possibly', 'pr…), `max_lookups` (3), `lookup_k` (4), `max_rounds` (2) | live |
 | `graph` | GraphRAG (local): entities and their neighbours add chunks, fused with search | `search_k` (8), `abstain_without_hits` (True), `uncited` ('flag'), `abstain_text` ("I don't know based on th…), `history_turns` (6), `blocked_text` ("I can't help with that r…), `stream` ('live'), `neighbours` (2), `max_graph_chunks` (8) | live |
+| `graph-global` | GraphRAG global: entity communities (label propagation) with summaries answer 'big picture' questions | `search_k` (8), `abstain_without_hits` (True), `uncited` ('flag'), `abstain_text` ("I don't know based on th…), `history_turns` (6), `blocked_text` ("I can't help with that r…), `stream` ('live'), `neighbours` (2), `max_graph_chunks` (8), `route` ('auto'), `algorithm` ('label-propagation'), `max_communities` (4), `min_community_size` (2), `chunks_per_community` (2), `summarizer` ('extractive'), `llm_slot` ('llm'), `summary_sentences` (3) | live |
+| `hyde` | HyDE: search with a model-written hypothetical answer passage as well as the question | `search_k` (8), `abstain_without_hits` (True), `uncited` ('flag'), `abstain_text` ("I don't know based on th…), `history_turns` (6), `blocked_text` ("I can't help with that r…), `stream` ('live'), `llm_slot` ('llm'), `keep_question` (True) | mocked |
+| `keyword` | vectorless: keyword (BM25) search only, then the configured reranker; no embeddings | `search_k` (8), `abstain_without_hits` (True), `uncited` ('flag'), `abstain_text` ("I don't know based on th…), `history_turns` (6), `blocked_text` ("I can't help with that r…), `stream` ('live'), `candidates` (30) | live |
+| `long-context` | per question: whole documents when they fit the context budget, else the usual chunks | `search_k` (8), `abstain_without_hits` (True), `uncited` ('flag'), `abstain_text` ("I don't know based on th…), `history_turns` (6), `blocked_text` ("I can't help with that r…), `stream` ('live'), `max_documents` (3), `budget_tokens` (None), `max_document_chunks` (200), `min_score_share` (0.0) | live |
+| `multi-query` | the rag-fusion pipeline under its other name (multi-query retrieval + RRF + rerank) | `search_k` (8), `abstain_without_hits` (True), `uncited` ('flag'), `abstain_text` ("I don't know based on th…), `history_turns` (6), `blocked_text` ("I can't help with that r…), `stream` ('live'), `variants` (4), `variant_source` ('llm'), `llm_slot` ('llm'), `rrf_k` (60), `parallel` (True) | mocked |
 | `naive` | baseline: dense top-k only, no transforms or reranking | `search_k` (8), `abstain_without_hits` (True), `uncited` ('flag'), `abstain_text` ("I don't know based on th…), `history_turns` (6), `blocked_text` ("I can't help with that r…), `stream` ('live') | live |
+| `pageindex` | vectorless: a model walks the documents' table of contents (heading overlap offline), reads the chosen sections | `search_k` (8), `abstain_without_hits` (True), `uncited` ('flag'), `abstain_text` ("I don't know based on th…), `history_turns` (6), `blocked_text` ("I can't help with that r…), `stream` ('live'), `navigator` ('llm'), `llm_slot` ('llm'), `max_documents` (3), `max_sections` (3), `max_section_chunks` (12), `max_toc_lines` (400), `preview_chars` (80), `fallback` ('keyword'), `min_score` (0.3) | mocked |
+| `rag-fusion` | RAG-Fusion: N model-written rephrasings searched in parallel, fused by RRF, reranked | `search_k` (8), `abstain_without_hits` (True), `uncited` ('flag'), `abstain_text` ("I don't know based on th…), `history_turns` (6), `blocked_text` ("I can't help with that r…), `stream` ('live'), `variants` (4), `variant_source` ('llm'), `llm_slot` ('llm'), `rrf_k` (60), `parallel` (True) | mocked |
 | `self-reflective` | Self-RAG style: check the answer's support; retrieve wider and regenerate if poor | `search_k` (8), `abstain_without_hits` (True), `uncited` ('flag'), `abstain_text` ("I don't know based on th…), `history_turns` (6), `blocked_text` ("I can't help with that r…), `stream` ('live'), `max_rounds` (2), `min_support` (0.5), `widen_factor` (2) | live |
+| `speculative` | Speculative RAG: the fast model drafts from evidence subsets in parallel; the quality model picks one | `search_k` (8), `abstain_without_hits` (True), `uncited` ('flag'), `abstain_text` ("I don't know based on th…), `history_turns` (6), `blocked_text` ("I can't help with that r…), `stream` ('live'), `drafts` (3), `drafter` ('llm'), `drafter_slot` ('llm'), `verifier` ('llm'), `verifier_slot` ('judge_llm'), `parallel` (True) | mocked |
 | `sql` | structured RAG: a model writes read-only SQL over permitted tables; result is cited | `search_k` (8), `abstain_without_hits` (True), `uncited` ('flag'), `abstain_text` ("I don't know based on th…), `history_turns` (6), `blocked_text` ("I can't help with that r…), `stream` ('live'), `tables`, `llm_slot` ('llm'), `max_rows` (50), `max_steps` (200000), `with_documents` (True) | mocked |
 | `standard` | advanced RAG: configured search → context → generate → cite (default) | `search_k` (8), `abstain_without_hits` (True), `uncited` ('flag'), `abstain_text` ("I don't know based on th…), `history_turns` (6), `blocked_text` ("I can't help with that r…), `stream` ('live') | live |
+| `table` | table QA: the CSV rows that match the question, cited (no model); sql for aggregates | `search_k` (8), `abstain_without_hits` (True), `uncited` ('flag'), `abstain_text` ("I don't know based on th…), `history_turns` (6), `blocked_text` ("I can't help with that r…), `stream` ('live'), `tables`, `max_rows` (10), `min_overlap` (1), `with_documents` (True) | live |
+| `vector` | vector RAG: dense search only, with the configured transformer, reranker and post-processors | `search_k` (8), `abstain_without_hits` (True), `uncited` ('flag'), `abstain_text` ("I don't know based on th…), `history_turns` (6), `blocked_text` ("I can't help with that r…), `stream` ('live'), `candidates` (30) | live |
+| `vectorless` | the pageindex pipeline under its other name (no embeddings: contents-page navigation, keyword fallback) | `search_k` (8), `abstain_without_hits` (True), `uncited` ('flag'), `abstain_text` ("I don't know based on th…), `history_turns` (6), `blocked_text` ("I can't help with that r…), `stream` ('live'), `navigator` ('llm'), `llm_slot` ('llm'), `max_documents` (3), `max_sections` (3), `max_section_chunks` (12), `max_toc_lines` (400), `preview_chars` (80), `fallback` ('keyword'), `min_score` (0.3) | mocked |
 
 ## graph_store: Knowledge graph (Step 35)
 
 | Name | What it does | Settings (default) | Tested |
 |---|---|---|---|
 | `memory` | entities, mentions and co-occurrence links in memory | none | live |
+| `postgres` | the entity graph in Postgres: durable, shared by replicas, access on every row, RLS per tenant Needs extra: `postgres`. | `dsn_env` ('RAG_DB_DSN'), `host` ('rag-db'), `port` (5432), `dbname` ('rag'), `credentials_file` (None), `collection` ('default'), `pool_size` (4) | live |
+
+## toc_store: Tables of contents (extension 03)
+
+| Name | What it does | Settings (default) | Tested |
+|---|---|---|---|
+| `memory` | each document's chunks and headings in memory, for pageindex | none | live |
 
 ## llm: Language models (Step 30)
 
