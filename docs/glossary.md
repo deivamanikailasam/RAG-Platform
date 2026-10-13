@@ -11,6 +11,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Access token | The short-lived (5-minute) token an app shows to an API on every call; it carries who you are, your groups and roles, and when it expires. | 16 |
 | Acknowledgement (XACK) | A worker's "done" signal for a stream message. Until it arrives, the message stays pending for that worker. | 15 |
 | ACL (access control list, Valkey) | Per-user rules for which keys (`~pattern`), pub/sub channels (`&pattern`) and commands (`+@category`, `-@category`) a user may use; `user default off` disables anonymous access. | 15 |
+| Action (GitHub) | A reusable workflow step published by someone else (`actions/checkout`): third-party code that runs inside your job with its token, so it is pinned by commit SHA. | 27 |
 | Active parameters | In a Mixture of Experts model, the parameters actually used for each token (about 3B in Qwen3.6-35B-A3B, the "A3B"); they set the speed. | 7 |
 | Admin events (Keycloak) | Keycloak's record of every administrative change (user created, group membership added, lockout cleared), with the full details when enabled; audit evidence for "who changed what". | 16 |
 | ADR (Architecture Decision Record) | A short Markdown file recording one significant decision: context, decision, alternatives and consequences. | 4 |
@@ -31,6 +32,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | arm64 / aarch64 vs amd64 / x86_64 | Processor families; Apple Silicon is arm64, amd64-only images need slower emulation. | 3 |
 | Asymmetric retrieval | Embedding questions and documents differently (queries get a task instruction, documents don't), because a short question and a long passage are different kinds of text. | 8 |
 | At-least-once delivery | Every job is delivered at least once, but may be delivered twice after a crash (the worker finished but died before acknowledging). | 15 |
+| Attestation | A signed statement about an artefact, attached to its digest: for example its build provenance (which repo, commit, workflow and runner built it) or its SBOM. | 27 |
 | Attributes (span) | Key–value facts recorded on a span, e.g. `rag.candidates = 5`; facts about the request, never its content. | 19 |
 | Audience (`aud`) | The claim saying who a token is meant for (here `rag-api`). An API must reject tokens meant for someone else. | 16 |
 | Audit log | A permanent, minimal record of security-relevant actions (who, what, when, result), kept for years and protected from tampering. Not for debugging. | 23 |
@@ -66,6 +68,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Cardinality | How many distinct values a label has. User ids as metric labels create one time series per user: slow dashboards and big bills; keep labels to small fixed sets like `outcome` = ok or error. | 19 |
 | Cask | A Homebrew package that is a normal Mac app with a window. | 1 |
 | Chat template | The model-specific recipe that turns a list of messages into the exact text format the model was trained on. | 7 |
+| CI (continuous integration) | Automatically checking every change (lint, types, tests, scans) on a fresh machine, so problems are found before they're merged. | 27 |
 | Ciphertext | The scrambled, encrypted version of a value; unreadable without the right key. | 6 |
 | Claim | One field in a token's payload, such as `iss`, `sub`, `groups` or `exp`. | 16 |
 | Clearance | The highest classification (public < internal < confidential < restricted) a person may read, taken from their groups; no known group means no clearance at all. | 18 |
@@ -97,6 +100,8 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Counter (metric) | A number that only goes up, such as requests served; dashboards turn it into a rate. | 19 |
 | Cross-encoder | A model (the reranker) that reads the query and one document together and scores their relevance; precise but slow, so only used on a shortlist. | 8 |
 | Crypto-shredding | Making data unreadable by destroying a key or a lookup instead of deleting it; reconciles "never delete" with the right to erasure (e.g. deleting the Keycloak account behind an audit `sub`). | 23 |
+| CVE | Common Vulnerabilities and Exposures: a public ID for a known vulnerability (e.g. CVE-2021-44228, Log4Shell), which scanners like pip-audit and Trivy look up. | 27 |
+| CycloneDX / SPDX | The two standard SBOM formats; Syft writes CycloneDX JSON here. SPDX also names the standard licence ids. | 27 |
 | DAG (directed acyclic graph) | Arrows with no loops. Lineage must be one, or "what was this built from?" has no answer. | 25 |
 | Dashboards as code | Generating dashboard definitions (Grafana JSON) from reviewed code in Git (`scripts/build_dashboards.py`) instead of clicking in the UI, with a check that fails when the committed JSON is out of date. | 20 |
 | Data filtering / partial evaluation (OPA) | OPA evaluating a policy with some facts still unknown and turning the rest into a filter, even a SQL `WHERE` clause, that a database can apply. | 18 |
@@ -112,6 +117,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Delete marker | With versioning on, "delete" only adds a marker that hides the object; older versions still exist until each is deleted by version ID. | 14 |
 | Delimiting | Wrapping untrusted text in clear markers (here XML-style tags like `<question>…</question>`) and telling the model that what's inside is data, not instructions. | 24 |
 | Deny by default | Nothing is allowed unless a rule explicitly allows it; in Rego, `default allow := false`. | 18 |
+| Dependabot | GitHub's bot that opens pull requests to update pinned versions (action SHAs, `uv.lock`, base images); CI tests each one before merging. | 27 |
 | Dependency | A package your project needs in order to work. | 2 |
 | Dependency group | A named set of extra dependencies in `pyproject.toml` (PEP 735), e.g. `dev` for test tools not needed in production. | 2 |
 | Dependency injection (FastAPI) | FastAPI runs helper functions ("get the caller", "require this role") before an endpoint and passes their results in; tests swap them for fakes with `dependency_overrides`. | 17 |
@@ -120,6 +126,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Deterministic check | A rule a program can check exactly, such as "cites document 2" or "contains no 'PWNED'": cheap, repeatable and explainable, so these form the evaluation gate. | 26 |
 | Dev dependency | A package needed only while developing (e.g. pytest), not when the app runs in production. | 2 |
 | Device flow | The sign-in flow for terminals and TVs: the app shows a link and a short code, you approve in a browser (with password and MFA), and the app receives tokens without ever seeing your password. | 16 |
+| Digest (image) | `sha256:…` of an image's content. Unlike a tag, it can't later point at different content, so scanning, signing and deploying all use it. | 27 |
 | Dimensions (of an embedding) | How many numbers an embedding vector has (Qwen3-Embedding-0.6B: up to 1,024); more can hold more nuance but costs storage and search time. | 8 |
 | direnv | A tool that loads a project's settings automatically when you enter its folder. | 1 |
 | Distance operator | pgvector's comparison symbols: `<=>` cosine distance, `<#>` negative inner product, `<->` Euclidean (L2), `<+>` L1. | 11 |
@@ -162,6 +169,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | GIN index | A Postgres "inverted" index for values with many parts: arrays, JSON and words. | 11 |
 | Git hook | A script git runs automatically at a set moment: before a commit, after the message is written, before a push. | 5 |
 | .gitattributes | Rules for how git treats file types (line endings, binary files, generated files). | 4 |
+| `GITHUB_TOKEN` / permissions | The short-lived token every GitHub Actions job gets automatically; the workflow's `permissions:` block limits what it may do (read-only by default here). | 27 |
 | .gitignore | A "do not pack" list of files git must never track (secrets, `.venv`, data, models). | 4 |
 | Golden dataset | Test cases with known good answers (or expected documents), written and checked by people, versioned and pinned by hash. | 26 |
 | Graceful degradation | Continuing with reduced quality or features instead of failing completely, e.g. skipping reranking and flagging the answer when the reranker is down. | 10 |
@@ -208,6 +216,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | k-NN plugin / Lucene engine | OpenSearch's vector search feature, here using Lucene's HNSW implementation. | 13 |
 | Key pair (public / private key) | Two matching keys: anyone can lock with the public key, only the private key unlocks. Share the public one, guard the private one. | 6 |
 | Key rotation | The identity provider switching to a new signing key; APIs must pick up the new key automatically (a JWKS re-fetch on an unknown `kid`) while old tokens expire. | 17 |
+| Keyless signing | Signing with a minutes-long certificate tied to the CI job's identity (via OIDC and Sigstore) instead of a long-lived private key, so there's no key to steal or rotate. | 27 |
 | `kid` (key id) | A label in a JWT's header naming which of the identity provider's keys signed it, so the verifier knows which public key to check with. | 17 |
 | KV cache | The model's working memory of everything read so far; grows with prompt and answer length and is a big part of memory use. | 7 |
 | Label (metric) | A key=value pair that identifies one slice of a metric, e.g. `outcome="error"`, `job="opa"`, `service_version="0.1.0"`. Every distinct label combination is its own time series. | 20 |
@@ -274,11 +283,13 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Object storage / S3 API | Storing files as objects in buckets, reached over HTTP using Amazon's S3 protocol, now an industry standard spoken by AWS S3, SeaweedFS, Ceph and many more. | 14 |
 | Observability | Being able to answer new questions about a running system from the outside, using its traces, metrics and logs, without shipping new code. | 19 |
 | Observation (Langfuse) | One step inside a Langfuse trace, with a type: `chain`, `retriever`, `embedding`, `generation`, `tool`, `agent` … | 22 |
+| OIDC token (CI) | A signed statement from GitHub saying "this job is repo X, workflow Y, branch Z"; Sigstore's Fulcio trusts it to issue a signing certificate. | 27 |
 | Opaque token | A token that is just a random reference, not a readable JWT; only the identity provider can say what it means, via introspection. | 17 |
 | Open core | A free (here MIT-licensed) core product plus paid Enterprise features; Langfuse's model. | 22 |
 | OpenAI-compatible API | The same request and response format as OpenAI's API, so any tool that speaks "OpenAI" can call a local model. | 7 |
 | OpenFGA | A CNCF relationship-based (ReBAC) authorisation engine modelled on Google's Zanzibar: "shared with", folder inheritance, team membership. Planned for the permission-aware RAG project. | 18 |
 | OpenLineage | An open standard for lineage events emitted by pipelines ("job X read A, wrote B"); Marquez is its reference server. Lineage observed, not declared. | 25 |
+| OpenSSF Scorecard | An automated score of a repository's security practices (pinning, branch protection, reviews…); a quick external check for public repositories. | 27 |
 | OpenTelemetry | The CNCF open standard (APIs, SDKs, protocol, Collector) for producing and shipping traces, metrics and logs, supported by every major vendor. | 19 |
 | OrbStack | A lightweight macOS container runtime: Linux VM + Docker engine + Compose + single-node Kubernetes. | 3 |
 | OTLP | The OpenTelemetry protocol that carries all three signals: gRPC on port 4317, HTTP on 4318. | 19 |
@@ -298,6 +309,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Persistence: RDB / AOF | How an in-memory store survives restarts. RDB: periodic snapshots to disk. AOF (append-only file): a log of every write, replayed at start-up; `appendfsync everysec` loses at most about 1 s. | 15 |
 | Persona (evaluation) | A synthetic person (name, groups) an evaluation runs as, so the real access rules apply; never a real person's account. | 26 |
 | pg_dump | Postgres's logical backup tool: writes a database's structure and data to a file that `pg_restore` can load again. | 11 |
+| Pinning by SHA | Referring to an exact commit (`@3d3c42e…`) or file hash instead of a tag (`@v7`): tags can be moved to other code, commits and hashes can't. | 27 |
 | Pipeline (Collector) | One signal's path through the Collector: receivers → processors (in order) → exporters. | 19 |
 | Placeholder | A slot like `{{question}}` in a prompt template that is filled in for each request; every one must be declared in `variables`. | 24 |
 | Plaintext | Readable, unencrypted text. | 6 |
@@ -378,9 +390,11 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Routing (alerts) | Alertmanager's tree of matchers that sends each alert to a receiver: here `severity="critical"` goes to `platform-team-urgent` (page), everything else to `platform-team` (ticket). | 20 |
 | Rule (Rego) | A named statement such as `allow if { ... }`, true when every line in its body is true; several rules with the same name mean OR. | 18 |
 | Runbook | Step-by-step instructions linked from an alert: what it means, what to check first, likely causes, how to fix, how to close. Every alert here links one under `docs/runbooks/`. | 20 |
+| Runner (hosted, self-hosted) | The machine that runs a CI job: GitHub-hosted (a fresh VM each time) or self-hosted (your own, e.g. the Mac with the models; never for fork code). | 27 |
 | S3 endpoint | The server URL to send S3 requests to (here `http://127.0.0.1:8333`), passed to tools as `--endpoint-url` / `endpoint_url`. | 14 |
 | Salt key (LITELLM_SALT_KEY) | A secret LiteLLM uses to encrypt credentials it stores in its database; it must never change, or those become unreadable. | 10 |
 | Sampling (head / tail) | Keeping only some traces. Head sampling decides when a request starts; tail sampling decides after seeing the whole trace (e.g. keep all errors and slow ones). | 19 |
+| SBOM (software bill of materials) | The list of every component in an artefact, with versions: the ingredients list for an image, so you can tell which images contain a vulnerable library. | 27 |
 | Scalar quantization (int8) | Storing each vector number as a 1-byte integer instead of 2–4 bytes: about 4× smaller and faster to scan. | 12 |
 | Schema (database) | A named folder of tables inside a database (we use `rag`); also "the structure" of the tables. | 11 |
 | Score (LLM evaluation) | A judgement attached to a trace: thumbs up/down, a 0–1 rating, or an evaluator's verdict. | 22 |
@@ -410,12 +424,15 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Side door | A way to read data around the access policy, for example a trace viewer showing documents the reader isn't cleared for. | 22 |
 | Signal | One kind of telemetry: traces, metrics or logs. | 19 |
 | Signed commit | A commit stamped with your private key so GitHub can show it as Verified (really from you). | 4 |
+| Sigstore (cosign, Fulcio, Rekor) | Free signing infrastructure: cosign signs and verifies, Fulcio issues short-lived certificates for an OIDC identity, Rekor is the public transparency log of signatures. | 27 |
 | Silence | A deliberate, time-limited mute of matching alerts in Alertmanager, e.g. during planned maintenance; stored so it survives restarts. | 20 |
 | Single source of truth | Each fact lives in exactly one file; other places check it rather than copy it. | 25 |
 | Single-pass rendering | Filling placeholders once: text that was inserted is never scanned again, so a user typing `{{context}}` can't pull in other values. | 24 |
 | SLI / SLO / SLA | Service level Indicator (what you measure, e.g. the share of searches that succeed) / Objective (your internal target, 99% over 28 days) / Agreement (the contractual promise to customers, set looser than the SLO). | 20 |
+| SLSA | Supply-chain Levels for Software Artifacts ("salsa"): a framework of levels for how trustworthy a build and its provenance are. | 27 |
 | Smoke test vs benchmark | A handful of cases that catch obvious breakage, vs hundreds that measure quality reliably. Eight cases is a smoke test: one case moves the score by 12.5 points. | 26 |
 | Snapshot | A point-in-time backup file of a collection. | 12 |
+| Software supply chain | Everything your software is made from and with: dependencies, tools, CI actions, base images and the build itself. | 27 |
 | SOPS | "Secrets OPerationS": encrypts the values in YAML, JSON or `.env` files while leaving the names readable. | 6 |
 | Source of truth | The one authoritative store that decides what exists and who may see it; every other copy is derived from it. | 12 |
 | Span | One timed step in a request: name, start, duration, status and attributes. | 19 |
@@ -436,6 +453,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Structured logging | Writing logs as JSON objects instead of free text, so they can be filtered and joined by field. | 19 |
 | Structured metadata (Loki) | Extra per-line key/value facts (such as OTLP attributes) that Loki stores and can search without turning them into labels, so they don't create new streams. | 21 |
 | Supersede | Replace an accepted ADR with a newer ADR that points back to it; the old one is never edited. | 4 |
+| Supply-chain attack | Poisoning something your software is built from (a library, an action, a tool binary, a base image) instead of attacking the application itself. | 27 |
 | Synonyms (search) | Rules treating different terms as equivalent ("wfh" = "work from home" = "remote work"), best applied at query time with `synonym_graph`. | 13 |
 | System card | A short document about an application built from models and data: purpose, users, human oversight, risk assessment. | 25 |
 | Table lock | A lock on a whole table; `LOCK TABLE … IN EXCLUSIVE MODE` lets only one writer append at a time (so the chain can't fork) while readers carry on. | 23 |
@@ -470,6 +488,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Trigger (database) | Code the database runs automatically before or after a change; here a statement trigger that refuses any change to the audit table. | 23 |
 | Truncation / max sequence length | The longest text a model reads; anything beyond is cut off, silently in TEI by default (`--auto-truncate`). | 8 |
 | Trunk-based development | `main` (the trunk) is always working; every change goes through a short-lived branch and a PR. | 4 |
+| Trust on first use (TOFU) | Recording a hash from your first download when the publisher provides none (dbmate here), and refusing anything different later; weaker than a published checksum. | 27 |
 | TTFT (time to first token) | How long you wait before the first word appears; mostly set by prefill and prompt length. | 7 |
 | TTL (time to live) | An expiry time on a key; it disappears automatically afterwards. Every cache entry gets one. | 15 |
 | Type checker | A tool (e.g. `mypy`) that reads type hints and checks they are used consistently, catching wrong-kind-of-value bugs before running. | 5 |
@@ -485,6 +504,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Virtual machine (VM) | A computer simulated inside your computer; on a Mac, containers run inside a small Linux VM. | 3 |
 | Wheel | A pre-built Python package, ready to install, like flat-pack furniture. | 2 |
 | Wired memory / GPU working-set limit | The share of unified memory macOS lets the GPU lock for itself (`iogpu.wired_limit_mb`); large models need it big enough. | 7 |
+| Workflow / job / step | GitHub Actions' structure: a workflow (YAML file) has jobs that run in parallel on fresh machines, and each job has steps (commands or actions). | 27 |
 | Workspace (uv) | Several Python packages in one repository sharing one `uv.lock` and one `.venv`. | 4 |
 | WORM (write once, read many) | Storage where data can be written once and then never changed or deleted until its retention ends; what object lock provides. | 14 |
 | `WWW-Authenticate` | The response header on a 401 telling the client a bearer token is required, or (with `error="invalid_token"`) that the one sent was not accepted. | 17 |

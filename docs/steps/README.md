@@ -38,3 +38,4 @@ Phases: **A** Workstation · **B** Model serving · **C** Data stores · **D** I
 | 24 | A prompt registry | F · Audit & governance | [step-24-prompt-registry.md](step-24-prompt-registry.md) |
 | 25 | Model, dataset and system cards, and lineage | F · Audit & governance | [step-25-cards-and-lineage.md](step-25-cards-and-lineage.md) |
 | 26 | An evaluation harness | G · Quality & delivery | [step-26-evaluation-harness.md](step-26-evaluation-harness.md) |
+| 27 | A CI pipeline and a secured supply chain | G · Quality & delivery | [step-27-ci-pipeline-and-supply-chain.md](step-27-ci-pipeline-and-supply-chain.md) |
