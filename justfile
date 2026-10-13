@@ -308,11 +308,12 @@ audit-test:
     #!/usr/bin/env bash
     set -euo pipefail
     export PATH="/opt/homebrew/opt/libpq/bin:$PATH"
+    # Step 28: a real password (not "trust"), so tests can prove that old passwords STOP working
     docker run -d --rm --name audit-test-pg -p 127.0.0.1:55432:5432 \
-      -e POSTGRES_HOST_AUTH_METHOD=trust pgvector/pgvector:0.8.7-pg17@sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d >/dev/null
+      -e POSTGRES_PASSWORD=test-admin pgvector/pgvector:0.8.7-pg17@sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d >/dev/null
     trap 'docker stop audit-test-pg >/dev/null' EXIT
     until docker exec audit-test-pg pg_isready -h 127.0.0.1 -U postgres -q; do sleep 1; done
-    AUDIT_TEST_ADMIN_DSN=postgres://postgres@127.0.0.1:55432/postgres uv run pytest
+    AUDIT_TEST_ADMIN_DSN=postgres://postgres:test-admin@127.0.0.1:55432/postgres uv run pytest
 
 audit_reader_dsn := "postgres://audit_reader:$AUDIT_DB_READER_PASSWORD@127.0.0.1:5432/audit"
 

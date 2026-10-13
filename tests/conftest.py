@@ -1,7 +1,9 @@
 """A real, THROWAWAY Postgres for the audit tests (Step 23).
 
 `just audit-test` starts one and sets
-AUDIT_TEST_ADMIN_DSN=postgres://postgres@127.0.0.1:55432/postgres
+AUDIT_TEST_ADMIN_DSN=postgres://postgres:test-admin@127.0.0.1:55432/postgres
+(a real password since Step 28: the OpenBao tests prove old passwords STOP working, which
+"trust" authentication would hide)
 The fixtures DROP and recreate the `audit` database and its roles, so never point this at rag-db.
 Tests skip when the variable isn't set or dbmate isn't installed.
 """

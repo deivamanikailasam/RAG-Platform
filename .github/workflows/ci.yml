@@ -24,13 +24,15 @@ jobs:
       postgres:  # throwaway database for the audit-log tests (Step 23); same image as rag-db
         image: pgvector/pgvector:0.8.7-pg17@sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d
         env:
-          POSTGRES_HOST_AUTH_METHOD: trust  # acceptable only here: a disposable, job-local container
+          # Real password checks: the OpenBao tests (Step 28) prove that old passwords STOP working,
+          # which "trust" authentication would hide. Throwaway value for a job-local container.
+          POSTGRES_PASSWORD: test-admin
         ports: ["55432:5432"]
         options: >-
           --health-cmd "pg_isready -h 127.0.0.1 -U postgres"
           --health-interval 2s --health-timeout 5s --health-retries 30
     env:
-      AUDIT_TEST_ADMIN_DSN: postgres://postgres@127.0.0.1:55432/postgres
+      AUDIT_TEST_ADMIN_DSN: postgres://postgres:test-admin@127.0.0.1:55432/postgres
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -43,7 +45,7 @@ jobs:
       - name: Install just and the pinned tools (checksums verified)
         run: |
           uv tool install rust-just==1.58.0
-          uv run --frozen python scripts/ci_tools.py opa regal dbmate
+          uv run --frozen python scripts/ci_tools.py opa regal dbmate bao
           echo "$PWD/.tools/bin" >> "$GITHUB_PATH"
       - run: sudo apt-get install -y --no-install-recommends postgresql-client  # psql for the audit bootstrap test
       - run: just ci-static
