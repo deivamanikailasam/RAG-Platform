@@ -56,6 +56,16 @@ rag mcp --subject ann --group all-staff [--classification internal] [--corpus da
         | --token-file F --oidc-issuer URL --oidc-audience A --oidc-jwks-url URL
                                                           search and answer as MCP tools over stdio
 
+Evaluation loop and incremental ingestion (extension 04; rag_core/evalcli.py has the details):
+rag eval-search / eval-answers … [--out runs/] [--include-unreviewed]   run files for A/B tests and exporters
+rag eval-compare dataset.yaml --a X --b Y | --runs A.json B.json        paired bootstrap + permutation test
+rag eval-sweep dataset.yaml --grid sweep.yaml [--rank-by ndcg]          ablations over rag.yaml settings
+rag eval-generate --from dataset.yaml --out gen.yaml [--mode llm]       synthetic questions (review: pending)
+rag eval-review gen.yaml [--approve ID…] [--check]                      the human review gate
+rag eval-candidates --events audit.jsonl --out candidates.yaml          feedback -> candidate questions
+rag eval-export run.json --to ragas|deepeval|promptfoo|trulens|phoenix
+rag sync [--watch] [--enqueue] [--dry-run]                              ingest what changed in the `connector`
+
 Reuse (Step 38):
 rag doctor [PATH] [--json]                                does a project meet the platform's standards?
                                                           (docs/standards/rag-standards.md; exit 1 on a MUST)
@@ -199,6 +209,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--json", action="store_true")
     p = sub.add_parser("eval-search", help="compare search variants on a labelled dataset")
     p.add_argument("dataset")
+    p.add_argument("--out", type=Path, help="write a run file per variant here (extension 04)")
+    p.add_argument(
+        "--include-unreviewed", action="store_true", help="also questions with review: pending"
+    )
     p.add_argument("--file", default=os.environ.get("RAG_CONFIG", "rag.yaml"))
     p.add_argument("--profile")
     p.add_argument("--variant", action="append", default=[])
@@ -218,6 +232,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--file", default=os.environ.get("RAG_CONFIG", "rag.yaml"))
     p.add_argument("--profile")
     p.add_argument("--variant", action="append", default=[], help="an entry of `architectures:`")
+    p.add_argument("--out", type=Path, help="write a run file per architecture here (extension 04)")
+    p.add_argument(
+        "--include-unreviewed", action="store_true", help="also questions with review: pending"
+    )
     p.add_argument("--no-ingest", action="store_true", help="the stores already hold the corpus")
     p.add_argument("--json", action="store_true")
     p.add_argument(
@@ -242,6 +260,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--json", action="store_true")
     _lifecycle_parsers(sub)
     _online_parser(sub)
+    from rag_core import evalcli
+
+    evalcli.add_parsers(sub)
     p = sub.add_parser("mcp", help="serve search and answer as MCP tools over stdio (extension 03)")
     p.add_argument("--file", default=os.environ.get("RAG_CONFIG", "rag.yaml"))
     p.add_argument("--profile")
@@ -280,6 +301,8 @@ def main(argv: list[str] | None = None) -> int:
             return _eval_search(a)
         if a.cmd == "eval-answers":
             return _eval_answers(a)
+        if a.cmd in evalcli.COMMANDS:
+            return evalcli.run(a)
         if a.cmd == "online-eval":
             return _online_eval(a)
         if a.cmd == "doctor":
@@ -674,12 +697,20 @@ def _print_details(answer: Any, ms: str) -> None:
 
 def _eval_search(a: argparse.Namespace) -> int:
     from rag_core import evaluate as ev
+    from rag_core.evalcli import _dataset
+    from rag_core.evalkit import runs
 
     dataset = Path(a.dataset)
-    doc = ev.load_dataset(dataset)
+    doc = _dataset(dataset, a.include_unreviewed)
     profile = a.profile or os.environ.get("RAG_PROFILE", "default")
     rows = [ev.run_variant(name, conf, doc, dataset.parent, ingest=not a.no_ingest)
             for name, conf in ev.variant_configs(Path(a.file), profile, doc, a.variant).items()]  # fmt: skip
+    if a.out:
+        written = runs.write_runs(
+            a.out,
+            [runs.make_run(r, suite="search", profile=profile, dataset=dataset) for r in rows],
+        )
+        print(f"run file(s): {', '.join(map(str, written))}", file=sys.stderr)
     k = int(doc.get("k", 5))
     if a.json:
         print(json.dumps([r.row() | {"per_case": r.per_case} for r in rows], indent=2))
@@ -690,8 +721,10 @@ def _eval_search(a: argparse.Namespace) -> int:
     for rule in a.fail_under:
         metric, _, value = rule.partition("=")
         for r in rows:
-            if metric not in r.row():
-                raise ComponentError(f"--fail-under: unknown metric {metric!r} (recall, mrr, ndcg)")
+            if metric not in r.row() or metric in ("variant", "leaks", "p50_ms"):
+                raise ComponentError(
+                    f"--fail-under: unknown metric {metric!r} (hit_rate, recall, precision, mrr, map, ndcg)"
+                )
             if r.row()[metric] < float(value):
                 failed.append(f"{r.variant}: {metric} {r.row()[metric]} < {value}")
     if any(r.leaks for r in rows):
@@ -705,17 +738,27 @@ def _eval_search(a: argparse.Namespace) -> int:
 
 def _eval_answers(a: argparse.Namespace) -> int:
     from rag_core import evaluate as ev
+    from rag_core.evalcli import _dataset
+    from rag_core.evalkit import runs
 
     dataset = Path(a.dataset)
-    doc = ev.load_dataset(dataset)
+    doc = _dataset(dataset, a.include_unreviewed)
     profile = a.profile or os.environ.get("RAG_PROFILE", "default")
     configs = ev.variant_configs(Path(a.file), profile, doc, a.variant, key="architectures")
     rows = [ev.run_answers(name, conf, doc, dataset.parent, ingest=not a.no_ingest)
             for name, conf in configs.items()]  # fmt: skip
+    if a.out:
+        written = runs.write_runs(
+            a.out,
+            [runs.make_run(r, suite="answers", profile=profile, dataset=dataset) for r in rows],
+        )
+        print(f"run file(s): {', '.join(map(str, written))}", file=sys.stderr)
     if a.json:
         print(json.dumps([r.row() | {"per_case": r.per_case} for r in rows], indent=2))
     else:
-        print(f"{len(doc['questions'])} questions, profile {profile!r}\n")
+        print(
+            f"{len(doc['questions'])} questions, profile {profile!r}, judge {rows[0].judge if rows else '-'}\n"
+        )
         print(ev.format_answer_table(rows))
     failed = []
     for rule in a.fail_under:
@@ -723,10 +766,13 @@ def _eval_answers(a: argparse.Namespace) -> int:
         for r in rows:
             if metric not in r.row() or metric in ("variant", "leaks", "p50_ms"):
                 raise ComponentError(
-                    f"--fail-under: unknown metric {metric!r} "
-                    "(context_recall, answered, cite_hit, abstain_ok, grounded)"
+                    f"--fail-under: unknown metric {metric!r} (context_recall, answered, cite_hit, "
+                    "abstain_ok, grounded, faithfulness, relevance, context_precision, correctness, "
+                    "citation_precision, citation_recall)"
                 )
-            if r.row()[metric] < float(value):
+            if r.row()[metric] is None:
+                failed.append(f"{r.variant}: {metric} not measured (no reference answers?)")
+            elif r.row()[metric] < float(value):
                 failed.append(f"{r.variant}: {metric} {r.row()[metric]} < {value}")
     failed += [f"{r.variant}: {r.leaks} forbidden document(s) cited" for r in rows if r.leaks]
     for f in failed:

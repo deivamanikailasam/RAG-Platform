@@ -35,6 +35,9 @@ SLOTS = {  # the slot in rag.yaml for each kind, and what it is for, in order of
     "search_cache": "Retrieval-result cache (extension 01)",
     "guard": "Guardrails (Step 34)", "pipeline": "RAG architecture (Step 35)",
     "graph_store": "Knowledge graph (Step 35)", "toc_store": "Tables of contents (extension 03)", "llm": "Language models (Step 30)",
+    "answer_formatter": "Shaping the answer: citations, JSON, confidence, follow-ups (extension 04)",
+    "judge": "Scoring answers in evaluations (extension 04)",
+    "connector": "Where sources come from, for `rag sync` (extension 04)",
 }  # fmt: skip
 
 

@@ -2,7 +2,7 @@
 
 # Catalogue of switchable components
 
-144 components in 28 kinds. Switch any of them with one line in rag.yaml: `<slot>: {use: <name>, <setting>: <value>}`. `rag components --kind <kind>` shows the same.
+159 components in 31 kinds. Switch any of them with one line in rag.yaml: `<slot>: {use: <name>, <setting>: <value>}`. `rag components --kind <kind>` shows the same.
 
 ## token_counter: Counting tokens (Step 30)
 
@@ -70,7 +70,8 @@
 
 | Name | What it does | Settings (default) | Tested |
 |---|---|---|---|
-| `cached` | wraps any embedder: the same text is never embedded twice (LRU) | `inner`, `max_items` (100000) | live |
+| `batched` | wraps any embedder: fixed-size batches, a requests-per-second ceiling, retries with backoff | `inner`, `batch_size` (32), `requests_per_second` (None), `max_retries` (3), `backoff_seconds` (1.0) | live |
+| `cached` | wraps any embedder: the same text is never embedded twice (LRU; shared in Valkey with store: valkey) | `inner`, `max_items` (100000), `store` ('memory'), `url_env` ('RAG_VALKEY_URL'), `url_file` (None), `ttl_seconds` (2592000), `namespace` ('rag:emb') | live |
 | `gateway` | any embedding model behind the LiteLLM gateway, batched, dimension-checked | `model` ('embedder'), `dimensions` (1024), `base_url` ('http://litellm:4000/v1'), `api_key_env` ('LLM_GATEWAY_KEY'), `api_key_file` (None), `batch_size` (32), `query_instruction` ('Instruct: Given a questi…), `query_prompt` (None), `prompts_dir` ('prompts'), `prompt_label` ('production'), `timeout` (120.0), `request_dimensions` (False) | mocked |
 | `hashing` | offline, deterministic word-hash vectors (tests, CI, demos) | `dimensions` (256) | live |
 | `instructed` | query vs passage prefixes for e5/bge/nomic/Qwen3-style models (presets or your own) | `inner`, `preset` ('none'), `query_prefix` (None), `passage_prefix` (None) | live |
@@ -116,13 +117,15 @@
 |---|---|---|---|
 | `chain` | run several transformers in order (e.g. rewrite, then multi-query) | `steps` | live |
 | `decompose` | LLM: split a compound question into simpler sub-questions | `n` (3), `include_original` (True), `llm_slot` ('llm'), `max_tokens` (300), `system` (None) | mocked |
-| `expand-terms` | add the meaning of known acronyms/jargon (no LLM) | `terms` ({}) | live |
+| `expand-terms` | add the meaning of known acronyms/jargon and synonyms, phrases too (no LLM) | `terms` ({}), `synonyms` ({}), `file` (None), `mode` ('append') | live |
 | `hyde` | LLM: a hypothetical answer passage, embedded like a document (HyDE) | `n` (3), `include_original` (True), `llm_slot` ('llm'), `max_tokens` (300), `system` (None) | mocked |
 | `identity` | search with the question exactly as asked | none | live |
 | `multi-query` | LLM: n paraphrases, searched separately and fused (better recall) | `n` (3), `include_original` (True), `llm_slot` ('llm'), `max_tokens` (300), `system` (None) | mocked |
+| `normalize` | clean up Unicode, spacing and punctuation; fix misspellings against the corpus words (no LLM) | `spelling` (True), `vocabulary` ([]), `vocabulary_file` (None), `from_index` (True), `protected` ([]), `min_length` (4), `max_edits` (2), `include_original` (True) | live |
 | `rewrite` | LLM: turn a follow-up ('and for part-timers?') into a standalone query | `n` (3), `include_original` (True), `llm_slot` ('llm'), `max_tokens` (300), `system` (None) | mocked |
 | `self-query` | extract a metadata filter from the question against a declared schema (rules offline, or LLM) | `fields`, `mode` ('rules'), `llm_slot` ('llm'), `max_tokens` (300), `date_field` (None), `fallback_on_empty` (True), `system` (None) | live |
 | `step-back` | LLM: add a more general 'principle' question | `n` (3), `include_original` (True), `llm_slot` ('llm'), `max_tokens` (300), `system` (None) | mocked |
+| `translate` | cross-lingual search: add the question in the corpus language (passthrough, glossary or LLM) | `target` ('en'), `mode` ('passthrough'), `glossary` ({}), `glossary_file` (None), `llm_slot` ('llm'), `include_original` (True), `max_tokens` (200) | live |
 | `with-history` | no-LLM follow-ups: prepend the last user turns to the question | `turns` (2) | live |
 
 ## retriever: Finding candidates (Step 32)
@@ -177,7 +180,7 @@
 | `min-score` | drop candidates below a score | `threshold`, `stage` (None), `min_keep` (0) | live |
 | `mmr` | diversify: relevant AND different (uses the embedder) | `lambda_` (0.7) | live |
 | `parent-expand` | replace matched child chunks by their parent section | none | live |
-| `recency` | blend relevance with freshness (half-life) | `field` ('updated'), `half_life_days` (365), `weight` (0.2), `missing` (0.5) | live |
+| `recency` | blend relevance with freshness (half-life) | `field` ('updated'), `half_life_days` (365), `weight` (0.2), `missing` (0.5), `when` ('always'), `cues` (['latest', 'current', 'cu…) | live |
 | `section-expand` | replace a hit by the whole section it belongs to, within a token budget; hits of one section merge | `max_tokens` (1200), `include_subsections` (False), `max_hits` (8), `max_chunks` (60) | live |
 | `summary-expand` | a retrieved summary brings its document's best detailed chunks for the question | `per_summary` (3), `keep_summary` (True) | live |
 | `window-expand` | replace a matched sentence by its window | none | live |
@@ -287,5 +290,32 @@
 |---|---|---|---|
 | `gateway` | any model behind the LiteLLM gateway (OpenAI-compatible chat completions) | `model` ('qwen-fast'), `base_url` ('http://litellm:4000/v1'), `api_key_env` ('LLM_GATEWAY_KEY'), `api_key_file` (None), `timeout` (120.0), `max_retries` (1) | mocked |
 | `scripted` | canned replies for tests and offline demos | `replies` ({}), `default` ('') | live |
+
+## answer_formatter: Shaping the answer: citations, JSON, confidence, follow-ups (extension 04)
+
+| Name | What it does | Settings (default) | Tested |
+|---|---|---|---|
+| `citations` | citation style (inline numeric or footnotes) plus quoted evidence with character offsets | `style` ('numeric'), `quotes` (True), `max_quote_chars` (300), `append_quotes` (False) | live |
+| `confidence` | a 0..1 confidence score and label from support, citations and coverage; can abstain below a floor | `weights` ({'support': 0.5, 'citatio…), `high` (0.75), `medium` (0.5), `abstain_below` (None), `min_support` (0.5) | live |
+| `follow-ups` | suggest follow-up questions the shown sources can answer (heuristic offline, or LLM) | `n` (3), `mode` ('heuristic'), `llm_slot` ('llm'), `max_tokens` (200), `min_overlap` (0.5) | live |
+| `json` | the answer as a schema-checked JSON object; optional model-extracted fields with retries | `fields` (None), `fields_file` (None), `llm_slot` ('llm'), `retries` (1), `as_text` (False), `max_tokens` (300) | live |
+
+## judge: Scoring answers in evaluations (extension 04)
+
+| Name | What it does | Settings (default) | Tested |
+|---|---|---|---|
+| `lexical` | offline judge: faithfulness, relevance and correctness from word and number overlap | `min_support` (0.5) | live |
+| `llm` | LLM-as-judge (JSON scores 0..1), lexical fallback per metric on an unusable reply | `llm_slot` ('judge_llm'), `max_tokens` (300), `max_context_chars` (12000), `min_support` (0.5) | mocked |
+
+## connector: Where sources come from, for `rag sync` (extension 04)
+
+| Name | What it does | Settings (default) | Tested |
+|---|---|---|---|
+| `confluence` | Confluence spaces: pages (and attachments), restrictions mapped to groups | `patterns` (['**/*']), `exclude` (['**/.*', '**/~$*']), `access` (AccessSpec(classification…), `rules` ([]), `max_bytes` (50000000), `base_url`, `spaces`, `token_file`, `include_attachments` (False), `map_permissions` (True) | reference |
+| `filesystem` | a folder: patterns, per-prefix access rules, mtime+size versions for incremental sync | `patterns` (['**/*']), `exclude` (['**/.*', '**/~$*']), `access` (AccessSpec(classification…), `rules` ([]), `max_bytes` (50000000), `root`, `follow_symlinks` (False) | live |
+| `google-drive` | Google Drive folders: Docs exported, changes API, sharing mapped to groups | `patterns` (['**/*']), `exclude` (['**/.*', '**/~$*']), `access` (AccessSpec(classification…), `rules` ([]), `max_bytes` (50000000), `folder_ids`, `service_account_file`, `export_google_docs_as` ('text/markdown'), `map_permissions` (True) | reference |
+| `s3` | an S3 bucket/prefix (AWS, MinIO, …): ETag versions for incremental sync Needs extra: `s3`. | `patterns` (['**/*']), `exclude` (['**/.*', '**/~$*']), `access` (AccessSpec(classification…), `rules` ([]), `max_bytes` (50000000), `bucket`, `prefix` (''), `endpoint_url` (None), `region` (None) | mocked |
+| `sharepoint` | SharePoint / OneDrive via Microsoft Graph: drives, delta links, permissions | `patterns` (['**/*']), `exclude` (['**/.*', '**/~$*']), `access` (AccessSpec(classification…), `rules` ([]), `max_bytes` (50000000), `tenant_id`, `site_url`, `drives` (['Documents']), `client_id`, `certificate_file`, `map_permissions` (True) | reference |
+| `web` | a web crawler: start URLs, domain allow-list, robots.txt, depth/page limits, polite rate | `patterns` (['**/*']), `exclude` (['**/.*', '**/~$*']), `access` (AccessSpec(classification…), `rules` ([]), `max_bytes` (50000000), `start_urls`, `allowed_domains` ([]), `max_pages` (1000), `max_depth` (3), `respect_robots_txt` (True), `requests_per_second` (1.0) | reference |
 
 Tested: **live** = tested against the real service; **mocked** = tested with a stand-in service; **reference** = reference implementation.

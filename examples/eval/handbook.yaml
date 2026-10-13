@@ -69,20 +69,23 @@ architectures:
   speculative:      {pipeline: {use: speculative, drafter: generator, verifier: support}}
   graph-global:     {pipeline: graph-global, graph_store: memory, enrichers: [context-header, llm-entities]}
 
+# extension 04: `reference` is the answer a person would accept; `rag eval-answers` scores
+# correctness against it (and context recall from it). Questions without one are still scored
+# on everything else.
 questions:
-  - {id: leave-days, question: "How many days of annual leave do full-time staff get?", relevant: [annual-leave.md], tags: [paraphrase]}
+  - {id: leave-days, question: "How many days of annual leave do full-time staff get?", relevant: [annual-leave.md], tags: [paraphrase], reference: "Full-time staff get 25 days of annual leave per year, plus public holidays."}
   - {id: carry-over, question: "Can I carry unused holidays over to next year?", relevant: [annual-leave.md], tags: [synonym]}
-  - {id: secondary-carer, question: "What parental leave does a secondary carer get?", relevant: [parental-leave.md]}
-  - {id: doctor-note, question: "Do I need a doctor's note when I'm off sick?", relevant: [sick-leave.md], tags: [synonym]}
-  - {id: wfh-days, question: "How many days a week can I WFH?", relevant: [remote-work.md], tags: [acronym]}
+  - {id: secondary-carer, question: "What parental leave does a secondary carer get?", relevant: [parental-leave.md], reference: "A secondary carer receives 4 weeks of parental leave at full pay."}
+  - {id: doctor-note, question: "Do I need a doctor's note when I'm off sick?", relevant: [sick-leave.md], tags: [synonym], reference: "A doctor's note is needed only for absences of more than two consecutive days."}
+  - {id: wfh-days, question: "How many days a week can I WFH?", relevant: [remote-work.md], tags: [acronym], reference: "Staff may work from home up to three days a week, agreed with their manager."}
   - {id: home-office, question: "Is there money for setting up my home office?", relevant: [remote-work.md]}
   - {id: business-class, question: "Can I fly business class to London?", relevant: [travel.md]}
   - {id: per-diem, question: "What is the daily meal allowance on a domestic trip?", relevant: [travel.md], tags: [synonym]}
-  - {id: claim-deadline, question: "How long do I have to submit an expense claim?", relevant: [expenses.md]}
+  - {id: claim-deadline, question: "How long do I have to submit an expense claim?", relevant: [expenses.md], reference: "Submit expense claims within 30 days of spending the money."}
   - {id: wine-client, question: "Will the company pay for wine at a client dinner?", relevant: [expenses.md], tags: [synonym]}
   - {id: e4021, question: "My VPN shows E-4021", relevant: [vpn-troubleshooting.md], tags: [code]}
   - {id: e1107, question: "What does error E-1107 mean?", relevant: [vpn-troubleshooting.md], tags: [code]}
-  - {id: password-length, question: "How long does my password have to be?", relevant: [security-passwords.md]}
+  - {id: password-length, question: "How long does my password have to be?", relevant: [security-passwords.md], reference: "Passwords must be at least 14 characters long."}
   - {id: mfa-sms, question: "Can I use SMS codes for MFA?", relevant: [security-passwords.md], tags: [acronym]}
   - {id: clicked-link, question: "I clicked a link in a suspicious email, who do I tell?", relevant: [incident-response.md]}
   - {id: sev1, question: "How quickly must a SEV1 be acknowledged?", relevant: [incident-response.md], tags: [code]}

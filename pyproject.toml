@@ -62,6 +62,7 @@ ignore = ["E501"]                   # line length is the formatter's job
 "scripts/**"  = ["T20"]             # scripts may print
 "examples/**" = ["T20"]             # runnable demos print what they show (Step 36)
 "libs/rag-core/src/rag_core/cli.py" = ["T20"]               # the `rag` command prints (Step 30)
+"libs/rag-core/src/rag_core/evalcli.py" = ["T20"]           # ... and so do its extension 04 commands
 "libs/rag-core/src/rag_core/testing/**" = ["S101"]          # the conformance kit asserts (Step 30)
 
 [tool.ruff.lint.isort]

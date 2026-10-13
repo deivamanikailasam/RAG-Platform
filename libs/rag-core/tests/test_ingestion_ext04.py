@@ -3,6 +3,7 @@ connectors and incremental `rag sync`. Offline: fakeredis and moto stand in for 
 
 from __future__ import annotations
 
+import json
 import os
 import time
 from collections.abc import Sequence
@@ -18,6 +19,7 @@ from moto import mock_aws
 from rag_core import config as cfg
 from rag_core import evaluate as ev
 from rag_core import sync
+from rag_core.cli import main
 from rag_core.components.basics import HashingEmbedder
 from rag_core.components.connectors import (
     AccessRule,
@@ -336,3 +338,18 @@ def test_reference_connectors_fail_clearly_but_validate() -> None:
                         ("sharepoint", {"tenant_id": "t", "site_url": "https://s", "client_id": "c", "certificate_file": "/c"})):  # fmt: skip
         with pytest.raises(ComponentError, match="not configured"):
             Container({"connector": {"use": name, **extra}}).get("connector")
+
+
+def test_rag_sync_command(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    root = _folder(tmp_path)
+    rag_yaml = tmp_path / "rag.yaml"
+    rag_yaml.write_text(yaml.safe_dump({"version": 1, "include": {"platform": "rag-core:platform.yaml"},
+                                        "profiles": {"mine": {"extends": "platform/offline",
+                                                              "connector": {"use": "filesystem", "root": str(root),
+                                                                            "patterns": ["**/*.md"]}}}}))  # fmt: skip
+    assert main(["sync", "--file", str(rag_yaml), "--profile", "mine", "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert "would ingest 2" in out
+    assert "? file://" in out
+    assert main(["sync", "--file", str(rag_yaml), "--profile", "mine", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out.strip())["listed"] == 2

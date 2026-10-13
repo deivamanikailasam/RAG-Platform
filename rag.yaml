@@ -26,6 +26,8 @@ profiles:
     queue: memory
     # search (Step 32)
     query_transformer: with-history   # identity | expand-terms | with-history | rewrite | multi-query | hyde | decompose | step-back | self-query | chain
+    #   extension 04: normalize (clean-up + spelling against the corpus words) | translate (cross-lingual)
+    #   e.g. {use: chain, steps: [normalize, {use: expand-terms, file: glossary.yaml}, with-history]}
     retriever: {use: hybrid, candidates: 30}     # dense | keyword | hybrid | ensemble | router | section
     fusion: {use: rrf, k: 60}                    # rrf | weighted | relative-score | dbsf | combsum | combmnz | borda
     # search_cache: {use: memory, ttl_seconds: 600}   # cached search results: memory | valkey (extension 01)
@@ -33,7 +35,7 @@ profiles:
     reranker: {use: term-overlap, top_n: 30}     # offline stand-in for a cross-encoder (maxsim: ColBERT-style)
     postprocessors:
       - {use: dedupe, threshold: 0.85}
-      - {use: recency, weight: 0.15, half_life_days: 730}   # needs an "updated" date in metadata
+      - {use: recency, weight: 0.15, half_life_days: 730}   # needs an "updated" date in metadata; when: asked = only for "latest/current…"
       - {use: max-per-document, n: 3}
     # extension 02 post-processors: auto-merge | section-expand | summary-expand (with the matching chunker/enricher)
     # answers (Step 33)
@@ -49,6 +51,11 @@ profiles:
     # compressors: [{use: extractive, threshold: 0.3}]   # extractive | embedding-filter | llm-extract | summarize | llmlingua
     context_builder: {use: numbered, max_tokens: 3000, order: relevance}   # relevance | lost-in-middle | document
     generator: {use: extractive, max_sentences: 3}   # no model offline; "llm" uses the registered prompt
+    # answer_formatters (extension 04), after the output guards, in order:
+    #   [confidence, follow-ups, {use: citations, style: footnotes}, json]   # extras: score, suggestions, quotes with offsets, JSON
+    # judge: lexical    # who scores answers in `rag eval-answers` (lexical | llm, with judge_llm); extension 04
+    # connector: {use: filesystem, root: examples/corpus/handbook, patterns: ["**/*.md"], access: {groups: [all-staff]}}
+    #   `rag sync` ingests what changed (filesystem | s3; web | confluence | sharepoint | google-drive are reference interfaces)
     memory: {use: memory, max_turns: 10}
     cache: {use: memory, ttl_seconds: 3600}          # memory | valkey | semantic
     # guardrails (Step 34), in the order they run within each stage
@@ -71,9 +78,11 @@ profiles:
     judge_llm: {use: gateway, model: qwen-quality, base_url: "http://litellm:4000/v1", api_key_file: /run/bao/rag_api_gateway_key}
     pii: {use: regex, strategy: pseudonymise, key_file: /run/bao/pii_hmac_key}
     embedder:
-      use: cached
+      use: cached       # extension 04: store: valkey, url_file: /run/bao/valkey_url shares it across replicas and restarts
       inner: {use: gateway, model: embedder, dimensions: 1024, base_url: "http://litellm:4000/v1", api_key_file: /run/bao/rag_api_gateway_key,
               query_prompt: query-instruction, prompts_dir: /app/prompts}   # Step 24's registered instruction
+      # a big re-index at the provider's pace: inner: {use: batched, batch_size: 64, requests_per_second: 5, inner: {use: gateway, …}}
+
     vector_store: {use: pgvector, dsn_env: null, credentials_file: /run/bao/rag_db.json, collection: default}
     keyword_index: {use: postgres-fts, dsn_env: null, credentials_file: /run/bao/rag_db.json, collection: default}
     manifest: {use: postgres, dsn_env: null, credentials_file: /run/bao/rag_db.json, collection: default}
