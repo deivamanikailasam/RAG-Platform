@@ -90,5 +90,14 @@ RAG_API_VALKEY_URL=redis://rag_app:${valkey_app}@valkey:6379/0
 RAG_PII_HMAC_KEY=$(openssl rand -hex 32)
 EOF
 
+# --- Backups (Step 36): the dump runs as the table owner (row-level security doesn't apply to it);
+#     the restore drill needs an admin login to create and drop a scratch database ---
+migrator=$(grep '^RAG_DB_MIGRATOR_PASSWORD=' "$out" | cut -d= -f2)
+pg_admin=$(grep '^POSTGRES_PASSWORD=' "$out" | cut -d= -f2)
+cat >> "$out" <<EOF
+RAG_BACKUP_DSN=postgres://rag_migrator:${migrator}@127.0.0.1:5432/rag
+RAG_RESTORE_ADMIN_DSN=postgres://postgres:${pg_admin}@127.0.0.1:5432/postgres
+EOF
+
 sops --encrypt --in-place "$out"
 echo "created $out (encrypted). View names with: just secrets-keys"

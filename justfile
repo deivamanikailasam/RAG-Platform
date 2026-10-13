@@ -227,18 +227,13 @@ db-migrate *args="status":
 db-psql:
     docker compose -f infra/compose/compose.yaml exec rag-db psql -U postgres -d rag
 
-# Logical backup of the RAG database (custom format, compressed) into backups/ (gitignored)
-db-backup:
-    mkdir -p backups
-    docker compose -f infra/compose/compose.yaml exec -T rag-db pg_dump -U postgres -d rag -Fc > backups/rag-$(date +%Y%m%d-%H%M%S).dump
-    ls -lh backups | tail -3
+# Backups (Step 36): a dump plus a receipt (checksum, row counts); a drill restores it and compares.
+# They replace Step 11's first versions. The dump goes to backups/ (gitignored: it holds all your data).
+db-backup out="backups/rag-$(date +%Y%m%d-%H%M).dump":
+    sops exec-env secrets/dev.enc.env 'uv run python scripts/backup.py backup --dsn-env RAG_BACKUP_DSN --out {{out}}'
 
-# Restore the latest backup into a scratch database and count rows (proves the backup is usable)
-db-restore-test:
-    docker compose -f infra/compose/compose.yaml exec -T rag-db psql -U postgres -c "DROP DATABASE IF EXISTS rag_restore_test" -c "CREATE DATABASE rag_restore_test"
-    cat "$(ls -t backups/rag-*.dump | head -1)" | docker compose -f infra/compose/compose.yaml exec -T rag-db pg_restore -U postgres -d rag_restore_test --no-owner
-    docker compose -f infra/compose/compose.yaml exec -T rag-db psql -U postgres -d rag_restore_test -c "SELECT count(*) AS chunks FROM rag.chunks"
-    docker compose -f infra/compose/compose.yaml exec -T rag-db psql -U postgres -c "DROP DATABASE rag_restore_test"
+db-restore-test dump:
+    sops exec-env secrets/dev.enc.env 'uv run python scripts/backup.py restore-test --dump {{dump}} --admin-dsn-env RAG_RESTORE_ADMIN_DSN'
 
 # Qdrant checks (admin key from secrets)
 qdrant-health:

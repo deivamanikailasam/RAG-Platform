@@ -213,10 +213,14 @@ def test_migrations_run_as_the_migrator_on_localhost() -> None:
     # pgvector's types live in "public"; a search_path of only "rag" breaks `halfvec`.
     assert "search_path=rag,public" in url
     assert "dbmate --migrations-dir infra/db/rag/migrations --no-dump-schema {{args}}" in text
-    for recipe in ("db-migrate", "db-psql:", "db-backup:", "db-restore-test:"):
+    for recipe in ("db-migrate", "db-psql:", "db-backup ", "db-restore-test dump:"):
         assert f"\n{recipe}" in text
-    assert "pg_dump -U postgres -d rag -Fc > backups/rag-" in text
-    assert "pg_restore -U postgres -d rag_restore_test --no-owner" in text
+    # Step 36 replaced Step 11's first backup recipes: a dump plus a receipt, and a real restore drill
+    assert "scripts/backup.py backup --dsn-env RAG_BACKUP_DSN" in text
+    assert (
+        "scripts/backup.py restore-test --dump {{dump}} --admin-dsn-env RAG_RESTORE_ADMIN_DSN"
+        in text
+    )
 
 
 def test_dbmate_installed_and_backups_never_committed() -> None:
