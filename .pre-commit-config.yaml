@@ -11,12 +11,15 @@ repos:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
+        args: [--allow-multiple-documents]  # Kubernetes manifests hold several objects (Step 29)
       - id: check-toml
       - id: check-json
       - id: check-merge-conflict      # leftover <<<<<<< markers
       - id: check-case-conflict       # File.txt vs file.txt (breaks on Linux)
       - id: check-added-large-files   # block files bigger than 1 MB
         args: [--maxkb=1024]
+        # Step 29: Argo CD's release manifest (~1.9 MB), vendored on purpose and pinned by SHA-256
+        exclude: ^deploy/argocd/install/upstream/install\.yaml$
       - id: detect-private-key        # -----BEGIN ... PRIVATE KEY-----
       - id: no-commit-to-branch       # never commit directly on main
         args: [--branch, main]

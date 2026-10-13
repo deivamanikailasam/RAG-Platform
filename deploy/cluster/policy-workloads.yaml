@@ -1,0 +1,49 @@
+# Rules Pod Security doesn't cover (Step 29): every container declares what it needs (requests)
+# and a memory ceiling, has a read-only root filesystem, and pods don't get a Kubernetes API token
+# unless they ask for one on purpose.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: rag-workloads-hardened
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+      - apiGroups: [apps]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [deployments, statefulsets, daemonsets]
+  variables:
+    - name: spec
+      expression: "object.kind == 'Pod' ? object.spec : object.spec.template.spec"
+    - name: containers
+      expression: >-
+        variables.spec.containers
+        + (has(variables.spec.initContainers) ? variables.spec.initContainers : [])
+  validations:
+    - expression: >-
+        variables.containers.all(c, has(c.resources) && has(c.resources.requests)
+          && has(c.resources.limits) && 'memory' in c.resources.limits)
+      message: every container needs resource requests and a memory limit
+    - expression: >-
+        variables.containers.all(c, has(c.securityContext)
+          && has(c.securityContext.readOnlyRootFilesystem) && c.securityContext.readOnlyRootFilesystem)
+      message: every container needs securityContext.readOnlyRootFilesystem true
+    - expression: >-
+        has(variables.spec.automountServiceAccountToken) && !variables.spec.automountServiceAccountToken
+      message: set automountServiceAccountToken false (mount a projected token explicitly if needed)
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: rag-workloads-hardened
+spec:
+  policyName: rag-workloads-hardened
+  validationActions: [Deny, Audit]
+  matchResources:
+    namespaceSelector:
+      matchLabels: { rag-platform/policy: enforced }

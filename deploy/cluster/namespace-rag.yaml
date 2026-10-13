@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rag
+  labels:
+    # Pod Security Admission, built into Kubernetes: "restricted" is the strictest standard profile
+    # (non-root, no privilege escalation, all capabilities dropped, seccomp on). Violations are REFUSED.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.36
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
+    # Our own admission policies (policy-*.yaml) apply to namespaces with this label
+    rag-platform/policy: enforced

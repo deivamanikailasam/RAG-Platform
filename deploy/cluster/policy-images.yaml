@@ -1,0 +1,56 @@
+# Every image in an enforced namespace must be pinned by DIGEST and come from YOUR registry space
+# (Step 29): replace "owner" with your GitHub owner, lower case (also in the error message). A tag
+# like :latest or :v1 can be moved to different content; a digest can't.
+# Checked by the API server itself (ValidatingAdmissionPolicy, GA since Kubernetes 1.30):
+# no extra controller to run, and it applies to Pods and to every workload template.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: rag-images-pinned
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+      - apiGroups: [apps]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [deployments, statefulsets, daemonsets, replicasets]
+      - apiGroups: [batch]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [jobs, cronjobs]
+  variables:
+    # the pod spec, wherever it sits in this kind of object
+    - name: spec
+      expression: >-
+        object.kind == 'Pod' ? object.spec :
+        object.kind == 'CronJob' ? object.spec.jobTemplate.spec.template.spec :
+        object.spec.template.spec
+    - name: containers
+      expression: >-
+        variables.spec.containers
+        + (has(variables.spec.initContainers) ? variables.spec.initContainers : [])
+        + (has(variables.spec.ephemeralContainers) ? variables.spec.ephemeralContainers : [])
+  validations:
+    - expression: >-
+        variables.containers.all(c,
+          c.image.matches('^(ghcr\\.io/owner/|quay\\.io/openbao/)[a-z0-9._/-]+@sha256:[a-f0-9]{64}$'))
+      messageExpression: >-
+        'images must come from ghcr.io/owner/ or quay.io/openbao/ and be pinned by @sha256 digest; got: '
+        + variables.containers.filter(c, !c.image.matches('^(ghcr\\.io/owner/|quay\\.io/openbao/)[a-z0-9._/-]+@sha256:[a-f0-9]{64}$')).map(c, c.image).join(', ')
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: rag-images-pinned
+spec:
+  policyName: rag-images-pinned
+  validationActions: [Deny, Audit]
+  matchResources:
+    namespaceSelector:
+      matchLabels: { rag-platform/policy: enforced }

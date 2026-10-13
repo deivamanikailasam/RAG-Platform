@@ -1,0 +1,25 @@
+# A ceiling for the whole namespace, and defaults for any container that forgets to set its own.
+# The Mac's models need most of the memory (Step 7): the cluster gets a fixed, small share.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: rag-quota
+  namespace: rag
+spec:
+  hard:
+    requests.cpu: "4"
+    requests.memory: 4Gi
+    limits.memory: 6Gi
+    pods: "20"
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: rag-defaults
+  namespace: rag
+spec:
+  limits:
+    - type: Container
+      defaultRequest: { cpu: 50m, memory: 64Mi }
+      default: { memory: 256Mi }
+      max: { memory: 2Gi }

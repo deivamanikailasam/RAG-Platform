@@ -1,0 +1,22 @@
+# rag-api on your Mac's Kubernetes (OrbStack). Argo CD syncs exactly what this renders (Step 29).
+# `just promote local sha256:…` changes the digest below, through a pull request.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: rag
+resources:
+  - ../../base/rag-api
+components:
+  - ../../components/external-deps
+images:
+  - name: rag-api
+    newName: ghcr.io/owner/rag-platform/rag-api  # your GitHub owner, lower case
+    digest: sha256:<digest>  # set by `just promote local sha256:…`
+patches:
+  - target: { kind: Deployment, name: rag-api }
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value: { name: OTEL_RESOURCE_ATTRIBUTES, value: "deployment.environment.name=k8s-local" }
+      - op: add
+        path: /spec/template/spec/imagePullSecrets
+        value: [{ name: ghcr-pull }]  # created by `just k8s-pull-secret` (read-only package token)

@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag-api
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }  # never fewer than 2 serving during a rollout
+  selector:
+    matchLabels: {}  # filled in by the kustomization's labels
+  template:
+    spec:
+      serviceAccountName: rag-api
+      automountServiceAccountToken: false
+      enableServiceLinks: false  # no Docker-link-style env vars for every Service
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001  # the image's app user (Step 17)
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile: { type: RuntimeDefault }
+      initContainers:
+        # A NATIVE SIDECAR (restartPolicy: Always, Kubernetes 1.33+): starts first, keeps running
+        # beside rag-api, and rag-api only starts once its startupProbe says the files are there.
+        - name: openbao-agent
+          image: openbao
+          restartPolicy: Always
+          command: ["bao", "agent", "-config=/openbao/config/agent.hcl"]
+          securityContext: &locked-down
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          startupProbe:
+            exec: { command: ["test", "-s", "/openbao/out/rag_db.json"] }
+            periodSeconds: 2
+            failureThreshold: 60
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 64Mi }
+          volumeMounts:
+            - { name: agent-config, mountPath: /openbao/config, readOnly: true }
+            - { name: openbao-token, mountPath: /var/run/secrets/openbao, readOnly: true }
+            - { name: secrets, mountPath: /openbao/out }
+      containers:
+        - name: rag-api
+          image: rag-api
+          ports:
+            - { name: http, containerPort: 8000 }
+          env:
+            - { name: RAG_API_OIDC_ISSUER, value: "http://localhost:8180/realms/rag" }  # what tokens say
+            - { name: RAG_API_OIDC_JWKS_URL, value: "http://keycloak:8180/realms/rag/protocol/openid-connect/certs" }
+            - { name: RAG_API_GATEWAY_URL, value: "http://litellm:4000/v1" }
+            - { name: RAG_API_DB_HOST, value: rag-db }
+            - { name: RAG_API_AUDIT_DB_HOST, value: rag-db }
+            - { name: RAG_API_OPA_URL, value: "http://opa:8181" }
+            - { name: RAG_API_DB_CREDENTIALS_FILE, value: /run/bao/rag_db.json }
+            - { name: RAG_API_AUDIT_DB_CREDENTIALS_FILE, value: /run/bao/audit_db.json }
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://otel-collector:4317" }
+            - { name: OTEL_SERVICE_NAME, value: rag-api }
+          securityContext: *locked-down
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 15
+            failureThreshold: 4
+          resources:
+            requests: { cpu: 250m, memory: 256Mi }
+            limits: { memory: 512Mi }
+          volumeMounts:
+            - { name: secrets, mountPath: /run/bao, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: agent-config
+          configMap: { name: rag-api-openbao-agent }
+        - name: openbao-token
+          projected:
+            sources:
+              - serviceAccountToken: { audience: openbao, expirationSeconds: 600, path: token }
+        - name: secrets  # in memory only, shared by the two containers
+          emptyDir: { medium: Memory, sizeLimit: 1Mi }
+        - name: tmp
+          emptyDir: { sizeLimit: 64Mi }
