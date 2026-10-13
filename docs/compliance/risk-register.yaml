@@ -126,9 +126,9 @@ controls:
     frameworks: {nist: [MANAGE 4.1, MEASURE 2.4], iso42001: [A.6.2.6, A.8.3], eu_ai_act: [Art. 14], app: [APP 13]}
   - id: C-LIFECYCLE
     title: Retention, erasure and immediate revocation
-    description: Retention rules, erasure of sources (all object versions), of a person's conversations and cached answers, and access changes in every store at once.
-    steps: [36]
-    evidence: [libs/rag-core/tests/test_lifecycle.py::test_retention_dry_run_then_apply, libs/rag-core/tests/test_lifecycle.py::test_erase_source_removes_every_version_and_every_copy,
+    description: Retention rules (scheduled nightly, legal holds win, Step 37), erasure of sources (all object versions; under a hold only with a recorded override), of a person's conversations and cached answers, and access changes in every store at once.
+    steps: [36, 37]
+    evidence: [libs/rag-core/tests/test_lifecycle.py::test_retention_dry_run_then_apply, libs/rag-core/tests/test_lifecycle.py::test_a_legal_hold_wins_over_retention, libs/rag-core/tests/test_lifecycle.py::test_erase_source_removes_every_version_and_every_copy,
                libs/rag-core/tests/test_lifecycle.py::test_revocation_reaches_search_answers_cache_and_manifest]
     frameworks: {nist: [MEASURE 2.10, MANAGE 2.4], iso42001: [A.7.2, A.7.5], eu_ai_act: [Art. 10], app: [APP 11, APP 12, APP 13]}
   - id: C-BACKUP
@@ -161,14 +161,49 @@ controls:
     steps: [29, 33, 34, 37]
     evidence: [docs/runbooks/rag-policy-mismatch.md, docs/runbooks/kubernetes.md]
     frameworks: {nist: [MANAGE 2.4, MANAGE 4.3], iso42001: [A.9.2, A.9.4], eu_ai_act: [Art. 14], app: [APP 1]}
+  # ---- Step 37: production ----
+  - id: C-PROMOTION
+    title: Promotion only with evidence, a soak in staging and production readiness
+    description: deploy/envs/promotion.yaml checked by scripts/gates.py in `just promote`; evidence per digest that expires; 24 h soak; online evaluation; no critical alert; change freezes; break glass recorded; `rag config readiness` refuses test stand-ins and missing guards.
+    steps: [37]
+    evidence: [tests/test_gates.py::test_prod_waits_for_the_soak_period, tests/test_gates.py::test_evidence_must_be_for_this_digest_passing_and_fresh,
+               libs/rag-core/tests/test_readiness.py::test_the_production_profile_is_ready]
+    frameworks: {nist: [MANAGE 2.4, MEASURE 2.7], iso42001: [A.6.2.5], eu_ai_act: [Art. 15], app: [APP 11]}
+  - id: C-CANARY
+    title: Canary releases that roll back by themselves
+    description: Argo Rollouts gives a new release 10, 25, 50 then 100% of pods while Prometheus checks and an online-evaluation Job compare it with the stable release; any failed check scales the canary to zero.
+    steps: [37]
+    evidence: [tests/test_environments.py::test_releases_are_canaries_with_analysis, tests/test_environments.py::test_analysis_queries_are_valid_promql]
+    frameworks: {nist: [MANAGE 2.4, MEASURE 2.4], iso42001: [A.6.2.6], eu_ai_act: [Art. 15], app: [APP 11]}
+  - id: C-ONLINE-EVAL
+    title: Answer quality watched in production, per release
+    description: rag online-eval joins audit records and feedback by answer id, compares releases with a significance test and lists answers to review; answer-quality alerts with unit tests.
+    steps: [37]
+    evidence: [libs/rag-core/tests/test_online.py::test_a_clearly_worse_canary_fails_and_a_similar_one_passes, infra/config/prometheus/tests/rag_answers_test.yml,
+               tests/test_environments.py::test_alert_rules_and_their_tests_pass]
+    frameworks: {nist: [MEASURE 2.4, MANAGE 4.1], iso42001: [A.6.2.6, A.8.3], eu_ai_act: [Art. 12, Art. 14], app: [APP 11]}
+  - id: C-HA-DR
+    title: Highly available database with point-in-time recovery and drills
+    description: CloudNativePG over three zones with quorum synchronous commit, WAL archiving and nightly base backups to a locked bucket, 30-day point-in-time recovery, monthly restore drill into a new cluster.
+    steps: [37]
+    evidence: [tests/test_environments.py::test_prod_database_is_ha_with_point_in_time_recovery, tests/test_environments.py::test_dr_drill_renders_a_point_in_time_restore,
+               docs/runbooks/disaster-recovery.md]
+    frameworks: {nist: [MEASURE 2.7, MANAGE 2.4], iso42001: [A.6.2.6], eu_ai_act: [Art. 15], app: [APP 11]}
+  - id: C-WORKLOAD-ID
+    title: Each workload logs in as itself, with only its own secrets
+    description: The ingestion worker and lifecycle jobs use the rag-ingest service account and OpenBao role; rag-api can't read the originals, the worker can't use rag-api's leases; scheduled jobs pass the same admission policies.
+    steps: [37]
+    evidence: [tests/test_vault.py::test_the_ingestion_worker_has_its_own_identity, tests/test_environments.py::test_the_worker_has_its_own_identity,
+               tests/test_environments.py::test_an_unhardened_cronjob_is_refused]
+    frameworks: {nist: [MEASURE 2.7], iso42001: [A.6.2.5], eu_ai_act: [Art. 15], app: [APP 11]}
 
 threats:
   - {id: T01, category: Spoofing, component: rag-api, threat: "A stolen or forged token is used to call the API.", controls: [C-AUTH, C-SECRETS], residual: Low}
   - {id: T02, category: Spoofing, component: conversation memory, threat: "Someone reads another person's conversation by guessing a session id.", controls: [C-SESSION], residual: Low}
   - {id: T03, category: Tampering, component: ingestion, threat: "A poisoned document plants instructions for the model (indirect prompt injection).", controls: [C-INJECTION, C-GROUND, C-AUDIT], residual: Medium}
   - {id: T04, category: Tampering, component: audit log, threat: "An administrator rewrites the audit history.", controls: [C-AUDIT], residual: Low}
-  - {id: T05, category: Tampering, component: build and deploy, threat: "A malicious dependency or image reaches production.", controls: [C-SUPPLY, C-DEPLOY], residual: Medium}
-  - {id: T06, category: Tampering, component: prompts, threat: "A prompt, model or dataset is changed without review and alters behaviour.", controls: [C-PROMPTS, C-EVAL, C-CARDS], residual: Low}
+  - {id: T05, category: Tampering, component: build and deploy, threat: "A malicious dependency or image reaches production.", controls: [C-SUPPLY, C-DEPLOY, C-PROMOTION, C-CANARY], residual: Medium}
+  - {id: T06, category: Tampering, component: prompts, threat: "A prompt, model or dataset is changed without review and alters behaviour.", controls: [C-PROMPTS, C-EVAL, C-CARDS, C-PROMOTION, C-ONLINE-EVAL], residual: Low}
   - {id: T07, category: Repudiation, component: rag-api, threat: "A user denies receiving an answer, or an operator denies a change.", controls: [C-AUDIT, C-DEPLOY], residual: Low}
   - {id: T08, category: Information disclosure, component: retrieval, threat: "An answer reveals a document the person may not see.", controls: [C-AUTHZ, C-STORE-ACL, C-CACHE], residual: Low}
   - {id: T09, category: Information disclosure, component: "stores, logs and traces", threat: "Personal data ends up in indexes, caches, logs or traces.", controls: [C-PII, C-AUDIT, C-OBSERVE, C-LIFECYCLE], residual: Medium}
@@ -176,9 +211,9 @@ threats:
   - {id: T11, category: Information disclosure, component: multi-tenant data, threat: "A query bug returns another tenant's data.", controls: [C-RLS, C-STORE-ACL], residual: Low}
   - {id: T12, category: Information disclosure, component: model providers, threat: "Questions and documents are sent to a model provider abroad.", controls: [C-LIMITS, C-PII], residual: Medium}
   - {id: T13, category: Denial of service, component: rag-api, threat: "Huge inputs, runaway agents or SQL, or cost abuse exhaust capacity or budget.", controls: [C-LIMITS, C-OBSERVE], residual: Medium}
-  - {id: T14, category: Denial of service, component: dependencies, threat: "A model, reranker or store outage takes answers down.", controls: [C-RESILIENCE, C-BACKUP, C-OBSERVE], residual: Medium}
+  - {id: T14, category: Denial of service, component: dependencies, threat: "A model, reranker or store outage takes answers down.", controls: [C-RESILIENCE, C-BACKUP, C-OBSERVE, C-HA-DR], residual: Medium}
   - {id: T15, category: Elevation of privilege, component: SQL RAG, threat: "Generated SQL writes data or reads tables beyond the person's access.", controls: [C-LIMITS, C-AUTHZ], residual: Low}
   - {id: T16, category: Elevation of privilege, component: model, threat: "A jailbreak makes the assistant ignore its rules or scope.", controls: [C-INJECTION, C-OVERSIGHT], residual: Medium}
-  - {id: T17, category: Elevation of privilege, component: platform, threat: "A compromised pod uses broad database or network access.", controls: [C-SECRETS, C-DEPLOY, C-RLS], residual: Low}
-  - {id: T18, category: Safety, component: answers, threat: "A confident wrong answer is acted on (hallucination, outdated document).", controls: [C-GROUND, C-EVAL, C-FEEDBACK, C-OVERSIGHT, C-LIFECYCLE], residual: Medium}
+  - {id: T17, category: Elevation of privilege, component: platform, threat: "A compromised pod uses broad database or network access.", controls: [C-SECRETS, C-DEPLOY, C-RLS, C-WORKLOAD-ID], residual: Low}
+  - {id: T18, category: Safety, component: answers, threat: "A confident wrong answer is acted on (hallucination, outdated document).", controls: [C-GROUND, C-EVAL, C-FEEDBACK, C-OVERSIGHT, C-LIFECYCLE, C-ONLINE-EVAL, C-CANARY], residual: Medium}
   - {id: T19, category: Safety, component: answers, threat: "People don't realise they're dealing with AI, or can't check where an answer came from.", controls: [C-TRANSPARENCY, C-CARDS], residual: Low}

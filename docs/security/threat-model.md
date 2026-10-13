@@ -8,8 +8,8 @@
 | T02 | Spoofing | conversation memory | Someone reads another person's conversation by guessing a session id. | C-SESSION | Low |
 | T03 | Tampering | ingestion | A poisoned document plants instructions for the model (indirect prompt injection). | C-INJECTION, C-GROUND, C-AUDIT | Medium |
 | T04 | Tampering | audit log | An administrator rewrites the audit history. | C-AUDIT | Low |
-| T05 | Tampering | build and deploy | A malicious dependency or image reaches production. | C-SUPPLY, C-DEPLOY | Medium |
-| T06 | Tampering | prompts | A prompt, model or dataset is changed without review and alters behaviour. | C-PROMPTS, C-EVAL, C-CARDS | Low |
+| T05 | Tampering | build and deploy | A malicious dependency or image reaches production. | C-SUPPLY, C-DEPLOY, C-PROMOTION, C-CANARY | Medium |
+| T06 | Tampering | prompts | A prompt, model or dataset is changed without review and alters behaviour. | C-PROMPTS, C-EVAL, C-CARDS, C-PROMOTION, C-ONLINE-EVAL | Low |
 | T07 | Repudiation | rag-api | A user denies receiving an answer, or an operator denies a change. | C-AUDIT, C-DEPLOY | Low |
 | T08 | Information disclosure | retrieval | An answer reveals a document the person may not see. | C-AUTHZ, C-STORE-ACL, C-CACHE | Low |
 | T09 | Information disclosure | stores, logs and traces | Personal data ends up in indexes, caches, logs or traces. | C-PII, C-AUDIT, C-OBSERVE, C-LIFECYCLE | Medium |
@@ -17,9 +17,9 @@
 | T11 | Information disclosure | multi-tenant data | A query bug returns another tenant's data. | C-RLS, C-STORE-ACL | Low |
 | T12 | Information disclosure | model providers | Questions and documents are sent to a model provider abroad. | C-LIMITS, C-PII | Medium |
 | T13 | Denial of service | rag-api | Huge inputs, runaway agents or SQL, or cost abuse exhaust capacity or budget. | C-LIMITS, C-OBSERVE | Medium |
-| T14 | Denial of service | dependencies | A model, reranker or store outage takes answers down. | C-RESILIENCE, C-BACKUP, C-OBSERVE | Medium |
+| T14 | Denial of service | dependencies | A model, reranker or store outage takes answers down. | C-RESILIENCE, C-BACKUP, C-OBSERVE, C-HA-DR | Medium |
 | T15 | Elevation of privilege | SQL RAG | Generated SQL writes data or reads tables beyond the person's access. | C-LIMITS, C-AUTHZ | Low |
 | T16 | Elevation of privilege | model | A jailbreak makes the assistant ignore its rules or scope. | C-INJECTION, C-OVERSIGHT | Medium |
-| T17 | Elevation of privilege | platform | A compromised pod uses broad database or network access. | C-SECRETS, C-DEPLOY, C-RLS | Low |
-| T18 | Safety | answers | A confident wrong answer is acted on (hallucination, outdated document). | C-GROUND, C-EVAL, C-FEEDBACK, C-OVERSIGHT, C-LIFECYCLE | Medium |
+| T17 | Elevation of privilege | platform | A compromised pod uses broad database or network access. | C-SECRETS, C-DEPLOY, C-RLS, C-WORKLOAD-ID | Low |
+| T18 | Safety | answers | A confident wrong answer is acted on (hallucination, outdated document). | C-GROUND, C-EVAL, C-FEEDBACK, C-OVERSIGHT, C-LIFECYCLE, C-ONLINE-EVAL, C-CANARY | Medium |
 | T19 | Safety | answers | People don't realise they're dealing with AI, or can't check where an answer came from. | C-TRANSPARENCY, C-CARDS | Low |

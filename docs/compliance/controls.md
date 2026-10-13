@@ -23,12 +23,17 @@
 | **C-DEPLOY** Deploy and roll back by pull request, guarded by admission policies | GitOps with Argo CD; hardened workloads; unpinned images refused; rollback is a revert. | 29, 37 | `tests/test_k8s.py::test_rag_api_workload_is_hardened`<br>`tests/test_promote.py` |
 | **C-OBSERVE** Traces, metrics and alerts without personal text | OpenTelemetry spans per stage, SLOs and alerts, masked LLM traces, guard verdict metrics. | 19, 20, 21, 22, 34 | `services/rag-api/tests/test_telemetry.py::test_no_token_and_no_question_text_in_any_span` |
 | **C-FEEDBACK** User feedback tied to each answer | Thumbs up/down with a fixed reason list, audited, joined to traces by answer id. | 33, 37 | `services/rag-api/tests/test_answer_api.py::test_feedback` |
-| **C-LIFECYCLE** Retention, erasure and immediate revocation | Retention rules, erasure of sources (all object versions), of a person's conversations and cached answers, and access changes in every store at once. | 36 | `libs/rag-core/tests/test_lifecycle.py::test_retention_dry_run_then_apply`<br>`libs/rag-core/tests/test_lifecycle.py::test_erase_source_removes_every_version_and_every_copy`<br>`libs/rag-core/tests/test_lifecycle.py::test_revocation_reaches_search_answers_cache_and_manifest` |
+| **C-LIFECYCLE** Retention, erasure and immediate revocation | Retention rules (scheduled nightly, legal holds win, Step 37), erasure of sources (all object versions; under a hold only with a recorded override), of a person's conversations and cached answers, and access changes in every store at once. | 36, 37 | `libs/rag-core/tests/test_lifecycle.py::test_retention_dry_run_then_apply`<br>`libs/rag-core/tests/test_lifecycle.py::test_a_legal_hold_wins_over_retention`<br>`libs/rag-core/tests/test_lifecycle.py::test_erase_source_removes_every_version_and_every_copy`<br>`libs/rag-core/tests/test_lifecycle.py::test_revocation_reaches_search_answers_cache_and_manifest` |
 | **C-BACKUP** Backups with restore drills | Custom-format dumps with a checksum and row-count receipt, uploaded to locked storage; a drill restores and compares. | 36 | `tests/test_backup.py::test_backup_and_restore_drill` |
 | **C-LIMITS** Limits on cost and blast radius | Gateway budgets and rate limits, input size guard, SQL authorizer with step and row limits, agent step limits. | 10, 34, 35 | `libs/rag-core/tests/test_architectures.py::test_sql_authorizer_allows_only_reads_of_permitted_tables`<br>`libs/rag-core/tests/test_guards.py::test_pii_topics_and_size` |
 | **C-RESILIENCE** Degrade, don't fail | Rerankers and helpers fail open (counted); planners and SQL fall back to documents; extractive fallback generator. | 32, 33, 35 | `libs/rag-core/tests/test_retrieval.py::test_reranker_failure_is_fail_open_by_default`<br>`libs/rag-core/tests/test_architectures.py::test_agentic_falls_back_when_the_planner_fails` |
 | **C-TRANSPARENCY** People know they're using AI, see sources, and can't be misled by refusals | System card, cited sources in every answer, fixed messages for blocked or out-of-scope questions, AI disclosure in the client. | 25, 33, 34 | `docs/cards/system-rag-api.md`<br>`services/rag-api/tests/test_answer_api.py::test_guard_block_shows_a_message_and_audits_the_reason` |
 | **C-OVERSIGHT** Human oversight and escalation | Abstention instead of guesses, referral messages for out-of-scope topics, runbooks, feedback review, kill switch by rollback. | 29, 33, 34, 37 | `docs/runbooks/rag-policy-mismatch.md`<br>`docs/runbooks/kubernetes.md` |
+| **C-PROMOTION** Promotion only with evidence, a soak in staging and production readiness | deploy/envs/promotion.yaml checked by scripts/gates.py in `just promote`; evidence per digest that expires; 24 h soak; online evaluation; no critical alert; change freezes; break glass recorded; `rag config readiness` refuses test stand-ins and missing guards. | 37 | `tests/test_gates.py::test_prod_waits_for_the_soak_period`<br>`tests/test_gates.py::test_evidence_must_be_for_this_digest_passing_and_fresh`<br>`libs/rag-core/tests/test_readiness.py::test_the_production_profile_is_ready` |
+| **C-CANARY** Canary releases that roll back by themselves | Argo Rollouts gives a new release 10, 25, 50 then 100% of pods while Prometheus checks and an online-evaluation Job compare it with the stable release; any failed check scales the canary to zero. | 37 | `tests/test_environments.py::test_releases_are_canaries_with_analysis`<br>`tests/test_environments.py::test_analysis_queries_are_valid_promql` |
+| **C-ONLINE-EVAL** Answer quality watched in production, per release | rag online-eval joins audit records and feedback by answer id, compares releases with a significance test and lists answers to review; answer-quality alerts with unit tests. | 37 | `libs/rag-core/tests/test_online.py::test_a_clearly_worse_canary_fails_and_a_similar_one_passes`<br>`infra/config/prometheus/tests/rag_answers_test.yml`<br>`tests/test_environments.py::test_alert_rules_and_their_tests_pass` |
+| **C-HA-DR** Highly available database with point-in-time recovery and drills | CloudNativePG over three zones with quorum synchronous commit, WAL archiving and nightly base backups to a locked bucket, 30-day point-in-time recovery, monthly restore drill into a new cluster. | 37 | `tests/test_environments.py::test_prod_database_is_ha_with_point_in_time_recovery`<br>`tests/test_environments.py::test_dr_drill_renders_a_point_in_time_restore`<br>`docs/runbooks/disaster-recovery.md` |
+| **C-WORKLOAD-ID** Each workload logs in as itself, with only its own secrets | The ingestion worker and lifecycle jobs use the rag-ingest service account and OpenBao role; rag-api can't read the originals, the worker can't use rag-api's leases; scheduled jobs pass the same admission policies. | 37 | `tests/test_vault.py::test_the_ingestion_worker_has_its_own_identity`<br>`tests/test_environments.py::test_the_worker_has_its_own_identity`<br>`tests/test_environments.py::test_an_unhardened_cronjob_is_refused` |
 
 ## NIST AI RMF 1.0
 
@@ -36,14 +41,14 @@
 |---|---|
 | GOVERN 1.6 | C-CARDS |
 | GOVERN 6.1 | C-SUPPLY |
-| MANAGE 2.4 | C-DEPLOY, C-LIFECYCLE, C-OVERSIGHT |
-| MANAGE 4.1 | C-OBSERVE, C-FEEDBACK |
+| MANAGE 2.4 | C-DEPLOY, C-LIFECYCLE, C-OVERSIGHT, C-PROMOTION, C-CANARY, C-HA-DR |
+| MANAGE 4.1 | C-OBSERVE, C-FEEDBACK, C-ONLINE-EVAL |
 | MANAGE 4.3 | C-OVERSIGHT |
 | MEASURE 2.3 | C-EVAL |
-| MEASURE 2.4 | C-OBSERVE, C-FEEDBACK |
+| MEASURE 2.4 | C-OBSERVE, C-FEEDBACK, C-CANARY, C-ONLINE-EVAL |
 | MEASURE 2.5 | C-GROUND, C-EVAL |
 | MEASURE 2.6 | C-INJECTION, C-OUTPUT |
-| MEASURE 2.7 | C-AUTH, C-AUTHZ, C-STORE-ACL, C-RLS, C-CACHE, C-INJECTION, C-SECRETS, C-SUPPLY, C-BACKUP, C-LIMITS, C-RESILIENCE |
+| MEASURE 2.7 | C-AUTH, C-AUTHZ, C-STORE-ACL, C-RLS, C-CACHE, C-INJECTION, C-SECRETS, C-SUPPLY, C-BACKUP, C-LIMITS, C-RESILIENCE, C-PROMOTION, C-HA-DR, C-WORKLOAD-ID |
 | MEASURE 2.8 | C-AUDIT, C-PROMPTS, C-CARDS, C-TRANSPARENCY |
 | MEASURE 2.9 | C-GROUND, C-TRANSPARENCY |
 | MEASURE 2.10 | C-SESSION, C-PII, C-OUTPUT, C-LIFECYCLE |
@@ -55,8 +60,8 @@
 |---|---|
 | A.6.2.3 | C-PROMPTS |
 | A.6.2.4 | C-STORE-ACL, C-CACHE, C-INJECTION, C-OUTPUT, C-GROUND, C-EVAL, C-LIMITS |
-| A.6.2.5 | C-AUTH, C-RLS, C-SECRETS, C-DEPLOY |
-| A.6.2.6 | C-OBSERVE, C-FEEDBACK, C-BACKUP, C-RESILIENCE |
+| A.6.2.5 | C-AUTH, C-RLS, C-SECRETS, C-DEPLOY, C-PROMOTION, C-WORKLOAD-ID |
+| A.6.2.6 | C-OBSERVE, C-FEEDBACK, C-BACKUP, C-RESILIENCE, C-CANARY, C-ONLINE-EVAL, C-HA-DR |
 | A.6.2.7 | C-PROMPTS, C-CARDS |
 | A.6.2.8 | C-AUDIT |
 | A.7.2 | C-SESSION, C-LIFECYCLE |
@@ -64,7 +69,7 @@
 | A.7.5 | C-CARDS, C-LIFECYCLE |
 | A.7.6 | C-PII |
 | A.8.2 | C-CARDS, C-TRANSPARENCY |
-| A.8.3 | C-FEEDBACK |
+| A.8.3 | C-FEEDBACK, C-ONLINE-EVAL |
 | A.9.2 | C-AUTHZ, C-OVERSIGHT |
 | A.9.4 | C-OVERSIGHT |
 | A.10.3 | C-SUPPLY |
@@ -76,10 +81,10 @@
 | Art. 9 | C-EVAL |
 | Art. 10 | C-SESSION, C-PII, C-LIFECYCLE |
 | Art. 11 | C-PROMPTS, C-CARDS |
-| Art. 12 | C-AUDIT, C-OBSERVE |
+| Art. 12 | C-AUDIT, C-OBSERVE, C-ONLINE-EVAL |
 | Art. 13 | C-GROUND, C-CARDS, C-TRANSPARENCY |
-| Art. 14 | C-FEEDBACK, C-OVERSIGHT |
-| Art. 15 | C-AUTH, C-AUTHZ, C-STORE-ACL, C-RLS, C-CACHE, C-INJECTION, C-OUTPUT, C-GROUND, C-EVAL, C-SECRETS, C-SUPPLY, C-DEPLOY, C-BACKUP, C-LIMITS, C-RESILIENCE |
+| Art. 14 | C-FEEDBACK, C-OVERSIGHT, C-ONLINE-EVAL |
+| Art. 15 | C-AUTH, C-AUTHZ, C-STORE-ACL, C-RLS, C-CACHE, C-INJECTION, C-OUTPUT, C-GROUND, C-EVAL, C-SECRETS, C-SUPPLY, C-DEPLOY, C-BACKUP, C-LIMITS, C-RESILIENCE, C-PROMOTION, C-CANARY, C-HA-DR, C-WORKLOAD-ID |
 | Art. 50 | C-TRANSPARENCY |
 
 ## Australian Privacy Principles
@@ -91,6 +96,6 @@
 | APP 5 | C-TRANSPARENCY |
 | APP 6 | C-AUTHZ, C-PII |
 | APP 10 | C-GROUND, C-EVAL |
-| APP 11 | C-AUTH, C-AUTHZ, C-STORE-ACL, C-RLS, C-SESSION, C-CACHE, C-PII, C-INJECTION, C-OUTPUT, C-SECRETS, C-SUPPLY, C-DEPLOY, C-OBSERVE, C-LIFECYCLE, C-BACKUP, C-LIMITS |
+| APP 11 | C-AUTH, C-AUTHZ, C-STORE-ACL, C-RLS, C-SESSION, C-CACHE, C-PII, C-INJECTION, C-OUTPUT, C-SECRETS, C-SUPPLY, C-DEPLOY, C-OBSERVE, C-LIFECYCLE, C-BACKUP, C-LIMITS, C-PROMOTION, C-CANARY, C-ONLINE-EVAL, C-HA-DR, C-WORKLOAD-ID |
 | APP 12 | C-LIFECYCLE |
 | APP 13 | C-FEEDBACK, C-LIFECYCLE |
