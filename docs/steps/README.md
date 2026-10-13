@@ -42,3 +42,4 @@ Phases: **A** Workstation · **B** Model serving · **C** Data stores · **D** I
 | 28 | Vault: secrets issued on demand, short-lived and audited | G · Quality & delivery | [step-28-vault-dynamic-secrets.md](step-28-vault-dynamic-secrets.md) |
 | 29 | Kubernetes and GitOps with Argo CD | G · Quality & delivery | [step-29-kubernetes-gitops-argo-cd.md](step-29-kubernetes-gitops-argo-cd.md) |
 | 30 | The RAG core: contracts and switchable components | H · RAG core | [step-30-rag-core-contracts-and-components.md](step-30-rag-core-contracts-and-components.md) |
+| 31 | Ingestion: from any document to searchable chunks | H · RAG core | [step-31-ingestion-pipeline.md](step-31-ingestion-pipeline.md) |

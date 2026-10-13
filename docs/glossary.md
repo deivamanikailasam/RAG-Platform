@@ -52,6 +52,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Auto-auth | The OpenBao Agent feature that logs in by itself (here with AppRole), renews its token and logs in again when the token reaches its maximum age. | 28 |
 | Auto-fix | A check that changes files to fix the problem itself; you review the change and `git add` it again. | 5 |
 | Baseline (evaluation) | The summary of the last accepted evaluation run, committed in `evals/baselines/`; a new run mustn't fall below it by more than a small tolerance. | 26 |
+| Boilerplate | Text that repeats everywhere and means nothing (running headers, footers, "Page 3 of 9", cookie banners); removed before chunking so it doesn't match every search. | 31 |
 | Break-glass | Emergency super-powers (here the database superuser), used rarely, deliberately and visibly. | 23 |
 | B-tree | The default Postgres index, for exact values and ranges (an ID, a date); like a sorted phone book. | 11 |
 | Batch | Several texts sent together and embedded in one GPU pass; much faster per text than one at a time. | 8 |
@@ -80,6 +81,8 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Cask | A Homebrew package that is a normal Mac app with a window. | 1 |
 | CEL (Common Expression Language) | A small, safe expression language (no endless loops, no network calls) used by ValidatingAdmissionPolicies. | 29 |
 | Chat template | The model-specific recipe that turns a list of messages into the exact text format the model was trained on. | 7 |
+| Chunk | A piece of a document that is embedded, retrieved and cited on its own; it carries a stable id, its text, what was embedded, its access rules and metadata. | 31 |
+| Chunking strategy | The rule that decides where a document is cut into chunks: every N tokens, by paragraphs then sentences, along headings, by sentence, where the topic changes, or small children inside big parents. | 31 |
 | CI (continuous integration) | Automatically checking every change (lint, types, tests, scans) on a fresh machine, so problems are found before they're merged. | 27 |
 | Ciphertext | The scrambled, encrypted version of a value; unreadable without the right key. | 6 |
 | Claim | One field in a token's payload, such as `iss`, `sub`, `groups` or `exp`. | 16 |
@@ -112,6 +115,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Content hash | A fingerprint (here SHA-256) computed from every byte of a file; any edit, even one character or a line ending, changes it. | 24 |
 | Context propagation | Passing the trace id from one service to the next (in the `traceparent` HTTP header) so their spans join one trace. | 19 |
 | Context window | The maximum number of tokens (prompt + answer) a model can handle at once. | 7 |
+| Contextual retrieval | Having an LLM write one or two sentences placing each chunk in its document, and embedding them with the chunk (Anthropic, 2024); fewer failed retrievals for one LLM call per chunk. | 31 |
 | Contract | The agreed list of methods a kind of component must have ("a vector store can upsert, delete, search with access rules, and count"); in rag-core, a Protocol. | 30 |
 | Control plane | The parts of Kubernetes that decide (API server, etcd, scheduler, controllers), as opposed to the nodes that run the containers. | 29 |
 | Controller / reconciliation | A loop that compares desired state with actual state and fixes the difference, forever; Kubernetes is made of them, and Argo CD is one too. | 29 |
@@ -136,6 +140,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Decode | The second phase of generation: the model writes the answer one token at a time; its speed is limited by memory bandwidth. | 7 |
 | Dedicated vector database | A database built only for storing vectors and finding the nearest ones fast, with filters (Qdrant, Milvus, Weaviate), rather than a general database with a vector extension. | 12 |
 | `default` (Rego) | The value a rule takes when none of its bodies match, e.g. `default allow := false`; the building block of deny by default. | 18 |
+| Deduplication | Dropping exact repeats (the same paragraph twice) so they don't crowd out everything else in search results. | 31 |
 | Default privileges (ALTER DEFAULT PRIVILEGES) | A standing instruction that every table a given role creates from now on automatically gets certain grants, so new tables are never invisible to the app. | 11 |
 | Delete marker | With versioning on, "delete" only adds a marker that hides the object; older versions still exist until each is deleted by version ID. | 14 |
 | Delimiting | Wrapping untrusted text in clear markers (here XML-style tags like `<question>…</question>`) and telling the model that what's inside is data, not instructions. | 24 |
@@ -165,9 +170,11 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Dynamic secret | A secret created on request, for one client, with an expiry. It didn't exist before you asked, and it is gone after its lease ends. | 28 |
 | EditorConfig | A small `.editorconfig` file telling every editor the same formatting basics (indentation, line endings). | 4 |
 | Embedding / vector | A fixed-length list of numbers representing a text's meaning: a point in meaning space. | 8 |
+| Embedding cache | A memory of "this text, with this model, gave this vector", so re-ingesting unchanged chunks or repeating a query costs nothing. | 31 |
 | Embedding contract | Everything that defines how vectors were made (model + revision, dimensions, query instruction, normalisation, pooling, chunk limit); change any part and the index must be rebuilt. | 8 |
 | Encryption | Scrambling data so only someone with the right key can unscramble it. | 6 |
 | Endpoint | A specific URL path on a server, e.g. `/v1/chat/completions` or `/health`. | 7 |
+| Enrichment (ingestion) | Adding context to what is embedded for a chunk (its title and section, an LLM-written context, the questions it answers) without changing the text that is shown and cited. | 31 |
 | Entry point | A standard Python packaging hook: a package declares "my components live in this module" under `rag_core.components`, and rag-core loads them. | 30 |
 | Envelope encryption | Values are locked with a random data key, and the data key is locked separately for each recipient, so adding a person never means re-encrypting every value by hand. | 6 |
 | Environment variable | A named value handed to a program when it starts (`DB_PASSWORD=…`); fine for settings, easy to leak for secrets. | 6 |
@@ -220,14 +227,17 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Homebrew | The standard package manager ("app store for developer tools") on macOS. | 1 |
 | host.docker.internal | The address a container uses to reach programs running on the host Mac itself. | 3 |
 | Hybrid search | Running keyword (BM25) and vector search together and fusing their normalised scores; robust across exact-code and paraphrase questions. | 13 |
+| Hypothetical questions | Questions an LLM says a chunk answers, embedded with it so that how users ask and how documents state meet in the same place. | 31 |
 | ID token | The token that tells the app (not the API) who signed in: name, username, email. | 16 |
 | Idempotency | Doing a job twice has the same effect as doing it once ("upsert chunks for document X at hash Y", not "append chunks"). Required with at-least-once delivery. | 15 |
+| Idempotent upsert | Writing the same chunk twice leaves one copy, because chunk ids are stable (same document, position and text = same id). | 31 |
 | Identity provider (IdP) | The service that signs people and machines in and vouches for them with signed tokens; Keycloak in this platform. | 16 |
 | Image | The frozen blueprint a container is started from: a program plus all its dependencies. | 3 |
 | Image tag vs digest | A tag (`v1.104.0`) is a movable label; a digest (`@sha256:…`) is the exact, unchangeable fingerprint of one image. | 9 |
 | Immutability (prompt versions) | A released prompt version can never change; a change means a new version, so `name@version` always means the same text. | 24 |
 | Impact analysis | Following lineage downstream to find everything affected by a change, and who owns it (`just cards impact`). | 25 |
 | Info metric | A metric whose value is always 1 and whose labels carry facts, e.g. `rag_prompt_info{prompt, version, sha, label}`; a Prometheus convention for "what is running". | 24 |
+| Ingestion | Everything between "here is a file" and "its pieces can be searched": parse, clean, redact, chunk, enrich, embed, index. | 31 |
 | Inhibition | An Alertmanager rule that mutes some alerts while another fires: here a critical alert mutes its warning twin with the same `alertname` and `service`. | 20 |
 | In-memory key-value store | A database that keeps data in RAM and retrieves it by a key (a name). Extremely fast, but limited by memory; Valkey and Redis are examples. | 15 |
 | Infrastructure as code | Defining your environment in version-controlled files instead of setting it up by hand. | 1 |
@@ -257,6 +267,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Label (metric) | A key=value pair that identifies one slice of a metric, e.g. `outcome="error"`, `job="opa"`, `service_version="0.1.0"`. Every distinct label combination is its own time series. | 20 |
 | Label (prompt) | A movable pointer from an environment to a prompt version ("production uses version 1, staging uses version 2"), kept in `prompts/labels.yaml`. | 24 |
 | launchd | macOS's built-in service manager: starts programs at login and restarts them if they crash (agents live in `~/Library/LaunchAgents/`). | 7 |
+| Layout analysis | Working out a page's reading order, columns, tables and figures (Docling does this; plain text extraction doesn't). | 31 |
 | Lease | The ID and time to live that come with every dynamic secret. It can be renewed up to the max TTL or revoked early; when it ends, the secret is destroyed (for a database login: sessions ended, user dropped). | 28 |
 | Least privilege | Giving each identity only the access it needs and nothing more. | 10 |
 | Legal basis (GDPR) | The reason that makes processing personal data lawful (contract, legal obligation, legitimate interest…); required on every dataset card with personal data. | 25 |
@@ -282,6 +293,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | macOS Keychain | The Mac's built-in encrypted password store, unlocked by your login; home for personal tokens. | 6 |
 | maintenance_work_mem | Postgres memory for maintenance work such as building indexes; HNSW builds are much faster when the graph fits in it. | 11 |
 | Manifest (audit archive) | A small file describing one archived batch of audit events: first and last row, head hash, previous head and the segment's checksum. | 23 |
+| Manifest (ingestion) | The record of each ingested source: its content hash, the pipeline hash, how many chunks, the status and when; unchanged sources are skipped. | 31 |
 | Mapping | An OpenSearch index's schema: each field's type (`text`, `keyword`, `knn_vector` …) and analyzer. | 13 |
 | Masking hook | A function in our own process that rewrites every value (tokens, keys, emails → `****`) before it is sent to Langfuse. | 22 |
 | Master key | The gateway's root credential (`LITELLM_MASTER_KEY`); it can do everything, so it is for admins only. | 9 |
@@ -317,12 +329,14 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | --no-verify | A git flag that skips local hooks; the reason CI must repeat the same checks. | 5 |
 | Non-root container | A container whose process runs as an ordinary user (uid 10001 here), so a compromised app can't change system files or its own code. | 17 |
 | Normalisation | Scaling a vector to length 1, so cosine similarity becomes a simple dot product. | 8 |
+| Normalisation (text) | Making text uniform before chunking: ligatures and full-width characters folded (NFKC), control characters removed, hyphenated line breaks re-joined, whitespace collapsed. | 31 |
 | OAuth 2.0 / OpenID Connect (OIDC) | The standards for getting tokens. OAuth 2.0 covers access ("may this app call that API?"); OIDC adds identity (who signed in) on top. | 16 |
 | Object lock / retention (governance vs compliance) | Rules preventing deletion or overwrite of an object version until a retain-until date (WORM). Governance mode: privileged users can deliberately override; compliance mode: nobody can, not even admins. | 14 |
 | Object metadata | Extra key-value information stored with an object (content type, source URI, sha256…). | 14 |
 | Object storage / S3 API | Storing files as objects in buckets, reached over HTTP using Amazon's S3 protocol, now an industry standard spoken by AWS S3, SeaweedFS, Ceph and many more. | 14 |
 | Observability | Being able to answer new questions about a running system from the outside, using its traces, metrics and logs, without shipping new code. | 19 |
 | Observation (Langfuse) | One step inside a Langfuse trace, with a type: `chain`, `retriever`, `embedding`, `generation`, `tool`, `agent` … | 22 |
+| OCR (optical character recognition) | Reading text out of an image, such as a scanned page that has no text layer. | 31 |
 | OIDC token (CI) | A signed statement from GitHub saying "this job is repo X, workflow Y, branch Z"; Sigstore's Fulcio trusts it to issue a signing certificate. | 27 |
 | Opaque token | A token that is just a random reference, not a readable JWT; only the identity provider can say what it means, via introspection. | 17 |
 | Open core | A free (here MIT-licensed) core product plus paid Enterprise features; Langfuse's model. | 22 |
@@ -335,11 +349,14 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | OpenTelemetry | The CNCF open standard (APIs, SDKs, protocol, Collector) for producing and shipping traces, metrics and logs, supported by every major vendor. | 19 |
 | OrbStack | A lightweight macOS container runtime: Linux VM + Docker engine + Compose + single-node Kubernetes. | 3 |
 | OTLP | The OpenTelemetry protocol that carries all three signals: gRPC on port 4317, HTTP on 4318. | 19 |
+| Overlap (chunking) | Repeating the end of one chunk at the start of the next, so a thought cut at the boundary appears whole in one of them. | 31 |
 | Override (configuration) | Changing one setting for one deployment without editing the file, e.g. `RAG__RERANKER__TOP_N=5`; double underscores mean nesting, values are YAML. | 30 |
 | Package manager | A program that installs, updates and removes other software and tracks what's installed. | 1 |
 | PAP (Policy Administration Point) | Where the rules are written and changed; here Git and pull requests on `policies/`. | 18 |
 | Parent / child span | Spans nest: a request's server span is the parent of the steps inside it, which can have children of their own; this nesting draws the waterfall. | 19 |
+| Parent-child chunking (small-to-big) | Searching small child chunks for precision, then giving the model the larger parent section they belong to. | 31 |
 | Parser (LogQL) | A LogQL step such as `| json` or `| logfmt` that turns each line's text into fields you can filter on, e.g. `| json | level="ERROR"`. | 21 |
+| Parsing | Turning a file's bytes into text with structure: which part is a heading, a list, a table, page 3. | 31 |
 | Password grant (ROPC) | The "resource owner password credentials" grant, where an app collects your password and swaps it for tokens. Modern OAuth guidance says never: the app sees the password and MFA can't work. | 16 |
 | PATH | The ordered list of folders your shell searches when you type a command. First match wins. | 1 |
 | Path-style addressing | Putting the bucket name in the URL path (`http://host:8333/bucket/key`) instead of the host name; common for self-hosted S3 stores. | 14 |
@@ -352,8 +369,10 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Persistence: RDB / AOF | How an in-memory store survives restarts. RDB: periodic snapshots to disk. AOF (append-only file): a log of every write, replayed at start-up; `appendfsync everysec` loses at most about 1 s. | 15 |
 | Persona (evaluation) | A synthetic person (name, groups) an evaluation runs as, so the real access rules apply; never a real person's account. | 26 |
 | pg_dump | Postgres's logical backup tool: writes a database's structure and data to a file that `pg_restore` can load again. | 11 |
+| PII (personally identifiable information) | Information about a person (email, phone, card, tax file number, IP address…); redacted at ingestion so no index, cache or log keeps it. | 31 |
 | Pinning by SHA | Referring to an exact commit (`@3d3c42e…`) or file hash instead of a tag (`@v7`): tags can be moved to other code, commits and hashes can't. | 27 |
 | Pipeline (Collector) | One signal's path through the Collector: receivers → processors (in order) → exporters. | 19 |
+| Pipeline hash | A fingerprint of the settings that shape the index (parsers, cleaning, PII, chunker, enrichers, embedder); when it changes, every source is re-ingested. | 31 |
 | Placeholder | A slot like `{{question}}` in a prompt template that is filled in for each request; every one must be declared in `variables`. | 24 |
 | Plaintext | Readable, unencrypted text. | 6 |
 | Plugin | A component that lives in another package and is discovered at run time, so adding it needs no change to rag-core. | 30 |
@@ -394,6 +413,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Provenance (evaluation run) | The record of exactly what an evaluation measured: dataset version and SHA-256, target, prompt and model, judge, git commit and time. | 26 |
 | Provider prefix | The part of a LiteLLM `model` before the first `/` (e.g. `openai/`): which API protocol to speak to the backend. | 9 |
 | Provisioning (Grafana) | Grafana reading its data sources and dashboards from files at start-up, so they are code in Git rather than settings clicked into its database. | 20 |
+| Pseudonymisation | Replacing personal data with a keyed token (an HMAC): the same value always gives the same token, so joins and counts still work, but nobody without the key can reverse it. | 31 |
 | Pseudonymous id | A stable identifier (like a token's `sub`) that points to a person without naming them; the name is looked up elsewhere, under its own access rules. | 23 |
 | Pull request (PR) | A request to review a branch and merge it into `main`. | 4 |
 | Pull vs push (metrics) | Prometheus either fetches (scrapes) `/metrics` from a target (pull), or receives metrics sent to it, here over OTLP from the Collector (push). | 20 |
@@ -474,8 +494,10 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | SecretStr | A pydantic type that prints as `**********`; the real value needs a deliberate `.get_secret_value()`. | 6 |
 | `SECURITY DEFINER` | A Postgres function that runs with the rights of its owner, not its caller; lets rag-api append audit events without any rights on the table. | 23 |
 | Security plugin | OpenSearch's built-in TLS, users, roles and permissions; never disable it. | 13 |
+| Semantic chunking | Cutting a text where the topic changes, found where the embeddings of neighbouring sentences stop being similar. | 31 |
 | Semantic conventions | Agreed attribute names (`http.request.method`, `gen_ai.request.model`) so every tool understands the data. | 19 |
 | Semantic Versioning | MAJOR.MINOR.PATCH version numbers: breaking change → major, `feat` → minor, `fix` → patch. | 4 |
+| Sentence window | A chunking strategy that searches single sentences (precise) and gives the model the sentences around the match (context). | 31 |
 | Service (Kubernetes) | A stable name and address for a set of pods, found by labels and a selector; an ExternalName Service is just a DNS alias. | 29 |
 | Service account | A non-human identity tied to a confidential client, used with client credentials (e.g. `service-account-ingestion-worker`). | 16 |
 | Service graph | Who-calls-whom metrics (`traces_service_graph_request_total{client, server}`) that Tempo computes from client/server spans; Grafana draws them as boxes and arrows. | 21 |
@@ -520,6 +542,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Stream (Loki) | All log lines that share exactly the same set of labels; each unique label combination is a separate stream, so labels must have few values. | 21 |
 | Stream (Valkey/Redis) | An append-only log of messages, each with an increasing ID (`XADD`); with consumer groups it works as a crash-safe job queue. | 15 |
 | Streaming (SSE) | Sending an answer token by token as it is generated, over Server-Sent Events, instead of all at the end. | 9 |
+| Structure-aware chunking | Cutting along a document's own structure: never across a heading, tables and code kept whole, each chunk labelled with its heading path. | 31 |
 | Structured logging | Writing logs as JSON objects instead of free text, so they can be filtered and joined by field. | 19 |
 | Structured metadata (Loki) | Extra per-line key/value facts (such as OTLP attributes) that Loki stores and can search without turning them into labels, so they don't create new streams. | 21 |
 | Supersede | Replace an accepted ADR with a newer ADR that points back to it; the old one is never edited. | 4 |
@@ -538,6 +561,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Template (OpenBao Agent) | An agent setting that renders a secret into a file (path, permissions, format), and re-renders it when the secret changes, writing aside and renaming so readers never see half a file. | 28 |
 | Tempo | Grafana's trace store: keeps every span cheaply in blocks, finds traces by id or TraceQL, and can generate metrics from them. | 21 |
 | Test case | One question in a golden dataset, with what a good result must (and must not) contain. | 26 |
+| Text layer | The text stored inside a digital PDF; a scanned PDF is only pictures of pages and has none, so it needs OCR. | 31 |
 | text vs keyword field | `text` is analysed for full-text search; `keyword` is stored exactly, for filters and IDs. | 13 |
 | Thinking mode | Qwen models' optional hidden reasoning before the answer; better on hard questions, slower and more tokens (`enable_thinking`). | 7 |
 | Threshold | The minimum or maximum a metric must reach for a run to pass the gate, e.g. `recall@5: {min: 0.9}` or `leaked_docs: {max: 0}`. | 26 |
