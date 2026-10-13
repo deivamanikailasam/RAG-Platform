@@ -68,6 +68,17 @@ def test_self_hosted_runner_never_runs_fork_code() -> None:
             if "self-hosted" in job.get("runs-on", []):
                 assert "head.repo.full_name == github.repository" in job["if"], f"{p.name}:{name}"
                 assert job.get("environment"), f"{p.name}:{name}: needs an approval environment"
+                # skipped, not queued forever, until the Mac runner is registered
+                assert "vars.RAG_MODELS_RUNNER == 'true'" in job["if"], f"{p.name}:{name}"
+
+
+def test_ci_postgres_client_matches_the_service_container() -> None:
+    ci = load(ROOT / ".github/workflows/ci.yml")
+    image = ci["jobs"]["checks"]["services"]["postgres"]["image"]
+    major = image.split("-pg")[1].split("@")[0]
+    runs = "\n".join(s.get("run", "") for s in ci["jobs"]["checks"]["steps"])
+    assert f"postgresql-client-{major}" in runs  # pg_dump refuses to dump a newer server
+    assert f"/usr/lib/postgresql/{major}/bin" in runs
 
 
 def test_ci_runs_the_same_recipes_as_your_mac() -> None:

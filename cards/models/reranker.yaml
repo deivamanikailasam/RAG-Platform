@@ -1,0 +1,29 @@
+kind: model
+id: reranker
+title: bge-reranker-v2-m3 (reranker)
+status: approved
+owner: rag-platform
+task: reranking
+summary: >-
+  A multilingual cross-encoder (built on bge-m3) that scores how well a passage answers a query,
+  used to re-order the top search candidates (Step 8). Served by TEI.
+licence:
+  id: apache-2.0
+  url: https://huggingface.co/BAAI/bge-reranker-v2-m3
+  verified_on: 2026-10-12
+intended_use:
+  - Re-ordering the top 20-100 retrieval candidates before they reach a prompt
+out_of_scope:
+  - Filtering for permissions (only the policy, Step 18, decides who may read what)
+  - Scores as calibrated probabilities across different queries
+risks:
+  - A strong reranker can promote a confidently worded but outdated document
+training_data: Not disclosed in detail by the publisher beyond its bge-m3 origin.
+data_handling: Runs on the Mac (TEI); nothing leaves the machine.
+fallback_allowed: false            # the app skips reranking instead (Step 10)
+known_limitations:
+  - Cost grows with the number of candidates, so keep k small
+last_reviewed: 2026-10-12
+review_every_days: 180
+approvals:
+  - {by: you, date: 2026-10-12, note: "Step 8"}

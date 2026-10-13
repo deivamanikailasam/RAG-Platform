@@ -22,7 +22,12 @@ jobs:
   evals:
     name: evaluate retrieval and the staging prompt
     # NEVER run code from forks on your own machine: a fork's PR could run anything there.
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    # And only once the Mac runner is registered: set the repository variable RAG_MODELS_RUNNER=true
+    # (Settings -> Secrets and variables -> Actions -> Variables). Until then the job is skipped instead
+    # of waiting in the queue for a runner that doesn't exist (and failing after 24 hours).
+    if: >-
+      vars.RAG_MODELS_RUNNER == 'true' &&
+      (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: [self-hosted, macOS, ARM64, rag-models]
     environment: evals  # requires an approval before it runs (repository settings -> Environments)
     timeout-minutes: 90

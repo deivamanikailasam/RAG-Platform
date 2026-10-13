@@ -25,6 +25,8 @@ data/
 # ...and the database tier's MANIFESTS (Step 37: CloudNativePG cluster, backups) are code
 !deploy/data/
 models/
+# ...but model CARDS (Step 25) are documentation, not model weights
+!cards/models/
 *.gguf
 *.safetensors
 *.bin

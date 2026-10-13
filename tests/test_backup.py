@@ -25,6 +25,30 @@ def load() -> ModuleType:
     return module
 
 
+def _require_matching_pg_dump(admin: str) -> None:
+    """pg_dump refuses to dump a server newer than itself: say so plainly instead of failing deep down.
+
+    Locally this skips (install the matching client); in CI (CI=true) it fails, because CI must
+    install the client that matches the server (see .github/workflows/ci.yml).
+    """
+    import re
+    import subprocess
+
+    import psycopg
+
+    pg_dump = shutil.which("pg_dump") or "pg_dump"
+    out = subprocess.run([pg_dump, "--version"], capture_output=True, text=True, check=True).stdout  # noqa: S603
+    match = re.search(r"(\d+)(?:\.\d+)?", out)
+    client = int(match.group(1)) if match else 0
+    with psycopg.connect(admin) as conn:
+        server = conn.info.server_version // 10000
+    if client < server:
+        message = f"pg_dump {client} cannot dump a PostgreSQL {server} server: install postgresql-client-{server}"
+        if os.environ.get("CI"):
+            pytest.fail(message)
+        pytest.skip(message)
+
+
 @pytest.fixture(scope="module")
 def source_db() -> tuple[str, str]:
     admin = os.environ.get("RAG_TEST_PGVECTOR_DSN")
@@ -32,6 +56,8 @@ def source_db() -> tuple[str, str]:
         pytest.skip("needs RAG_TEST_PGVECTOR_DSN and pg_dump/pg_restore on PATH")
     import psycopg
     from psycopg.conninfo import make_conninfo
+
+    _require_matching_pg_dump(admin)
 
     from rag_core import config
     from rag_core import evaluate as ev
