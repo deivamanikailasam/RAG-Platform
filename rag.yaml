@@ -1,0 +1,20 @@
+# Which component fills each slot of a RAG pipeline, per environment (Step 30).
+# `uv run rag components` lists what can go in each slot; `uv run rag config show --profile <p>`
+# prints a profile after `extends` and RAG__<SLOT>__<PARAM> environment overrides.
+# Secrets never go here: components take the NAME of an environment variable (api_key_env).
+# Steps 31-35 add ingestion, retrieval, generation, guardrail and pipeline slots.
+version: 1
+profiles:
+  # Runs anywhere, with nothing else running: tests, CI, demos, a new laptop
+  offline:
+    token_counter: approx
+    llm: {use: scripted, default: "I don't know."}
+    embedder: {use: hashing, dimensions: 256}
+    vector_store: memory
+    keyword_index: memory-bm25
+
+  # The platform on your Mac (Compose / OrbStack): real models through the gateway
+  local:
+    extends: offline
+    llm: {use: gateway, model: qwen-fast, base_url: "http://litellm:4000/v1"}
+    judge_llm: {use: gateway, model: qwen-quality, base_url: "http://litellm:4000/v1"}
