@@ -1,7 +1,7 @@
 # Glossary
 
 Plain-English definitions of the terms introduced across the build guide, in alphabetical order.
-The Step column gives the step where the term is first explained (Appendix B of the guide); see [`docs/steps/`](steps/README.md).
+The Step column gives the step where the term is first explained (Appendix B of the guide); see [`docs/steps/`](steps/README.md). E01, E02, … are the [extension pages](extensions/README.md) added after the guide.
 
 | Term | Meaning | Step |
 |---|---|---:|
@@ -67,6 +67,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Batch | Several texts sent together and embedded in one GPU pass; much faster per text than one at a time. | 8 |
 | Bearer token | A token that works for whoever holds ("bears") it, sent as `Authorization: Bearer <token>`. Guard it like a password and never log it. | 17 |
 | Bi-encoder | A model (the embedder) that turns the query and each document into vectors separately, so document vectors can be computed once in advance and compared in milliseconds. | 8 |
+| Binary quantization | Storing each vector number as a single bit (positive or not): about 32× smaller, much less precise, so the best `oversample × k` candidates are re-scored with the full vectors. `quantization: binary` on pgvector and Qdrant. | E01 |
 | Bind mount | A host folder shared into a container; fine for config and code, slow for databases on a Mac. | 3 |
 | Blast radius | How much damage one leaked or misbehaving credential can do; small, scoped, expiring keys keep it small. | 10 |
 | Blue/green | Building the new version beside the old one, then switching traffic all at once, with the old one kept for rollback. | 12 |
@@ -74,6 +75,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | BM25 | The standard keyword relevance formula: scores rise with how often query words appear in a document (term frequency), how rare they are overall (inverse document frequency) and how short the document is, with diminishing returns for repeats. | 13 |
 | Boilerplate | Text that repeats everywhere and means nothing (running headers, footers, "Page 3 of 9", cookie banners); removed before chunking so it doesn't match every search. | 31 |
 | Bootstrap (temporary) admin | The first Keycloak administrator created at start-up from environment variables (`temp-admin`), only to create a real, MFA-protected admin and then be deleted. | 16 |
+| Borda count | A fusion method that treats each ranked list as a vote: first place gets N points, second N−1, and so on; the points are added up. `fusion: borda`. | E01 |
 | Branch | A separate line of work (a draft) where you change things without touching `main`. | 4 |
 | Branch protection / ruleset | GitHub settings that block direct pushes to `main` and require PRs, checks and signed commits. | 4 |
 | Break glass | The recorded emergency path around the normal rules, e.g. `just promote prod sha256:… "INC-1234: why"` skips the gates but writes the reason into the commit and still needs review. | 37 |
@@ -120,6 +122,8 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | CODEOWNERS | A GitHub file naming who must review changes to which folders. | 4 |
 | Collection (Qdrant) | Qdrant's equivalent of a table: a set of points sharing vector settings. | 12 |
 | Collector (OpenTelemetry) | A service that receives, processes and exports telemetry; our single governance point that limits memory, scrubs secrets, redacts values, labels and batches (`otel-collector`). | 19 |
+| CombMNZ | A fusion method: CombSUM multiplied by the number of lists that found the item, so agreement between retrievers counts strongly. `fusion: combmnz`. | E01 |
+| CombSUM | A fusion method: each list's scores normalised (min-max, z-score or none), then added up per item. `fusion: combsum`. | E01 |
 | Command category (Valkey) | A named group of commands used in ACLs, e.g. `@dangerous` (FLUSHALL, KEYS, CONFIG, DEBUG…) or `@admin`; `+@all -@dangerous` means everything except those. | 15 |
 | Command Line Tools | Apple's free kit of basic developer programs: compiler, `make`, `git`, system headers. | 1 |
 | Commit | A save point in git history, with a message explaining what changed and why. | 4 |
@@ -201,27 +205,32 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | direnv | A tool that loads a project's settings automatically when you enter its folder. | 1 |
 | Disaster recovery (DR) | Getting back after something high availability can't absorb: a region lost, or data destroyed by mistake; here a point-in-time restore into a new cluster, practised monthly. | 37 |
 | Discovery document | The `/.well-known/openid-configuration` page listing an identity provider's issuer, endpoints and signing-key (JWKS) address. | 16 |
+| Distance metric (similarity metric) | How "close" two vectors are measured: cosine (angle), dot product (angle and length), L2 (straight-line distance) or L1 (sum of differences). Must match what the embedding model was trained for; part of the embedding contract. `metric:` on every vector store. | E01 |
 | Distance operator | pgvector's comparison symbols: `<=>` cosine distance, `<#>` negative inner product, `<->` Euclidean (L2), `<+>` L1. | 11 |
 | Distributed lock | A short-lived "I'm working on this" marker shared by all workers (`SET key token NX PX 30000`): only one holder, expires on its own, released only with the owner's token. | 15 |
 | Docker Compose | A file (`compose.yaml`) listing many containers and how they connect; `docker compose up` starts them all. | 3 |
 | Docker engine / CLI | The engine runs containers inside the VM; the `docker` command is how you talk to it. | 3 |
+| Dot product (inner product) | Multiply two vectors number by number and add up: large when they point the same way AND are long. Equals cosine similarity for unit-length vectors. `metric: dot`. | E01 |
 | Downstream | Everything that depends on a component, directly or through others; what an impact analysis lists. | 25 |
 | Drift | When the dependency list (`pyproject.toml`) and the lockfile (`uv.lock`) no longer match; `uv sync --locked` catches it. | 2 |
 | Dual logging | Docker keeping a local copy of a container's recent output even when a remote logging driver (like `fluentd`) ships it elsewhere, so `docker compose logs` keeps working. | 21 |
 | Dynamic secret | A secret created on request, for one client, with an expiry. It didn't exist before you asked, and it is gone after its lease ends. | 28 |
 | EditorConfig | A small `.editorconfig` file telling every editor the same formatting basics (indentation, line endings). | 4 |
+| ef_search / ef_construction | HNSW's candidate-list sizes: `ef_construction` at build time (graph quality vs build time), `ef_search` at query time (recall vs latency). Higher = better recall, slower. | E01 |
 | Embedding cache | A memory of "this text, with this model, gave this vector", so re-ingesting unchanged chunks or repeating a query costs nothing. | 31 |
 | Embedding contract | Everything that defines how vectors were made (model + revision, dimensions, query instruction, normalisation, pooling, chunk limit); change any part and the index must be rebuilt. | 8 |
 | Embedding / vector | A fixed-length list of numbers representing a text's meaning: a point in meaning space. | 8 |
 | Encryption | Scrambling data so only someone with the right key can unscramble it. | 6 |
 | Endpoint | A specific URL path on a server, e.g. `/v1/chat/completions` or `/health`. | 7 |
 | Enrichment (ingestion) | Adding context to what is embedded for a chunk (its title and section, an LLM-written context, the questions it answers) without changing the text that is shown and cited. | 31 |
+| Ensemble retriever | Several retrievers (dense, keyword, another collection, another model) run in parallel and their lists fused with per-member weights. `retriever: {use: ensemble, members: […]}`. | E01 |
 | Entry point | A standard Python packaging hook: a package declares "my components live in this module" under `rag_core.components`, and rag-core loads them. | 30 |
 | Envelope encryption | Values are locked with a random data key, and the data key is locked separately for each recipient, so adding a person never means re-encrypting every value by hand. | 6 |
 | Environment parity | Staging is built from the same parts as production (same base, same production component), so "it worked in staging" means something. | 37 |
 | Environment variable | A named value handed to a program when it starts (`DB_PASSWORD=…`); fine for settings, easy to leak for secrets. | 6 |
 | Error budget | The amount of failure an SLO allows: with 99% of searches succeeding over 28 days, 1% may fail. Budget left: ship features; budget burning: prioritise reliability. | 20 |
 | etcd | The key-value database where Kubernetes stores every object. | 29 |
+| Euclidean (L2) distance | The straight-line distance between two vectors' tips; smaller = more similar. Reported here as 1 / (1 + distance) so higher is better. `metric: l2`. | E01 |
 | Evaluation (eval) | Running a system on test cases and scoring the results. | 26 |
 | Eviction / maxmemory policy | What a memory-capped store deletes when it is full. `volatile-lru` removes the least-recently-used keys that have a TTL; `allkeys-lru` may remove any key, including queued jobs. | 15 |
 | Evidence (compliance) | The proof that a control works: a file or a test that CI runs. The register names it as `path::test_name`, and the CI check fails if it disappears. | 36 |
@@ -244,6 +253,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | False positive (guards) | An ordinary request wrongly stopped by a guard; measured as the false positive rate by `rag eval-guards` and gated in CI as closely as the catch rate. | 34 |
 | FileSecret | A secret read from its file on every use, so a rotated key is picked up without a restart. | 32 |
 | FinOps | The practice of making technology spend visible, attributed to teams, and managed against budgets; AI FinOps applies it to model usage. | 10 |
+| Flat (exact) index | No index at all: every vector is compared with the query. Perfect recall, slow on large collections. `index_type: flat`. | E01 |
 | `for` (alert duration) | How long an alert's condition must stay true before it fires (`for: 2m`). Stops a single wobbly reading from paging anyone. | 20 |
 | Formatter | A tool (e.g. `ruff format`) that rewrites code layout into one consistent style without changing what it does. | 5 |
 | Formula | A Homebrew package that is a command-line tool. | 1 |
@@ -374,6 +384,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Luhn check | A simple checksum on card numbers; used to avoid redacting random digit strings that aren't cards. | 31 |
 | macOS Keychain | The Mac's built-in encrypted password store, unlocked by your login; home for personal tokens. | 6 |
 | maintenance_work_mem | Postgres memory for maintenance work such as building indexes; HNSW builds are much faster when the graph fits in it. | 11 |
+| Manhattan (L1) distance | The sum of the absolute differences between two vectors, like walking city blocks; reported as 1 / (1 + distance). `metric: l1` (pgvector ≥ 0.7, Qdrant; OpenSearch only exact). | E01 |
 | Manifest (audit archive) | A small file describing one archived batch of audit events: first and last row, head hash, previous head and the segment's checksum. | 23 |
 | Manifest (ingestion) | The record of each ingested source: its content hash, the pipeline hash, how many chunks, the status and when; unchanged sources are skipped. | 31 |
 | Mapping | An OpenSearch index's schema: each field's type (`text`, `keyword`, `knn_vector` …) and analyzer. | 13 |
@@ -386,6 +397,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Memory bandwidth | How fast data moves between memory and the GPU; each decoded token reads the model's weights, so it is the speed limit for tokens per second. | 7 |
 | Merkle tree | A tree of hashes in which each parent hashes its children; allows small proofs that an entry is included in a large log. | 23 |
 | Mermaid | A text format for diagrams that GitHub and many wikis render automatically; `docs/cards/README.md` draws the lineage with it. | 25 |
+| Metadata filter | A condition on a document's or chunk's metadata (department = hr, updated ≥ 2025-01-01, tags contain leave) that narrows a search. Here a typed expression applied inside each store, always ANDed with the permission filter. | E01 |
 | Metric | A number measured over time (requests per second, latency, errors); answers "is something wrong?". | 19 |
 | MFA / TOTP | Multi-factor authentication: a second proof besides the password. TOTP is the six-digit, time-based code from an authenticator app. | 16 |
 | Migration | A versioned, reviewable script that changes the database structure, applied in order and recorded in the database. | 11 |
@@ -446,6 +458,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Overlap (chunking) | Repeating the end of one chunk at the start of the next, so a thought cut at the boundary appears whole in one of them. | 31 |
 | Overlay (Kustomize) | One small file per environment that layers names, sizes and settings on top of a shared base (and reusable components). | 37 |
 | Override (configuration) | Changing one setting for one deployment without editing the file, e.g. `RAG__RERANKER__TOP_N=5`; double underscores mean nesting, values are YAML. | 30 |
+| Oversampling | Fetching more candidates than needed (e.g. 4 × k) from a fast, approximate or compressed search so that rescoring with the full vectors can still find the true top k. | E01 |
 | Package manager | A program that installs, updates and removes other software and tracks what's installed. | 1 |
 | Packaged profiles / include | The platform's tested `rag.yaml` profiles shipped inside rag-core (`rag_core/profiles/platform.yaml`); a project includes and extends them and writes only what differs. | 38 |
 | PAP (Policy Administration Point) | Where the rules are written and changed; here Git and pull requests on `policies/`. | 18 |
@@ -535,6 +548,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Query decomposition | An LLM splits a compound question ("X and Y?") into simpler sub-questions that are each searched, so each part finds its own document. | 32 |
 | Query instruction | A one-sentence task description prefixed to queries (not documents) for instruction-aware embedders: `Instruct: {task}\nQuery:{query}`. | 8 |
 | Query rewriting | Turning the question into a better search query; for a follow-up ("how do I fix it?"), rewriting it as a standalone question using the conversation. | 32 |
+| Query router | A component that sends each question to the right index, profile or retriever (by keywords, or by asking an LLM to pick from descriptions). `retriever: {use: router}`. | E01 |
 | Query transformation | Changing what is searched for before retrieval: expanding acronyms, rewriting, paraphrasing, imagining an answer, splitting or generalising the question. | 32 |
 | Quorum (replication) | "Any N of the replicas" must confirm: with `method: any, number: 1`, a commit waits for one replica, whichever is fastest. | 37 |
 | RAG architecture | The overall design of how a RAG system gathers context and checks its answer (naive, advanced, corrective, agentic…); here, the component in the `pipeline` slot. | 35 |
@@ -566,6 +580,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Rego | OPA's policy language: you write rules that become true or produce values, and OPA evaluates them against `input` and `data`. | 18 |
 | Regression | A change that makes a metric worse. | 26 |
 | Relational database / table / row / column | Data stored in tables; each row is a record (one chunk), each column a field (its text, its vector). | 11 |
+| Relative score fusion | Weaviate's name for min-max normalising each result list and adding them with weights (alpha for vectors, 1 − alpha for keywords); the same maths as `weighted`. `fusion: relative-score`. | E01 |
 | Remote / origin | A copy of the repository on a server (GitHub); `origin` is its default nickname. | 4 |
 | Remote write | The Prometheus protocol for pushing samples into a Prometheus server (enabled with `--web.enable-remote-write-receiver`); Tempo uses it to deliver span metrics and the service graph. | 21 |
 | Renew (lease) | Extending a lease before it expires, up to its max TTL. For our database logins a renewal also moves the Postgres VALID UNTIL forward. | 28 |
@@ -583,6 +598,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Restore drill | Actually restoring a backup into a scratch database and checking it (checksum, row counts), on a schedule: a backup never restored is a hope. | 36 |
 | Retention | How long a store keeps data before deleting it: 7 days for traces (Tempo `block_retention`) and logs (Loki `retention_period` plus `compactor.retention_enabled`). | 21 |
 | Retention rule | How long an indexed source may stay after it was last ingested, matched by a glob on its URI; `rag retention` reports, then (with `--apply`) deletes what outlived it. | 36 |
+| Retrieval-result cache | A cache of search results (not answers), keyed by the person's access, the question, the filter, k, the settings and an index epoch, so a repeated search skips embedding, stores and reranker. The `search_cache` slot. | E01 |
 | Retrieve-then-rerank | The two-stage search pattern: a fast embedder finds ~50 candidates, then a slow, precise reranker picks the best few for the LLM. | 8 |
 | Retry | Trying the same model again after a temporary error, before any fallback. | 10 |
 | Reverse proxy | A server that sits in front of other servers, receives every request, applies rules and forwards it. | 9 |
@@ -639,6 +655,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | SecretStr | A pydantic type that prints as `**********`; the real value needs a deliberate `.get_secret_value()`. | 6 |
 | `SECURITY DEFINER` | A Postgres function that runs with the rights of its owner, not its caller; lets rag-api append audit events without any rights on the table. | 23 |
 | Security plugin | OpenSearch's built-in TLS, users, roles and permissions; never disable it. | 13 |
+| Self-query | Extracting a metadata filter from the question itself ("HR policies updated after 2025" → department = hr, updated ≥ 2026-01-01) against a declared schema, by rules or an LLM whose output is checked. `query_transformer: self-query`. | E01 |
 | Self-reflective RAG (Self-RAG) | The system critiques its own answer against the sources and retrieves more and regenerates if it falls short; the `self-reflective` architecture. | 35 |
 | Semantic chunking | Cutting a text where the topic changes, found where the embeddings of neighbouring sentences stop being similar. | 31 |
 | Semantic conventions | Agreed attribute names (`http.request.method`, `gen_ai.request.model`) so every tool understands the data. | 19 |

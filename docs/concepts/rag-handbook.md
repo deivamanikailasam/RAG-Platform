@@ -9,7 +9,7 @@
 > swappable part. This handbook explains each technique in everyday terms, when to pick it, what it
 > costs, what else exists, and the exact line in [`rag.yaml`](../../rag.yaml) that switches it.
 
-Every component listed here is in the generated [catalogue](../catalogue.md) (94 components in 24
+Every component listed here is in the generated [catalogue](../catalogue.md) (103 components in 25
 kinds, with every setting and default). The steps that built them: [30](../steps/step-30-rag-core-contracts-and-components.md)
 (core), [31](../steps/step-31-ingestion-pipeline.md) (ingestion), [32](../steps/step-32-retrieval-and-ranking.md)
 (retrieval), [33](../steps/step-33-augmentation-and-generation.md) (answers),
@@ -217,6 +217,24 @@ the same conformance tests, including access-leak tests.
 
 **Switch:** `retriever: {use: hybrid, candidates: 30}`; engines via the `local-engines` profile.
 **Choose** Postgres first; add Qdrant/OpenSearch when scale or keyword features demand it.
+
+**Similarity metric and index settings** ([extension 01](../extensions/01-retrieval-math-filters-fusion.md)). Every vector store takes
+`metric: cosine | dot | l2 | l1` (use what the embedding model was trained for; cosine for this
+platform's model), `index_type: hnsw | flat | ivfflat`, `hnsw_m`, `ef_construction`, `ef_search`, and
+quantization where supported (pgvector `binary`, Qdrant `scalar`/`binary`, with rescoring). Scores
+always mean "higher = more similar". The store refuses to search an index built for another metric or
+size (the embedding contract); `rag index ddl` prints the index a non-cosine collection needs.
+
+**Metadata filters** narrow a search to documents whose metadata match: `{"department": "hr",
+"updated": {"gte": "2025-01-01"}}` with eq, ne, in, nin, gt/gte/lt/lte, range, exists, and/or/not.
+Each store applies them inside its own query, always ANDed with the permission filter (a filter can
+only narrow). Use `rag search --filter department=hr`, `"filter"` in `/v1/search` and `/v1/answer`,
+or `filters=` in the SDK.
+
+| Retriever | Use |
+|---|---|
+| `ensemble` | Several retrievers (another collection, model or profile) in parallel, fused with per-member weights |
+| `router` | One index per department/language/product: keyword rules or an LLM pick the route |
 **Alternatives:** learned sparse (SPLADE), late interaction (ColBERT), engine-native hybrid queries
 (ADR-0032's "revisit when").
 
@@ -230,7 +248,13 @@ Dense and keyword scores are on different scales; you can't add them. Fusion com
 | `weighted` | Min-max normalised scores, weighted sum | You've measured that one side deserves more (`weights: {dense: 0.5, sparse: 0.5}`) |
 | `dbsf` | Distribution-based (mean ± 3 std devs), as in Qdrant | Score distributions differ a lot |
 
+| `relative-score` | Same maths as `weighted`, set with one `alpha` (Weaviate's relative score fusion) | Tuning dense vs keyword with one number |
+| `combsum` | Normalised scores summed (`normalize`: minmax, zscore or none) | Agreement and score size both matter |
+| `combmnz` | CombSUM × number of lists that found the chunk | Several similar retrievers voting (an ensemble) |
+| `borda` | Points by position (N, N−1, …) | Ranks only, more weight to mid-list than RRF |
+
 **Switch:** `fusion: {use: weighted, weights: {dense: 1, sparse: 2}}` for code-heavy content.
+Comparison and examples: [extension 01](../extensions/01-retrieval-math-filters-fusion.md#3-fusion-the-result-cache-and-the-ensemble).
 
 ## 10. Reranking and post-processing
 
@@ -275,6 +299,7 @@ Changing the *question* before searching.
 | `decompose` | Splits compound questions | n calls | "X and Y?" questions |
 | `step-back` | Adds a more general question | n calls | Questions needing principles |
 | `chain` | Several in order (e.g. rewrite, then multi-query) | Sum | Combining |
+| `self-query` | Pulls a metadata filter out of the question ("HR policies updated after 2025") against a declared schema; rules offline or an LLM checked against the schema; retries without it if nothing matches | Free (rules) / 1 call (llm) | Users write conditions into questions |
 
 **Switch:** `query_transformer: {use: rewrite, llm_slot: llm}`; for one run
 `RAG__QUERY_TRANSFORMER__USE=multi-query`. The `llm` slot is the fast model (`qwen-fast`).
@@ -359,6 +384,11 @@ settings, prompt, model, and an **index epoch** bumped by every ingestion or acc
 with different access never share an answer and a changed document empties the cache at once.
 **Switch:** `cache: {use: valkey, …}`, `cache: none`. Keep `semantic` off for regulated advice; measure
 false hits first.
+
+**Retrieval-result cache** (`search_cache` slot, [extension 01](../extensions/01-retrieval-math-filters-fusion.md)): the same search, by someone with
+the same access, with the same filter and k, against the same index epoch, returns the stored hits
+(no embedding call, no store round trips, no reranker). `memory` per process, `valkey` shared by
+replicas; invalidated by every ingestion change like the answer cache.
 
 ## 17. Guardrails
 
@@ -459,6 +489,11 @@ ingesting the handbook. In production: online evaluation per release
 | Repeated questions (help desk) | `valkey` exact cache; `semantic` only after measuring |
 | Model outage / offline demo | `extractive` generator |
 | Large volumes | More workers on the Valkey stream; Qdrant/OpenSearch |
+| Embedding model trained for inner product / L2 | `metric: dot` / `l2` on the vector store, a new collection, `rag index ddl` |
+| "Only HR documents from this year" | `filter` in the request; `self-query` when users type it into the question |
+| One index per department | `router` retriever |
+| Search a second collection or model too | `ensemble` retriever with `combmnz` or `rrf` |
+| Repeated identical searches | `search_cache: valkey` |
 
 See also: [glossary](../glossary.md) for every term, [catalogue](../catalogue.md) for every setting,
 [architecture overview](../architecture/overview.md) for where each stage runs.
