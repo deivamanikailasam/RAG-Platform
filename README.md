@@ -27,4 +27,7 @@ See [docs/adr](docs/adr/README.md).
 
 ## Build guide
 - Step-by-step write-ups of each chapter: [docs/steps/README.md](docs/steps/README.md)
+- Every file and command in one place (Appendix A): [docs/reference.md](docs/reference.md)
+- Plain-English glossary (Appendix B): [docs/glossary.md](docs/glossary.md)
+- What was checked against the guide: [docs/coverage-audit.md](docs/coverage-audit.md)
 - The source build guide (PDF): [docs/source/](docs/source/)
