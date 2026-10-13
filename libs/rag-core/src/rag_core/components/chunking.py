@@ -50,6 +50,43 @@ def _filterable(value: Any) -> bool:
     return isinstance(value, scalar)
 
 
+SECTION_NUMBER = re.compile(
+    r"^(?:(?:section|sec\.|chapter|part|clause|article|appendix|annex|§)\s*)?(\d+(?:\.\d+)*|[A-Z](?:\.\d+)*)(?=[.):]?\s|[.):]?$)",
+    re.IGNORECASE,
+)
+
+
+def section_number(heading: str) -> str | None:
+    """ "4.2 Parental leave" -> "4.2"; "Section 3: Pay" -> "3"; "Appendix B" -> "B"; else None."""
+    m = SECTION_NUMBER.match(heading.strip())
+    if not m:
+        return None
+    num = m.group(1)
+    # a lone letter only counts after a word like "Appendix" ("A guide to…" is not section A)
+    if num.isalpha() and not re.match(r"^(?:section|chapter|part|appendix|annex)\b", heading, re.I):
+        return None
+    return num.rstrip(".").upper() if num.isalpha() else num.rstrip(".")
+
+
+SECTION_KEYS = ("section", "heading", "section_path", "section_numbers")
+
+
+def section_meta(path: list[str]) -> dict[str, Any]:
+    """Where a chunk sits (extension 02), recorded so a filter can pick a section: `section`
+    "Leave > Parental leave" (the path), `heading` "Parental leave" (the nearest heading),
+    `section_path` ["Leave", "Leave > Parental leave"] (every enclosing section, so
+    `{"section_path": "Leave"}` matches the whole chapter) and `section_numbers` ["4", "4.2"]
+    when the headings are numbered."""
+    if not path:
+        return {"section": ""}
+    meta: dict[str, Any] = {"section": " > ".join(path), "heading": path[-1],
+                            "section_path": [" > ".join(path[: i + 1]) for i in range(len(path))]}  # fmt: skip
+    numbers = [n for n in (section_number(h) for h in path) if n]
+    if numbers:
+        meta["section_numbers"] = numbers
+    return meta
+
+
 class _Base:
     def __init__(self, counter: Any) -> None:
         self.counter = counter
@@ -192,6 +229,8 @@ class StructureChunker(_Base):
                     cur = [header]  # repeat the header: each part of a table stays readable
                 cur.append(r)
             return [*out, "\n".join(cur)]
+        if e.kind == "code":  # code is cut between lines, never mid-statement by a sentence rule
+            return self._windows(e.text.split("\n"), self.p.max_tokens, 0, "\n")
         return self._windows(
             sentences(e.text) or [e.text], self.p.max_tokens, self.p.overlap_tokens
         )
@@ -214,7 +253,7 @@ class StructureChunker(_Base):
                     continue
             joined_last = False
             merged.append((path, list(texts)))
-        pieces = [(t, {"section": " > ".join(path)}) for path, texts in merged for t in texts]
+        pieces = [(t, section_meta(path)) for path, texts in merged for t in texts]
         return self._make(document, pieces)
 
 
@@ -311,8 +350,8 @@ class ParentChildChunker(_Base):
             for t in self._windows(
                 sentences(parent.text) or [parent.text], self.p.child_tokens, self.p.child_overlap
             ):
-                pieces.append((t, {"parent_id": parent.id, "parent_text": parent.text,
-                            "section": parent.metadata.get("section", "")}))  # fmt: skip
+                pieces.append((t, {"parent_id": parent.id, "parent_text": parent.text, "section": "",
+                            **{k: v for k, v in parent.metadata.items() if k in SECTION_KEYS}}))  # fmt: skip
         chunks = self._make(document, pieces)
         return [replace(c, parent_id=str(c.metadata["parent_id"])) for c in chunks]
 

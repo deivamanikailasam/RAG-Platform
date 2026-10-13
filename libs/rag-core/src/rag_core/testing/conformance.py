@@ -315,3 +315,95 @@ def check_metrics(make: Callable[[Any], Any], dims: int = 4) -> None:
             assert math.isclose(h.score, exact[n], rel_tol=2e-2, abs_tol=2e-3), (
                 f"{metric}: score of {n} is {h.score}, expected {exact[n]} (higher = more similar)"
             )
+
+
+# ---------------------------------------------------------------- extension 02
+
+
+def sample_document() -> Any:
+    """A small structured document: a title, numbered sections, a subsection, a table."""
+    from rag_core.types import Document, Element
+
+    els = (
+        Element("title", "Leave policy", level=1),
+        Element("paragraph", "All staff accrue leave from their first day of work."),
+        Element("heading", "4 Leave types", level=2),
+        Element("heading", "4.1 Annual leave", level=3),
+        Element(
+            "paragraph",
+            "Full-time staff get 20 days of annual leave per year. "
+            "Leave must be approved by your manager. Book it in the HR portal.",
+        ),
+        Element("heading", "4.2 Parental leave", level=3),
+        Element(
+            "paragraph",
+            "Parental leave is 18 weeks at full pay. It can start up to six "
+            "weeks before the due date. Partners get four weeks.",
+        ),
+        Element("table", "| Type | Weeks |\n| Primary carer | 18 |\n| Partner | 4 |"),
+        Element("heading", "5 Public holidays", level=2),
+        Element("paragraph", "Public holidays are paid. Working on one earns a day in lieu."),
+    )
+    return Document("doc://policy", "Leave policy", els, "sha-policy", Access("internal", ("hr",)))
+
+
+def check_chunker(chunker: Any, document: Any = None) -> None:
+    """A chunker (Step 31) returns non-empty chunks of the document, with stable ids (the same
+    input gives the same ids: re-ingesting is idempotent), positions in order, the document's
+    access copied to every chunk, and the document's words all still findable somewhere."""
+    doc = document or sample_document()
+    chunks = chunker.chunk(doc)
+    assert chunks, "no chunks"
+    assert all(c.text.strip() for c in chunks), "empty chunk"
+    assert all(c.document_uri == doc.uri for c in chunks)
+    assert all(c.access == doc.access for c in chunks), (
+        "every chunk must carry the document's access"
+    )
+    assert len({c.id for c in chunks}) == len(chunks), "chunk ids must be unique"
+    assert [c.id for c in chunker.chunk(doc)] == [c.id for c in chunks], "ids must be stable"
+    assert [c.index for c in chunks] == sorted(c.index for c in chunks), "indexes in order"
+    assert all(c.token_count > 0 for c in chunks)
+    from rag_core.text import content_words
+
+    seen = {
+        w for c in chunks for w in content_words(c.text + " " + str(c.metadata.get("window", "")))
+    }
+    lost = {w for e in doc.elements for w in content_words(e.text)} - seen
+    assert len(lost) <= 3, f"the chunks lost these words of the document: {sorted(lost)[:10]}"
+
+
+def check_compressor(compressor: Any) -> None:
+    """A compressor (extension 02) only shortens or drops what it is given: same ids, documents
+    and access, never a chunk it wasn't given, never longer, best kept for the question."""
+    from rag_core.types import Query
+
+    chunks = sample_chunks()
+    long = Chunk("long", "doc://leave", 5, "Parental leave is 18 weeks at full pay. The office "
+                 "café opens at 8 am. Deployments use Argo CD.", 20, Access("internal", ("hr",)))  # fmt: skip
+    hits = [ScoredChunk(c, 1.0 - i / 10) for i, c in enumerate([long, *chunks])]
+    out = compressor.compress(Query("how many weeks of parental leave", ALICE), hits)
+    given = {h.chunk.id: h.chunk for h in hits}
+    assert out, "a compressor must not drop every chunk that answers the question"
+    for h in out:
+        orig = given.get(h.chunk.id)
+        assert orig is not None, "a compressor must only return chunks it was given"
+        assert h.chunk.document_uri == orig.document_uri
+        assert h.chunk.access == orig.access
+        assert len(h.chunk.text) <= len(orig.text), "compression must not lengthen a chunk"
+    assert len({h.chunk.id for h in out}) == len(out), "no duplicates"
+    assert any("18 weeks" in h.chunk.text for h in out), "the answer must survive compression"
+    assert compressor.compress(Query("anything", ALICE), []) == []
+
+
+def check_sparse_embedder(embedder: Any) -> None:
+    """A sparse embedder (extension 02): {id: weight} with positive weights; texts sharing words
+    share ids; a model name; and the idf flag the index needs."""
+    docs = embedder.embed_sparse_documents(["annual leave policy", "deployment pipeline"])
+    assert len(docs) == 2, "one sparse vector per text"
+    assert all(docs), "a text with words must have a non-empty sparse vector"
+    assert all(isinstance(i, int) and w > 0 for d in docs for i, w in d.items())
+    q = embedder.embed_sparse_query("annual leave")
+    assert set(q) & set(docs[0]), "a query must share ids with a text that has its words"
+    assert not set(q) & set(docs[1]) or len(set(q) & set(docs[0])) > len(set(q) & set(docs[1]))
+    assert embedder.model, "a sparse embedder must name its model"
+    assert isinstance(embedder.idf, bool)
