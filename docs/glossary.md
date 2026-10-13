@@ -246,6 +246,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | .gitignore | A "do not pack" list of files git must never track (secrets, `.venv`, data, models). | 4 |
 | GitOps | Git holds the declarative desired state; an agent in the cluster pulls it and continuously reconciles the cluster to it (OpenGitOps principles). | 29 |
 | Golden dataset | Test cases with known good answers (or expected documents), written and checked by people, versioned and pinned by hash. | 26 |
+| Golden path / paved road | The supported, easiest way to build a certain kind of system, with the right defaults built in; here, the project template on a versioned rag-core. | 38 |
 | Graceful degradation | Continuing with reduced quality or features instead of failing completely, e.g. skipping reranking and flagging the answer when the reranker is down. | 10 |
 | Grant / flow | A standard recipe for getting a token: authorization code + PKCE (web apps), device flow (CLIs), client credentials (machines). The password grant (ROPC) is switched off. | 16 |
 | GraphRAG (local and global search) | Using a knowledge graph to find related information: local search follows the entities near the question (built in here as `graph`); global search summarises whole communities of entities to answer "what are the main themes?". | 35 |
@@ -284,6 +285,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Inhibition | An Alertmanager rule that mutes some alerts while another fires: here a critical alert mutes its warning twin with the same `alertname` and `service`. | 20 |
 | In-memory key-value store | A database that keeps data in RAM and retrieves it by a key (a name). Extremely fast, but limited by memory; Valkey and Redis are examples. | 15 |
 | Infrastructure as code | Defining your environment in version-controlled files instead of setting it up by hand. | 1 |
+| Inner source | Open-source habits inside a company: anyone can propose changes to shared code (here, project teams contribute components back to rag-core by pull request). | 38 |
 | `input` vs `data` (Rego) | `input` holds the facts about this one request (who, which action, which documents); `data` holds standing facts loaded with the policy, such as `data.json` mappings. | 18 |
 | Instrumentation (automatic vs manual) | Code that creates telemetry: libraries that make spans for you (HTTP, SQL) versus spans you add for your own logic (retrieval, policy decisions). | 19 |
 | Internal user | A user stored inside OpenSearch's own security index (here `rag_search`, `rag_indexer`). | 13 |
@@ -430,7 +432,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Pipeline hash | A fingerprint of the settings that shape the index (parsers, cleaning, PII, chunker, enrichers, embedder); when it changes, every source is re-ingested. | 31 |
 | Placeholder | A slot like `{{question}}` in a prompt template that is filled in for each request; every one must be declared in `variables`. | 24 |
 | Plaintext | Readable, unencrypted text. | 6 |
-| Plugin | A component that lives in another package and is discovered at run time, so adding it needs no change to rag-core. | 30 |
+| Plugin | A component that lives in another package and is discovered at run time, so adding it needs no change to rag-core; also loaded from modules named in `RAG_PLUGINS` (Step 38). | 30 |
 | Pod Security Standards | Kubernetes' built-in profiles (privileged, baseline, restricted), enforced per namespace by a label. | 29 |
 | Pod | One or more containers that run together and share network and volumes; the unit Kubernetes schedules. | 29 |
 | PodDisruptionBudget | "Never voluntarily take away more than this many pods", e.g. during node maintenance. | 29 |
@@ -454,6 +456,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Profile (rag.yaml) | A named set of component choices (`offline`, `local`, …); `extends` copies another profile and changes some parts. | 30 |
 | Progressive delivery | Releasing a change gradually with automatic checks at each step (canaries, analysis), instead of to everyone at once. | 37 |
 | Project and API keys (Langfuse) | A Langfuse project holds traces; its public key (`pk-lf-…`) identifies it and its secret key (`sk-lf-…`) authorises writes. | 22 |
+| Project template, scaffolding | A generator that creates a new project's files from a few answers (`templates/rag-project`, run with Copier); `copier update` re-applies it later. | 38 |
 | Projected service account token | A short-lived token the kubelet writes into a pod for one audience only (here `openbao`, 10 minutes) and refreshes automatically. | 29 |
 | Promotion (deployment) | Moving a tested, signed build to an environment; here a one-line digest change by pull request (`just promote`). | 29 |
 | Promotion / rollback | Moving a prompt label to a newer version / back to an older one: a one-number change in `labels.yaml`, reviewed as a pull request. | 24 |
@@ -474,6 +477,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Provisioning (Grafana) | Grafana reading its data sources and dashboards from files at start-up, so they are code in Git rather than settings clicked into its database. | 20 |
 | Pseudonymisation | Replacing personal data with a keyed token (an HMAC): the same value always gives the same token, so joins and counts still work, but nobody without the key can reverse it. | 31 |
 | Pseudonymous id | A stable identifier (like a token's `sub`) that points to a person without naming them; the name is looked up elsewhere, under its own access rules. | 23 |
+| Public API | The parts of a library others rely on, so changing them breaks their code; for rag-core: contracts, types, the SDK, the CLI, component names and settings, the rag.yaml format and the packaged profiles. | 38 |
 | Pull request (PR) | A request to review a branch and merge it into `main`. | 4 |
 | Pull vs push (metrics) | Prometheus either fetches (scrapes) `/metrics` from a target (pull), or receives metrics sent to it, here over OTLP from the Collector (push). | 20 |
 | Push / pull | Send your commits to the remote / fetch other people's commits from it. | 4 |
@@ -560,6 +564,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Score (LLM evaluation) | A judgement attached to a trace: thumbs up/down, a 0–1 rating, or an evaluator's verdict. | 22 |
 | Score normalisation | Rescaling scores from different methods to the same range (min-max: best = 1, worst = 0) before combining them. | 13 |
 | Scrape | Prometheus fetching a target's `/metrics` page on a schedule (every 15 s here), optionally with a bearer token read from a secret file. | 20 |
+| SDK, facade | A small, friendly interface over a bigger system: one object (`RagApp`) instead of many pipelines. | 38 |
 | Seal / unseal | OpenBao's data on disk is encrypted. After every start it is sealed (can't read its own data) until enough key shares are entered to rebuild the unseal key in memory. | 28 |
 | Search engine | A system built to find documents by their words (and now vectors) fast, with relevance ranking; e.g. OpenSearch, Elasticsearch. | 13 |
 | Search pipeline | Processing steps OpenSearch applies around a search, e.g. normalising and combining scores for hybrid search (`rag-hybrid`). | 13 |
@@ -622,6 +627,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | SSH key | A private key that stays on your Mac and a public `.pub` key you give GitHub, to prove it's you without a password. | 4 |
 | SSO session | Your sign-in at Keycloak itself. While it lasts (30 idle minutes, 10 hours at most here), other apps sign you in without asking again. | 16 |
 | Staged files | The files you have `git add`-ed: exactly what the next commit will contain, and what hooks check. | 5 |
+| Standards as code | Rules written down with ids and checked by a program (`rag doctor`), not only by reviewers. | 38 |
 | Status: live / mocked / reference | How a rag-core component is tested here: against the real service, against its exact HTTP requests, or not at all (needs heavy extras). | 30 |
 | Stemming | Reducing words to a common root ("Fridays" → "fridai") so variations of a word match. | 13 |
 | Step-back prompting | An LLM writes a more general question about the principle behind the user's question; searching both finds the background policy as well as the specific rule. | 32 |

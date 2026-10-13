@@ -49,3 +49,4 @@ Phases: **A** Workstation · **B** Model serving · **C** Data stores · **D** I
 | 35 | RAG architectures: one slot, many designs | H · RAG core | [step-35-rag-architectures.md](step-35-rag-architectures.md) |
 | 36 | Data lifecycle, threat model and compliance | I · Production & reuse | [step-36-lifecycle-threat-model-compliance.md](step-36-lifecycle-threat-model-compliance.md) |
 | 37 | Production: environments, canaries, HA/DR and online evaluation | I · Production & reuse | [step-37-production-environments-canaries-ha-dr.md](step-37-production-environments-canaries-ha-dr.md) |
+| 38 | The reuse kit: template, SDK, standards and the whole platform | I · Production & reuse | [step-38-reuse-kit-template-sdk-standards.md](step-38-reuse-kit-template-sdk-standards.md) |

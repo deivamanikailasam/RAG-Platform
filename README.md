@@ -14,6 +14,13 @@ Secrets (Step 6): create your age key, put its public key in `.sops.yaml`, then
 ## Layout
 - `libs/` shared Python packages · `services/` deployable apps · `infra/` compose, k8s, config
 - `evals/` evaluation data and runs · `tests/` cross-service tests · `docs/adr/` decision records
+- `templates/rag-project/` the template for a new RAG project (`just new-project ../my-project`, Step 38)
+
+## Building a new RAG project on the platform (Step 38)
+- Start from the template: `just new-project ../hr-assistant`, then `just check` in it.
+- In code: `from rag_core.sdk import RagApp` (rag-core 1.0.0, [changelog](libs/rag-core/CHANGELOG.md)).
+- The rules every project meets: [docs/standards/rag-standards.md](docs/standards/rag-standards.md), checked by `just doctor`.
+- Every switchable component: [docs/catalogue.md](docs/catalogue.md) (generated: `just catalogue`).
 
 ## Decisions
 See [docs/adr](docs/adr/README.md).
