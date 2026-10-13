@@ -552,7 +552,7 @@ k8s-check:
     for p in cluster base/rag-api envs/local argocd/install argocd/apps; do kubectl kustomize deploy/$p > /dev/null && echo "renders: $p"; done
     # Step 37: staging and prod, the worker, the operators, the database tier, each cluster's Argo CD
     for p in base/rag-ingest envs/staging envs/prod argo-rollouts/install cnpg/install data/envs/staging data/envs/prod argocd/envs/staging argocd/envs/prod; do kubectl kustomize deploy/$p > /dev/null && echo "renders: $p"; done
-    uv run pytest -q tests/test_k8s.py tests/test_promote.py tests/test_k8s_secrets.py tests/test_environments.py
+    uv run pytest -q tests/test_k8s.py tests/test_promote.py tests/test_k8s_secrets.py tests/test_environments.py tests/test_gates.py
 
 # What would change in the cluster if this were applied now (read-only)
 k8s-diff path="envs/local":
@@ -612,14 +612,21 @@ k8s-netpol-check:
     fi
 
 # Promote a released image: verify it, change one line, open a pull request. Merging deploys it.
-promote env digest:
+# Step 37: the promotion gates run first. Break glass: just promote prod sha256:… "INC-1234: why"
+promote env digest override="":
     #!/usr/bin/env bash
     set -euo pipefail
     just image-verify {{digest}}
+    if [ -z "{{override}}" ]; then
+      just gates {{env}} {{digest}}
+      note="Promotion gates passed (deploy/envs/promotion.yaml)."
+    else
+      note="GATES SKIPPED (break glass): {{override}}"
+    fi
     git switch -c "promote/{{env}}-$(echo {{digest}} | cut -c8-19)"
     out="$(uv run python scripts/promote.py {{env}} {{digest}})"
     echo "$out"
-    git commit -am "deploy({{env}}): rag-api {{digest}}" -m "$out" -m "Signature and provenance verified (just image-verify). Roll back: git revert this commit."
+    git commit -am "deploy({{env}}): rag-api {{digest}}" -m "$out" -m "Signature and provenance verified (just image-verify). $note Roll back: git revert this commit."
     git push -u origin HEAD
     gh pr create --fill
 
@@ -642,6 +649,18 @@ k8s-scan:
     trivy config --exit-code 1 --severity HIGH,CRITICAL,MEDIUM --ignorefile .trivyignore.yaml "$out"
 
 # ---- Production (Step 37) ----
+
+# May this digest go to that environment? Every failed rule is listed (deploy/envs/promotion.yaml)
+gates env digest evidence="release-evidence" alertmanager="":
+    uv run python scripts/gates.py check {{env}} {{digest}} --evidence {{evidence}} {{ if alertmanager != "" { "--alertmanager " + alertmanager } else { "" } }}
+
+# CI records one check's result for a digest; the gates read these files
+gates-record name digest status summary="":
+    uv run python scripts/gates.py record {{name}} {{digest}} {{status}} --summary "{{summary}}"
+
+# Answer quality per release from the audit log (needs AUDIT_READER_DSN); --candidate/--baseline compare
+online-eval *args:
+    sops exec-env secrets/dev.enc.env 'uv run rag online-eval --dsn-env AUDIT_READER_DSN {{args}}'
 
 # Restore production's backups into a NEW cluster at a point in time, compare, delete (monthly)
 dr-drill target="":

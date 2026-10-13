@@ -1,0 +1,33 @@
+# Promotion rules (Step 37): what must be true before a digest may move into each environment.
+# `just promote <env> sha256:…` checks these first (scripts/gates.py) and refuses with the reasons.
+# Evidence = small JSON files CI writes for one digest (scripts/gates.py record …), kept as
+# build artefacts: {"check": …, "digest": …, "status": "pass", "created": …, "summary": …}.
+version: 1
+order: [local, staging, prod]
+environments:
+  local: {}  # your Mac: anything signed may run
+  staging:
+    evidence:  # offline gates, run by CI on the image's commit
+      - image-verify  # signature + provenance (Step 27)
+      - readiness  # rag config readiness --profile production
+      - search-eval  # Step 32
+      - guard-eval  # Step 34
+      - answer-eval  # Step 35
+    max_evidence_age_days: 14
+  prod:
+    from: staging  # the SAME digest must be running in staging now ...
+    soak_hours: 24  # ... and have been for this long (from the git history)
+    evidence:
+      - image-verify
+      - readiness
+      - search-eval
+      - guard-eval
+      - answer-eval
+      - online-eval  # rag online-eval in staging: candidate vs the previous release
+    max_evidence_age_days: 14
+    alerts_clear:  # nothing this severe may be firing in the "from" environment
+      severity: critical
+    freeze:  # no promotions in these windows (UTC, inclusive); break-glass below
+      - { from: "2026-12-21", to: "2027-01-04", reason: "year-end change freeze" }
+# Break glass: `just promote prod sha256:… "INC-1234: security fix"` skips the gates,
+# writes the reason into the commit and pull request, and still needs the usual review to merge.
