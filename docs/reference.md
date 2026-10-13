@@ -553,7 +553,11 @@ Every file or folder the steps add, with its purpose. Paths are relative to the 
 | [`libs/rag-core/CHANGELOG.md`](../libs/rag-core/CHANGELOG.md) | rag-core versions; 1.0.0 = stable public API | 38 |
 | `libs/rag-core/tests/test_sdk.py`, `test_doctor.py`, `tests/test_template.py` | Step 38 tests | 38 |
 | [`docs/adr/0038-a-reuse-kit-for-rag-projects.md`](adr/0038-a-reuse-kit-for-rag-projects.md) | ADR-0038: versioned core, packaged profiles, standards as code, template | 38 |
-| [`docs/adr/`](adr/README.md) | All decision records, ADR-0001 to ADR-0038 | 4–38 |
+| [`docs/adr/`](adr/README.md) | All decision records, ADR-0001 to ADR-0042 (0039–0042: the extensions) | 4–38, E01–E04 |
+| [`docs/extensions/`](extensions/README.md) | Techniques added after the 38 steps, one feature group per page | E01–E04 |
+| [`docs/concepts/decision-guide.md`](concepts/decision-guide.md), [`docs/concepts/coverage-matrix.md`](concepts/coverage-matrix.md) | When to use which (every component, plain English, starter configs) · do we have it, item by item | after E04 |
+| [`examples/profiles/recipes.yaml`](../examples/profiles/recipes.yaml), `tests/test_example_profiles.py` | The decision guide's starter configs, validated in CI | after E04 |
+| [`scripts/doc_coverage.py`](../scripts/doc_coverage.py), `tests/test_doc_coverage.py` | `just doc-coverage`: a document for every component, recipe, ADR and page; no broken links | after E04 |
 
 ---
 
@@ -996,6 +1000,21 @@ Run from the repository root. `just` with no arguments lists every recipe.
 
 ### Recipes not in the guide's cheat sheet
 
-These exist in the `justfile` (added by the steps) but Appendix A doesn't list them separately:
-`default`, `install-hooks`, `embed-demo`, `bench-embed`, `gateway-smoke`, `search-models-download`,
-`licences`, `ci-static`, `ci-test`, `ci-config`, `vault-secret-id`, `online-eval`.
+These exist in the `justfile` (added by the steps and extensions) but Appendix A doesn't list them
+separately. `just doc-coverage` fails CI when a recipe is missing from this page.
+
+| Command | What it does |
+|---|---|
+| `just` (the `default` recipe) | List every recipe |
+| `just lock` | Re-resolve `uv.lock` after editing a `pyproject.toml` |
+| `just install-hooks` | Install the pre-commit, commit-msg and pre-push hooks (once per clone) |
+| `just search-models-download` | Download the embedding and reranker models (Step 8; needs network and a Hugging Face token) |
+| `just embed-demo` · `just bench-embed` | Embeddings, instructions, Matryoshka and reranking demo · chunks/s and rerank latency (Step 8) |
+| `just gateway-smoke` | Full smoke and security test through the gateway (Step 9) |
+| `just ci-static` · `just ci-test` · `just ci-config` | The parts of `just ci`: lockfile, lint, format, types · all tests · configuration-as-code checks (prompts, cards, dashboards, alerts, OpenBao policies, rag.yaml and starter configs, quality gates, compliance, doctor, catalogue, documentation coverage) |
+| `just licences [-v]` | Licence of every installed dependency against `ci/licence-policy.yaml` (Step 27) |
+| `just vault-secret-id <role>` | A single-use, wrapped secret ID (valid 10 minutes) for an AppRole, e.g. for a job (Step 28) |
+| `just vault-cutover-undo` | Undo `just vault-cutover`: the shared database roles can log in again (Step 28) |
+| `just online-eval` | Answer quality per release from the audit events (Step 37) |
+| `just doc-coverage [--json]` | Is there a document for everything? Every component in the [decision guide](concepts/decision-guide.md) and a step or extension page, every recipe here, every ADR and page indexed, no broken links (`scripts/doc_coverage.py`) |
+| `uv run rag config validate --file examples/profiles/recipes.yaml --profile <name>` | Check one of the decision guide's [starter configs](concepts/decision-guide.md#starter-configs) |

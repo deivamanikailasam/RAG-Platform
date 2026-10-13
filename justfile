@@ -383,6 +383,7 @@ ci-config:
     just compliance-check
     just doctor
     just catalogue --check
+    just doc-coverage
 
 # rag.yaml: every profile names real components with valid settings (Step 30), no services needed
 # Step 37: and the production profile must be fit for production (no stand-ins, the required guards)
@@ -725,6 +726,10 @@ doctor path=".":
 # The catalogue of every switchable component, generated from the registry
 catalogue *args:
     uv run python scripts/catalogue.py {{args}}
+
+# Is there a document for everything? Components, recipes, ADRs, indexes and links (part of ci-config)
+doc-coverage *args:
+    uv run python scripts/doc_coverage.py {{args}}
 
 # rag-core ships the platform profiles; keep its copy identical to rag.yaml after editing rag.yaml
 sync-profiles:
