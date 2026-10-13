@@ -214,9 +214,11 @@ def configured(env: Env) -> Env:
     done = env.setup(admin_password=BOOTSTRAP_PW)
     assert "connection rag-db (root password rotated)" in done
     assert "connection audit-db (root password rotated)" in done
-    vs.put_secret(
-        env.bao(), "rag-api", {"gateway_key": "gw-key-from-bao", "opa_token": "opa-token-from-bao"}
-    )
+    vs.put_secret(env.bao(), "rag-api", {
+        "gateway_key": "gw-key-from-bao", "opa_token": "opa-token-from-bao",
+        # Step 31: the ingestion worker's queue URL and object-store keys
+        "valkey_url": "redis://rag_app:pw@valkey:6379/0", "s3_access_key": "AK", "s3_secret_key": "SK",
+    })  # fmt: skip
     return env
 
 
@@ -458,6 +460,11 @@ def test_agent_renders_files_and_rotates_credentials(configured: Env) -> None:
         assert not (boot / "secret_id").exists()  # read once, then deleted
         assert stat.S_IMODE((out / "rag_db.json").stat().st_mode) == 0o400
         assert (out / "rag_api_gateway_key").read_text() == "gw-key-from-bao"
+        # Step 31: the ingestion worker's files, rendered by the same agent
+        assert (out / "valkey_url").read_text() == "redis://rag_app:pw@valkey:6379/0"
+        assert (out / "aws_credentials").read_text() == (
+            "[default]\naws_access_key_id = AK\naws_secret_access_key = SK\n"
+        )
 
         audit_creds = CredentialsFile(audit_file)
         first_user = audit_creds()[0]

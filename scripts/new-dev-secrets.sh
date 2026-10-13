@@ -83,5 +83,12 @@ BAO_ADMIN_PASSWORD=$(rand)
 DEMO_TOKEN=$(rand)
 EOF
 
+# --- Ingestion (Step 31): the worker's queue URL (Valkey's rag_app user) and the PII pseudonymisation key ---
+valkey_app=$(grep '^VALKEY_APP_PASSWORD=' "$out" | cut -d= -f2)
+cat >> "$out" <<EOF
+RAG_API_VALKEY_URL=redis://rag_app:${valkey_app}@valkey:6379/0
+RAG_PII_HMAC_KEY=$(openssl rand -hex 32)
+EOF
+
 sops --encrypt --in-place "$out"
 echo "created $out (encrypted). View names with: just secrets-keys"

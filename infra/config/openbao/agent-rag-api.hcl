@@ -52,3 +52,18 @@ template {
   perms                = "0400"
   error_on_missing_key = true
 }
+
+# Step 31: what the ingestion worker (same identity as rag-api, Step 37 separates them) needs
+template {
+  contents             = "{{ with secret \"secret/data/rag-api\" }}{{ .Data.data.valkey_url }}{{ end }}"
+  destination          = "/openbao/out/valkey_url"
+  perms                = "0400"
+  error_on_missing_key = true
+}
+
+template {
+  contents             = "{{ with secret \"secret/data/rag-api\" }}[default]\naws_access_key_id = {{ .Data.data.s3_access_key }}\naws_secret_access_key = {{ .Data.data.s3_secret_key }}\n{{ end }}"
+  destination          = "/openbao/out/aws_credentials"
+  perms                = "0400"
+  error_on_missing_key = true
+}
