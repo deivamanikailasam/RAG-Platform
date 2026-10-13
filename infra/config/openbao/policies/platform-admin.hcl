@@ -73,3 +73,8 @@ path "secret/metadata/*" {
 path "secret/data/*" {
   capabilities = ["create", "update"]
 }
+
+# Kubernetes logins (Step 29): which cluster keys to trust, which service account gets which policy
+path "auth/kubernetes-jwt/*" {
+  capabilities = ["create", "read", "update", "delete", "list"]
+}

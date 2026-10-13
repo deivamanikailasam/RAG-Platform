@@ -1,7 +1,11 @@
 """OpenBao, for real (Step 28): a throwaway server from the REAL server.hcl, configured by the REAL
 setup script against the throwaway Postgres, with the REAL agent configuration.
 
+Step 29 adds Kubernetes logins: service account tokens from a real kube-apiserver (tests/kube.py),
+trusted with the REAL k8s_trust() and used by the REAL deploy/base/rag-api/openbao-agent.hcl.
+
 Needs `bao` on PATH (just tools) and AUDIT_TEST_ADMIN_DSN (just audit-test). Skips otherwise.
+The Kubernetes tests also need kube-apiserver, etcd and kubectl (just tools kube-apiserver etcd kubectl).
 """
 
 from __future__ import annotations
@@ -31,6 +35,8 @@ from rag_api.audit import AuditEvent, PgAuditLog
 from rag_common.secrets import CredentialsFile
 
 from .conftest import AuditDb
+from .kube import ApiServer
+from .kube import available as kube_available
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "infra/config/openbao"
@@ -511,6 +517,149 @@ def test_agent_stops_when_its_secret_id_was_already_used(configured: Env) -> Non
             "wrapping token is not valid or does not exist"
             in (configured.tmp / "agent-used.log").read_text()
         )
+    finally:
+        agent.terminate()
+        agent.wait(10)
+
+
+# ---- Kubernetes logins (Step 29) ------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def cluster(tmp_path_factory: pytest.TempPathFactory) -> Iterator[ApiServer]:
+    if not kube_available():
+        pytest.skip(
+            "kube-apiserver/etcd/kubectl not installed (just tools kube-apiserver etcd kubectl)"
+        )
+    server = ApiServer(tmp_path_factory.mktemp("kube")).start()
+    try:
+        for ns, sa in (("rag", "rag-api"), ("rag", "other"), ("sandbox", "rag-api")):
+            server.kubectl("create", "namespace", ns, check=False)
+            server.kubectl("create", "serviceaccount", sa, "-n", ns)
+        yield server
+    finally:
+        server.stop()
+
+
+def k8s_token(cluster: ApiServer, namespace: str = "rag", account: str = "rag-api",
+              audience: str | None = "openbao") -> str:  # fmt: skip
+    """What the kubelet writes into the pod: a short-lived token for one account and audience.
+    audience=None gives an ordinary Kubernetes API token (audience: the API server itself)."""
+    args = ["create", "token", account, "-n", namespace, "--duration=10m"]
+    if audience is not None:
+        args += ["--audience", audience]
+    return cluster.kubectl(*args).stdout.strip()
+
+
+@pytest.fixture(scope="module")
+def k8s_trusted(configured: Env, cluster: ApiServer) -> Env:
+    """`just vault-k8s-trust`: the cluster's REAL public keys and issuer, given to the REAL k8s_trust."""
+    jwks = json.loads(cluster.kubectl("get", "--raw", "/openid/v1/jwks").stdout)
+    issuer = json.loads(
+        cluster.kubectl("get", "--raw", "/.well-known/openid-configuration").stdout
+    )["issuer"]
+    done = vs.k8s_trust(configured.bao(), jwks, issuer)
+    assert done == [
+        "jwt auth at kubernetes-jwt/",
+        f"trusts 1 cluster signing key(s), issuer {issuer}",
+        "1 kubernetes role(s)",
+    ]
+    return configured
+
+
+def jwt_login(env: Env, token: str) -> httpx.Response:
+    with env.http() as c:
+        return c.post(f"auth/{vs.K8S_MOUNT}/login", json={"role": "rag-api", "jwt": token})
+
+
+def test_a_pod_logs_in_with_its_service_account(k8s_trusted: Env, cluster: ApiServer) -> None:
+    r = jwt_login(k8s_trusted, k8s_token(cluster))
+    assert r.status_code == 200, r.text
+    auth = r.json()["auth"]
+    assert auth["policies"] == ["default", "rag-api"]
+    assert auth["lease_duration"] == 3600
+    assert auth["metadata"]["role"] == "rag-api"
+    bao = k8s_trusted.bao(auth["client_token"])
+    assert bao.call("GET", "database/creds/rag-api") is not None
+    with pytest.raises(vs.BaoError, match="403"):
+        bao.call("GET", "database/creds/rag-readonly")
+
+
+@pytest.mark.parametrize(
+    ("what", "namespace", "account", "audience", "error"),
+    [
+        ("another account in the namespace", "rag", "other", "openbao", "sub"),
+        ("the same name in another namespace", "sandbox", "rag-api", "openbao", "sub"),
+        ("a token meant for the Kubernetes API", "rag", "rag-api", None, "audience"),
+    ],
+)
+def test_other_identities_are_refused(k8s_trusted: Env, cluster: ApiServer, what: str,
+                                      namespace: str, account: str, audience: str | None,
+                                      error: str) -> None:  # fmt: skip
+    r = jwt_login(k8s_trusted, k8s_token(cluster, namespace, account, audience))
+    assert r.status_code in (400, 403), f"{what}: {r.text}"
+    assert error in r.text
+    assert "client_token" not in r.text
+
+
+def test_a_forged_token_is_refused(k8s_trusted: Env, cluster: ApiServer) -> None:
+    """Identical claims and header, signed by a key the cluster doesn't have: refused."""
+    import jwt
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    real = k8s_token(cluster)
+    claims = jwt.decode(real, options={"verify_signature": False})
+    header = jwt.get_unverified_header(real)
+    other_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    forged = jwt.encode(claims, other_key, algorithm="RS256", headers={"kid": header["kid"]})
+    r = jwt_login(k8s_trusted, forged)
+    assert r.status_code == 400, r.text
+    assert "client_token" not in r.text
+    assert jwt_login(k8s_trusted, real).status_code == 200  # the genuine one still works
+
+
+def test_trusting_a_cluster_again_changes_nothing(k8s_trusted: Env, cluster: ApiServer) -> None:
+    jwks = json.loads(cluster.kubectl("get", "--raw", "/openid/v1/jwks").stdout)
+    again = vs.k8s_trust(k8s_trusted.bao(), jwks, "https://kubernetes.default.svc.cluster.local")
+    assert not any(item.startswith("jwt auth at") for item in again)  # the mount already exists
+    assert jwt_login(k8s_trusted, k8s_token(cluster)).status_code == 200
+    with pytest.raises(vs.BaoError, match="no RSA keys"):
+        vs.jwks_to_pem({"keys": []})
+
+
+def test_pod_agent_logs_in_with_the_projected_token(k8s_trusted: Env, cluster: ApiServer) -> None:
+    """The REAL Kubernetes agent config: logs in with a token FILE (as the kubelet writes it),
+    renders all four files, leaves the token in place, and the database login it got works."""
+    tmp = k8s_trusted.tmp / "k8s-agent"
+    tokens, out = tmp / "token-dir", tmp / "out"
+    tokens.mkdir(parents=True)
+    out.mkdir()
+    token_file = tokens / "token"
+    token_file.write_text(k8s_token(cluster))
+    cfg = tmp / "agent.hcl"
+    cfg.write_text(real_config(ROOT / "deploy/base/rag-api/openbao-agent.hcl", {
+        '"http://openbao:8200"': f'"{k8s_trusted.addr}"',
+        '"/var/run/secrets/openbao/token"': f'"{token_file}"',
+        '"/openbao/out/': f'"{out}/',
+    }))  # fmt: skip
+    agent = subprocess.Popen(  # noqa: S603
+        ["bao", "agent", f"-config={cfg}"], env=NO_PROXY_ENV,  # noqa: S607
+        stdout=(tmp / "agent.log").open("w"), stderr=subprocess.STDOUT,
+    )  # fmt: skip
+    files = ("rag_db.json", "audit_db.json", "rag_api_gateway_key", "rag_api_opa_token")
+    try:
+        wait_for(lambda: all((out / f).exists() for f in files), 20, "agent files")
+        assert token_file.exists()  # remove_jwt_after_reading = false: the kubelet owns it
+        assert (out / "rag_api_gateway_key").read_text() == "gw-key-from-bao"
+        assert stat.S_IMODE((out / "rag_db.json").stat().st_mode) == 0o400
+        user, password = CredentialsFile(out / "rag_db.json")()
+        assert user.startswith("v-")  # a user made for this lease ...
+        assert "rag-api" in user  # ... for the rag-api role
+        with k8s_trusted.pg(user, password, "rag") as conn:
+            assert conn.execute("SELECT title FROM documents WHERE id = 1").fetchone() == (
+                "Leave policy",
+            )
+        assert agent.poll() is None  # still running, to renew and rotate
     finally:
         agent.terminate()
         agent.wait(10)

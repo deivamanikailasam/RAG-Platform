@@ -6,6 +6,7 @@
     just vault-secret-id rag-api                a single-use, wrapped secret ID for the agent
     just vault-creds rag-readonly               short-lived database login for a person or a job
     just vault-unseal                           after every OpenBao restart (keys from the SOPS file)
+    just vault-k8s-trust                        let rag-api pods log in with their service account (Step 29)
 
 Talks to the HTTP API directly (BAO_ADDR, BAO_TOKEN), so every call is visible and testable.
 """
@@ -99,6 +100,20 @@ APPROLES = (
     AppRole("rag-api", ("rag-api",)),
     AppRole("rag-evals", ("rag-evals",), token_max_ttl="4h"),  # noqa: S106
 )
+
+
+@dataclass(frozen=True)
+class K8sRole:
+    name: str
+    namespace: str
+    service_account: str
+    policies: tuple[str, ...]
+
+
+# Step 29: pods in Kubernetes log in with their own service account token (no secret ID)
+K8S_ROLES = (K8sRole("rag-api", "rag", "rag-api", ("rag-api",)),)
+K8S_MOUNT = "kubernetes-jwt"
+K8S_AUDIENCE = "openbao"
 
 
 def creation_statements(role: DbRole) -> list[str]:
@@ -195,6 +210,50 @@ def setup(bao: Bao, *, pg_host: str, pg_port: int, admin_password: str | None,
     return done
 
 
+def jwks_to_pem(jwks: dict[str, Any]) -> list[str]:
+    """The cluster's token-signing public keys (from /openid/v1/jwks) as PEM, for OpenBao."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+    from jwt.algorithms import RSAAlgorithm
+
+    pems = []
+    for key in jwks.get("keys", []):
+        if key.get("kty") != "RSA":
+            continue
+        public = RSAAlgorithm.from_jwk(key)
+        if isinstance(public, RSAPrivateKey):  # a JWKS should never hold one; take its public half
+            public = public.public_key()
+        pems.append(public.public_bytes(serialization.Encoding.PEM,
+                                        serialization.PublicFormat.SubjectPublicKeyInfo).decode())  # fmt: skip
+    if not pems:
+        raise BaoError("no RSA keys in the JWKS")
+    return pems
+
+
+def k8s_trust(bao: Bao, jwks: dict[str, Any], issuer: str) -> list[str]:
+    """Let pods log in with their service account token. OpenBao checks the token's signature
+    against the cluster's public keys OFFLINE: it never needs to reach the Kubernetes API."""
+    done = []
+    if f"{K8S_MOUNT}/" not in (bao.call("GET", "sys/auth") or {}).get("data", {}):
+        bao.call("POST", f"sys/auth/{K8S_MOUNT}", {"type": "jwt"})
+        done.append(f"jwt auth at {K8S_MOUNT}/")
+    bao.call("POST", f"auth/{K8S_MOUNT}/config", {
+        "jwt_validation_pubkeys": jwks_to_pem(jwks), "bound_issuer": issuer,
+    })  # fmt: skip
+    done.append(f"trusts {len(jwks['keys'])} cluster signing key(s), issuer {issuer}")
+    for r in K8S_ROLES:
+        bao.call("POST", f"auth/{K8S_MOUNT}/role/{r.name}", {
+            "role_type": "jwt", "user_claim": "sub",
+            # exactly this service account in exactly this namespace, and tokens made for us only
+            "bound_subject": f"system:serviceaccount:{r.namespace}:{r.service_account}",
+            "bound_audiences": [K8S_AUDIENCE],
+            "token_policies": list(r.policies), "token_ttl": "1h", "token_max_ttl": "4h",
+            "token_type": "service",
+        })  # fmt: skip
+    done.append(f"{len(K8S_ROLES)} kubernetes role(s)")
+    return done
+
+
 def role_id(bao: Bao, name: str) -> str:
     data = bao.call("GET", f"auth/approle/role/{name}/role-id")
     if data is None:
@@ -265,6 +324,9 @@ def main(argv: list[str]) -> int:
     p.add_argument("role")
     p.add_argument("--out", type=Path, required=True)
     sub.add_parser("unseal", help="reads the init JSON (from sops decrypt) on stdin")
+    p = sub.add_parser("k8s-trust", help="trust a cluster's service account tokens (Step 29)")
+    p.add_argument("--jwks", type=Path, required=True, help="the cluster's /openid/v1/jwks")
+    p.add_argument("--issuer", required=True, help="the cluster's service account issuer")
     a = ap.parse_args(argv)
     addr = os.environ.get("BAO_ADDR", "http://127.0.0.1:8200")
     try:
@@ -289,6 +351,9 @@ def main(argv: list[str]) -> int:
                 f"secret/{a.path}: version {put_secret(bao, a.path, values)} "
                 f"({', '.join(sorted(values))})"
             )
+        elif a.cmd == "k8s-trust":
+            for item in k8s_trust(bao, json.loads(a.jwks.read_text()), a.issuer):
+                print("ok:", item)
         elif a.cmd == "role-id":
             print(role_id(bao, a.name))
         elif a.cmd == "creds":
