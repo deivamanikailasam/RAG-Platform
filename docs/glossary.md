@@ -56,7 +56,9 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Authorization header | The HTTP request header that carries credentials; for APIs it is `Authorization: Bearer <access token>`. | 17 |
 | Auto-auth | The OpenBao Agent feature that logs in by itself (here with AppRole), renews its token and logs in again when the token reaches its maximum age. | 28 |
 | Auto-fix | A check that changes files to fix the problem itself; you review the change and `git add` it again. | 5 |
+| Backup receipt | A small JSON file written next to a database dump: its SHA-256 checksum, size, time and the row counts of the important tables, so a restore can be checked against it. | 36 |
 | Baseline (evaluation) | The summary of the last accepted evaluation run, committed in `evals/baselines/`; a new run mustn't fall below it by more than a small tolerance. | 26 |
+| Blue/green re-index | Rebuilding the search index into a new collection beside the live one, comparing the two, then switching by a one-line change; the old collection stays until the switch is proven. | 36 |
 | Boilerplate | Text that repeats everywhere and means nothing (running headers, footers, "Page 3 of 9", cookie banners); removed before chunking so it doesn't match every search. | 31 |
 | Break-glass | Emergency super-powers (here the database superuser), used rarely, deliberately and visibly. | 23 |
 | B-tree | The default Postgres index, for exact values and ranges (an ID, a date); like a sorted phone book. | 11 |
@@ -77,6 +79,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Bucket (histogram) | One counter in a histogram: how many values were at or below a fixed edge (`le="0.5"`, `le="2"`…). The edges must be in the metric's unit and should include each objective (2 s here). | 20 |
 | Budget / budget period | The maximum spend (here in shadow dollars) a key or team may reach before requests are refused, and how often it resets (e.g. `30d`). | 10 |
 | Burn rate | How fast an error budget is being used, relative to the allowed pace. 1× spends it exactly over the period; 14.4× spends a 28-day budget in about 2 days (page); 6× in about 5 days (ticket). | 20 |
+| C4 model | Architecture diagrams at four zoom levels: context (people and systems), containers (services), components, code. Kept here as code in `docs/architecture/workspace.dsl`. | 36 |
 | Cache hit / miss | Hit: the answer was already stored and comes back in milliseconds. Miss: it had to be computed (the LLM ran) and is then stored. | 15 |
 | Cache invalidation, epoch | Making old cached answers unusable when documents change; here, by bumping a counter (the epoch) that is part of every cache key, after every ingest or delete. | 33 |
 | Cache key | The value a cache looks answers up by. It must include everything that changes the answer (prompt with retrieved context, model, parameters, user's permission scope, tenant), or answers leak between users. | 15 |
@@ -128,6 +131,8 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Context window | The maximum number of tokens (prompt + answer) a model can handle at once. | 7 |
 | Contextual retrieval | Having an LLM write one or two sentences placing each chunk in its document, and embedding them with the chunk (Anthropic, 2024); fewer failed retrievals for one LLM call per chunk. | 31 |
 | Contract | The agreed list of methods a kind of component must have ("a vector store can upsert, delete, search with access rules, and count"); in rag-core, a Protocol. | 30 |
+| Control (risk) | A measure that treats a threat, such as token checks, row-level security or an output guard; in the risk register each one names its evidence. | 36 |
+| Control mapping | Showing which requirements of a framework (NIST AI RMF, ISO/IEC 42001, EU AI Act, APPs) each control helps meet. It shows contribution, not compliance. | 36 |
 | Control plane | The parts of Kubernetes that decide (API server, etcd, scheduler, controllers), as opposed to the nodes that run the containers. | 29 |
 | Controller / reconciliation | A loop that compares desired state with actual state and fixes the difference, forever; Kubernetes is made of them, and Argo CD is one too. | 29 |
 | Conventional Commits | A commit-message format `type(scope)!: description` (e.g. `feat(gateway): …`) readable by people and tools. | 4 |
@@ -146,6 +151,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Data exfiltration (LLM) | Smuggling data out through the model, for example by getting it to put private text into a link or image URL that the user's browser then loads from an attacker's server. | 34 |
 | Data filtering / partial evaluation (OPA) | OPA evaluating a policy with some facts still unknown and turning the rest into a filter, even a SQL `WHERE` clause, that a database can apply. | 18 |
 | Data key | The random key SOPS creates per file to lock every value; it is itself locked once per recipient. | 6 |
+| Data lifecycle | Everything that happens to data from creation to deletion: changes, access changes, copies, archiving, destruction. | 36 |
 | Data retention | How long data is kept before it is deleted; for Langfuse traces, 30 days, enforced by our own nightly job because automatic retention is an Enterprise feature when self-hosted. | 22 |
 | Database secrets engine | The OpenBao plug-in that creates a database user on request (CREATE ROLE … VALID UNTIL …) and drops it when the lease ends. | 28 |
 | Dataset card / datasheet | A short document about a dataset: provenance, every location, personal data and legal basis, retention, deletion route, access, gaps. | 25 |
@@ -200,6 +206,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | etcd | The key-value database where Kubernetes stores every object. | 29 |
 | Evaluation (eval) | Running a system on test cases and scoring the results. | 26 |
 | Eviction / maxmemory policy | What a memory-capped store deletes when it is full. `volatile-lru` removes the least-recently-used keys that have a TTL; `allkeys-lru` may remove any key, including queued jobs. | 15 |
+| Evidence (compliance) | The proof that a control works: a file or a test that CI runs. The register names it as `path::test_name`, and the CI check fails if it disappears. | 36 |
 | Exact / semantic cache | Reusing a stored answer for the same question (same normalised words) or for one with nearly the same meaning (embedding similarity); only among people who can see exactly the same documents. | 33 |
 | Exemplar | A sample trace id attached to one metric data point, so a dot on a graph links straight to a real request's trace. | 21 |
 | EXPLAIN | Asks Postgres how it will run a query, e.g. whether it uses an index; `EXPLAIN ANALYZE` also runs it and shows real timings. | 11 |
@@ -496,18 +503,23 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Required action | Something a user must do at their next sign-in: change a temporary password, set up MFA (`CONFIGURE_TOTP`), verify an email. | 16 |
 | Reranking | Re-ordering the best few dozen candidates with a stronger, slower model (a cross-encoder or an LLM) that reads the question and each passage together. | 32 |
 | Rescoring | After a fast search on compressed vectors, re-ranking the top candidates using the original vectors to recover accuracy. | 12 |
+| Residual risk | The risk that remains after the controls; recorded per threat (Low / Medium) and agreed with someone who owns it. | 36 |
 | Resource (OpenTelemetry) | Facts about the process sending telemetry (`service.name`, version, environment), attached to every span and metric. | 19 |
 | ResourceQuota | A ceiling for a whole namespace: total CPU and memory requests and limits, number of pods. | 29 |
 | Response wrapping | OpenBao hands out a secret inside a single-use envelope (a wrapping token with a short TTL). If someone opened it first, the real recipient's unwrap fails, so the theft is noticed. | 28 |
 | Restart policy | The rule Docker uses to restart a container that stops or crashes (`restart: unless-stopped`). | 9 |
+| Restore drill | Actually restoring a backup into a scratch database and checking it (checksum, row counts), on a schedule: a backup never restored is a hope. | 36 |
 | Retention | How long a store keeps data before deleting it: 7 days for traces (Tempo `block_retention`) and logs (Loki `retention_period` plus `compactor.retention_enabled`). | 21 |
+| Retention rule | How long an indexed source may stay after it was last ingested, matched by a glob on its URI; `rag retention` reports, then (with `--apply`) deletes what outlived it. | 36 |
 | Retrieve-then-rerank | The two-stage search pattern: a fast embedder finds ~50 candidates, then a slow, precise reranker picks the best few for the LLM. | 8 |
 | Retry | Trying the same model again after a temporary error, before any fallback. | 10 |
 | Reverse proxy | A server that sits in front of other servers, receives every request, applies rules and forwards it. | 9 |
 | Review interval | How often a card must be re-read and re-confirmed (e.g. every 90 or 180 days); overdue reviews warn and fail the weekly strict run. | 25 |
 | Revocation | Making an old secret stop working, e.g. deleting an API token. | 6 |
+| Revocation (access) | Taking access to a document away. It must reach every copy (every store, the graph, the manifest, cached answers) or it hasn't happened: `rag reacl`. | 36 |
 | Revoke (lease) | Ending a lease early. For a database login: end its sessions and drop the user, immediately (`bao lease revoke`). | 28 |
 | RFC 3161 timestamp | A signed statement from a timestamping authority that some hash existed at a given time. | 23 |
+| Right to erasure | A person's right to have their data removed (GDPR Art. 17; under the Australian Privacy Principles, destroying or de-identifying information no longer needed, APP 11.2). | 36 |
 | Role / privilege (database) | A database identity / what it's allowed to do (connect, read, write, create tables). | 11 |
 | Role mapping | The link in OpenSearch's security plugin that gives a user (or backend role) the permissions of a role. | 13 |
 | Rolling update | Replacing pods a few at a time; with `maxUnavailable: 0`, a new pod must be ready before an old one goes. | 29 |
@@ -516,6 +528,8 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Rotation | Replacing a secret with a new value on a schedule, or immediately after a suspected leak. | 6 |
 | Routing | Choosing which real backend (deployment) answers a request for a given model alias. | 9 |
 | Routing (alerts) | Alertmanager's tree of matchers that sends each alert to a receiver: here `severity="critical"` goes to `platform-team-urgent` (page), everything else to `platform-team` (ticket). | 20 |
+| Row-level security (RLS) | Rules inside the database that decide which rows a query may see, whatever the query says; here keyed by a per-transaction `rag.tenant` setting, so a query that forgets the tenant returns nothing. | 36 |
+| RPO / RTO | Recovery point objective: how much data you can afford to lose. Recovery time objective: how long you can afford to be down. | 36 |
 | RRF (Reciprocal Rank Fusion) | The default way to merge ranked lists: each chunk scores 1/(60 + its rank) in every list it appears in, summed. Uses only positions, so it needs no tuning. | 32 |
 | Rule (Rego) | A named statement such as `allow if { ... }`, true when every line in its body is true; several rules with the same name mean OR. | 18 |
 | Runbook | Step-by-step instructions linked from an alert: what it means, what to check first, likely causes, how to fix, how to close. Every alert here links one under `docs/runbooks/`. | 20 |
@@ -573,6 +587,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | SLSA | Supply-chain Levels for Software Artifacts ("salsa"): a framework of levels for how trustworthy a build and its provenance are. | 27 |
 | Smoke test vs benchmark | A handful of cases that catch obvious breakage, vs hundreds that measure quality reliably. Eight cases is a smoke test: one case moves the score by 12.5 points. | 26 |
 | Snapshot | A point-in-time backup file of a collection. | 12 |
+| Soak period | How long the old version is kept after a switch (e.g. the previous collection after a re-index), so rolling back stays a simple revert. | 36 |
 | Software supply chain | Everything your software is made from and with: dependencies, tools, CI actions, base images and the build itself. | 27 |
 | SOPS | "Secrets OPerationS": encrypts the values in YAML, JSON or `.env` files while leaving the names readable. | 6 |
 | Source of truth | The one authoritative store that decides what exists and who may see it; every other copy is derived from it. | 12 |
@@ -595,6 +610,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Stream (Loki) | All log lines that share exactly the same set of labels; each unique label combination is a separate stream, so labels must have few values. | 21 |
 | Stream (Valkey/Redis) | An append-only log of messages, each with an increasing ID (`XADD`); with consumer groups it works as a crash-safe job queue. | 15 |
 | Streaming (SSE) | Sending an answer token by token as it is generated, over Server-Sent Events, instead of all at the end. | 9 |
+| STRIDE | A checklist of threat categories: Spoofing, Tampering, Repudiation, Information disclosure, Denial of service, Elevation of privilege. The register adds Safety. | 36 |
 | Structure-aware chunking | Cutting along a document's own structure: never across a heading, tables and code kept whole, each chunk labelled with its heading path. | 31 |
 | Structured logging | Writing logs as JSON objects instead of free text, so they can be filtered and joined by field. | 19 |
 | Structured metadata (Loki) | Extra per-line key/value facts (such as OTLP attributes) that Loki stores and can search without turning them into labels, so they don't create new streams. | 21 |
@@ -618,6 +634,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | text vs keyword field | `text` is analysed for full-text search; `keyword` is stored exactly, for filters and IDs. | 13 |
 | Text-to-SQL | A model writing a database query from a question; the `sql` architecture, where the result becomes a cited source. | 35 |
 | Thinking mode | Qwen models' optional hidden reasoning before the answer; better on hard questions, slower and more tokens (`enable_thinking`). | 7 |
+| Threat model | A structured list of what could go wrong with a system, who could cause it, and what stops it; here generated from `docs/compliance/risk-register.yaml`. | 36 |
 | Threshold | The minimum or maximum a metric must reach for a run to pass the gate, e.g. `recall@5: {min: 0.9}` or `leaked_docs: {max: 0}`. | 26 |
 | Throughput | How much work a server finishes per second, e.g. chunks embedded per second. | 8 |
 | Time series | One metric with one exact set of labels, sampled over time, e.g. `rag_search_requests_total{outcome="ok"}`. | 20 |
