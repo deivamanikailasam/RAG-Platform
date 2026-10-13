@@ -95,6 +95,8 @@ class IngestionPipeline:
         # Step 33: any change to the index starts a new cache epoch, so no cached answer outlives
         # the documents it was based on (a Valkey cache does this for every replica at once)
         self.cache = container.get("cache") if container.has("cache") else None
+        # Step 35: GraphRAG's entity store is one more place a document lives
+        self.graph = container.get("graph_store") if container.has("graph_store") else None
 
     def ingest(self, source: Source, force: bool = False) -> IngestResult:
         start = time.monotonic()
@@ -125,6 +127,8 @@ class IngestionPipeline:
                         IngestResult(source.uri, "skipped", 0, "no text after cleaning"),
                         start,
                     )
+                if self.graph is not None:  # before enrichers re-add this source's entities
+                    self.graph.delete_document(source.uri)
                 for e in self.enrichers:
                     with tracer.start_as_current_span(f"rag.ingest.enrich.{type(e).__name__}"):
                         chunks = e.enrich(doc, chunks)
@@ -160,10 +164,16 @@ class IngestionPipeline:
             n = max(n, self.keywords.delete_document(uri))
         return n
 
+    def _forget_graph(self, uri: str) -> None:
+        """The graph store (Step 35) keeps chunks too: a deleted document leaves it as well."""
+        if self.graph is not None:
+            self.graph.delete_document(uri)
+
     def delete(self, uri: str) -> IngestResult:
         """A source was deleted or must be forgotten: remove it from every store (Step 36: erasure)."""
         start = time.monotonic()
         n = self._delete_everywhere(uri)
+        self._forget_graph(uri)
         if self.manifest:
             self.manifest.delete(uri)
         result = IngestResult(uri, "deleted", n, seconds=time.monotonic() - start)

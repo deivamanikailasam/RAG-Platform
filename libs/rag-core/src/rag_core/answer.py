@@ -8,14 +8,18 @@ Order of work, and why:
    memory   → the conversation so far, so follow-ups make sense
    guards   → input checks (Step 34) before anything is spent: a block returns a fixed message
    cache    → same question, same access, same index and prompt: reuse
-   search   → Step 32's pipeline (+ the caller's own post-check, e.g. OPA in rag-api)
+   retrieve → the architecture in the `pipeline` slot (Step 35) gathers context: by default
+              Step 32's search; naive, corrective, adaptive, agentic, graph or sql otherwise
+   check    → the caller's own post-check (e.g. OPA in rag-api), via context_for
    guards   → context checks (Step 34): documents that give orders are dropped
    abstain  → nothing relevant found: say so, without calling a model
    context  → numbered <doc> blocks within a token budget
    generate → the registered prompt, the answer model; streamed or whole
    cite     → keep only citations that point at a document that was shown
    guards   → output checks (Step 34): groundedness, personal data, secrets, toxicity
-   remember, cache, return (with a trace of everything above)
+   review   → a reviewing architecture (self-reflective) may retrieve again and regenerate
+   remember, cache, return (with a trace of everything above): once, after any review, so a
+              replaced draft is never remembered or cached
 """
 
 from __future__ import annotations
@@ -30,6 +34,7 @@ from typing import Any, Literal
 
 from opentelemetry import trace
 
+from rag_core.components.architectures import Standard
 from rag_core.components.basics import ApproxTokenCounter
 from rag_core.components.conversation import cache_key
 from rag_core.components.generation import (
@@ -69,9 +74,11 @@ class AnswerPipeline:
     def __init__(self, container: Container) -> None:
         self.c = container
         self.search = SearchPipeline(container)
-        self.p: AnswerParams = (
-            container.get("pipeline") if container.has("pipeline") else AnswerParams()
+        # Step 35: the pipeline slot holds an architecture; its params are the answer settings
+        self.arch: Any = (
+            container.get("pipeline") if container.has("pipeline") else Standard(AnswerParams())
         )
+        self.p: AnswerParams = self.arch.params
         counter = (
             container.get("token_counter")
             if container.has("token_counter")
@@ -154,31 +161,55 @@ class AnswerPipeline:
             trace_data["cache"] = "miss"
         trace_data["cache_key"] = key
 
-        result = self.search.search(query)
-        hits = result.hits
-        trace_data["search"] = result.trace
+        retrieval = self.arch.retrieve(self, query)
+        trace_data["architecture"] = self.arch.name
+        trace_data["search"] = retrieval.info
+        if retrieval.direct is not None:
+            # e.g. adaptive's reply to small talk: no retrieval, no model
+            direct = replace(retrieval.direct, trace={**retrieval.direct.trace, **trace_data})
+            return query, direct, None
+        context, stop = self.context_for(query, retrieval.hits, post_check, trace_data)
+        return query, stop, context
+
+    def context_for(self, query: Query, hits: list[ScoredChunk], post_check: PostCheck | None,
+                    trace_data: dict[str, Any]) -> tuple[PackedContext | None, Answer | None]:  # fmt: skip
+        """Post-check, context guards, abstain-if-empty, pack. Architectures that retrieve again
+        (self-reflective) come back through here, so no check is ever skipped."""
         if post_check is not None:  # e.g. rag-api's OPA re-check of every document
             before = len(hits)
             hits = post_check(hits)
-            trace_data["post_check_dropped"] = before - len(hits)
-
-        hits, blocked = self._guard("context", query, hits, trace_data)
-        if blocked is not None:
-            return query, blocked, None
+            trace_data["post_check_dropped"] = (
+                trace_data.get("post_check_dropped", 0) + before - len(hits)
+            )
+        hits, stop = self._guard("context", query, hits, trace_data)
+        if stop is not None:
+            return None, stop
         if not hits and self.p.abstain_without_hits:
             trace_data["abstained_reason"] = "no relevant documents"
-            return query, Answer(text=self.p.abstain_text, abstained=True, trace=trace_data), None
-
+            return None, Answer(text=self.p.abstain_text, abstained=True, trace=trace_data)
         with tracer.start_as_current_span("rag.context") as span:
             context = self.builder.build(query, hits)
             span.set_attributes({"rag.context.chunks": len(context.chunks), "rag.context.tokens": context.tokens,
                                  "rag.context.dropped": context.dropped})  # fmt: skip
         trace_data["context"] = {"chunks": [h.chunk.id for h in context.chunks], "tokens": context.tokens,
-                                 "dropped": context.dropped}  # fmt: skip
-        return query, None, context
+                                 "dropped": context.dropped,
+                                 "documents": sorted({h.chunk.document_uri for h in context.chunks})}  # fmt: skip
+        return context, None
+
+    def generate(self, query: Query, context: PackedContext, trace_data: dict[str, Any]) -> Answer:
+        """Generate and check one answer (citations, output guards). Not remembered or cached yet:
+        a reviewing architecture may still replace it."""
+        with tracer.start_as_current_span(
+            "rag.generate", attributes={"gen_ai.operation.name": "chat"}
+        ) as g:
+            generated = self.generator.generate(query, context)
+            g.set_attribute("gen_ai.request.model", str(getattr(self.generator, "model", "?")))
+            for k, v in generated.usage.items():
+                g.set_attribute(f"gen_ai.usage.{k}", v)
+        return self._finish(query, generated.text, generated.usage, context, trace_data)
 
     def _finish(self, query: Query, raw: str, usage: Mapping[str, int], context: PackedContext,
-                session_id: str | None, trace_data: dict[str, Any]) -> Answer:  # fmt: skip
+                trace_data: dict[str, Any]) -> Answer:  # fmt: skip
         checked = check_citations(raw, context)
         text, abstained = checked.text, is_abstention(raw)
         trace_data |= {"model": getattr(self.generator, "model", "?"),
@@ -195,9 +226,7 @@ class AnswerPipeline:
         )
         if blocked is not None:
             return blocked
-        answer = out.answer if isinstance(out, GeneratedAnswer) else answer
-        self._remember(query, answer, session_id, trace_data)
-        return answer
+        return out.answer if isinstance(out, GeneratedAnswer) else answer
 
     def _remember(
         self, query: Query, answer: Answer, session_id: str | None, trace_data: dict[str, Any]
@@ -242,16 +271,10 @@ class AnswerPipeline:
                 )
             if context is None:  # pragma: no cover - _prepare returns one or the other
                 raise RuntimeError("no context and no early answer")
-            with tracer.start_as_current_span(
-                "rag.generate", attributes={"gen_ai.operation.name": "chat"}
-            ) as g:
-                generated = self.generator.generate(query, context)
-                g.set_attribute("gen_ai.request.model", str(getattr(self.generator, "model", "?")))
-                for k, v in generated.usage.items():
-                    g.set_attribute(f"gen_ai.usage.{k}", v)
-            answer = self._finish(
-                query, generated.text, generated.usage, context, session_id, trace_data
-            )
+            answer = self.generate(query, context, trace_data)
+            if not answer.blocked:  # a reviewing architecture may retrieve again and regenerate
+                answer = self.arch.review(self, query, answer, context, trace_data, post_check)
+            self._remember(query, answer, session_id, trace_data)
             span.set_attributes({"rag.answer.abstained": answer.abstained, "rag.answer.citations": len(answer.citations),
                                  "rag.answer.blocked": bool(answer.blocked)})  # fmt: skip
         return replace(
@@ -284,9 +307,18 @@ class AnswerPipeline:
         yield Event("meta", {"documents": [{"n": i, "document": h.chunk.document_uri, "title": h.chunk.metadata.get("title", "")}
                                            for i, h in enumerate(context.chunks, 1)]})  # fmt: skip
         usage: dict[str, int] = {}
+        if self.arch.reviews:  # the first answer may be replaced: never stream it as a draft
+            done = self.generate(query, context, trace_data)
+            if not done.blocked:
+                done = self.arch.review(self, query, done, context, trace_data, post_check)
+            self._remember(query, done, session_id, trace_data)
+            yield Event("delta", done.text)
+            yield Event("done", done)
+            return
         if self.p.stream == "checked":  # generate fully, check, then send: never unchecked text
             parts = list(self.generator.stream(query, context, usage))
-            done = self._finish(query, "".join(parts), usage, context, session_id, trace_data)
+            done = self._finish(query, "".join(parts), usage, context, trace_data)
+            self._remember(query, done, session_id, trace_data)
             yield Event("delta", done.text)
             yield Event("done", done)
             return
@@ -294,9 +326,9 @@ class AnswerPipeline:
         for delta in self.generator.stream(query, context, usage):
             parts.append(delta)
             yield Event("delta", delta)
-        yield Event(
-            "done", self._finish(query, "".join(parts), usage, context, session_id, trace_data)
-        )
+        done = self._finish(query, "".join(parts), usage, context, trace_data)
+        self._remember(query, done, session_id, trace_data)
+        yield Event("done", done)
 
 
 def answer_dict(a: Answer) -> dict[str, Any]:

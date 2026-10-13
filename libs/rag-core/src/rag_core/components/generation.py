@@ -340,7 +340,5 @@ class AnswerParams(_Strict):
     stream: Literal["live", "checked"] = "live"
 
 
-@register("pipeline", "standard", params=AnswerParams,
-          summary="retrieve → (abstain) → context → generate → cite: the advanced-RAG default")  # fmt: skip
-def _standard(p: AnswerParams, c: Container) -> AnswerParams:
-    return p
+# The `pipeline` slot holds an architecture built on these settings (Step 35): standard, naive,
+# corrective, self-reflective, adaptive, agentic, graph, sql. See components/architectures.py.
