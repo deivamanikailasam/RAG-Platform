@@ -2,7 +2,7 @@
 # `rag components` lists everything that can go here; `rag config check --profile <p>` builds it.
 # Switch one thing without editing this file: RAG__RERANKER__USE=none, RAG__CHUNKER__MAX_TOKENS=300
 # Secrets never go here: components take the NAME of an environment variable (api_key_env) or of a
-# file the OpenBao agent writes (credentials_file, url_file).
+# file the OpenBao agent writes (credentials_file, url_file, api_key_file, key_file).
 version: 1
 profiles:
   # ---- runs anywhere, with nothing else running: tests, CI, demos, a new laptop ----
@@ -20,20 +20,35 @@ profiles:
     keyword_index: memory-bm25
     manifest: memory
     queue: memory
+    # search (Step 32)
+    query_transformer: none    # identity | expand-terms | with-history | rewrite | multi-query | hyde | decompose | step-back | chain
+    retriever: {use: hybrid, candidates: 30}     # dense | keyword | hybrid
+    fusion: {use: rrf, k: 60}                    # rrf | weighted | dbsf
+    reranker: {use: term-overlap, top_n: 30}     # offline stand-in for a cross-encoder
+    postprocessors:
+      - {use: dedupe, threshold: 0.85}
+      - {use: max-per-document, n: 3}
 
   # ---- the platform on your Mac (Compose / OrbStack): real models and stores ----
   local:
     extends: offline
-    llm: {use: gateway, model: qwen-fast, base_url: "http://litellm:4000/v1"}
-    judge_llm: {use: gateway, model: qwen-quality, base_url: "http://litellm:4000/v1"}
-    pii: {use: regex, strategy: pseudonymise, key_env: RAG_PII_HMAC_KEY}
+    # Step 32: the gateway key and the PII key are files OpenBao Agent writes (Step 28), re-read on every use
+    llm: {use: gateway, model: qwen-fast, base_url: "http://litellm:4000/v1", api_key_file: /run/bao/rag_api_gateway_key}
+    judge_llm: {use: gateway, model: qwen-quality, base_url: "http://litellm:4000/v1", api_key_file: /run/bao/rag_api_gateway_key}
+    pii: {use: regex, strategy: pseudonymise, key_file: /run/bao/pii_hmac_key}
     embedder:
       use: cached
-      inner: {use: gateway, model: embedder, dimensions: 1024, base_url: "http://litellm:4000/v1"}
+      inner: {use: gateway, model: embedder, dimensions: 1024, base_url: "http://litellm:4000/v1", api_key_file: /run/bao/rag_api_gateway_key,
+              query_prompt: query-instruction, prompts_dir: /app/prompts}   # Step 24's registered instruction
     vector_store: {use: pgvector, dsn_env: null, credentials_file: /run/bao/rag_db.json, collection: default}
     keyword_index: {use: postgres-fts, dsn_env: null, credentials_file: /run/bao/rag_db.json, collection: default}
     manifest: {use: postgres, dsn_env: null, credentials_file: /run/bao/rag_db.json, collection: default}
     queue: {use: valkey-streams, url_file: /run/bao/valkey_url}
+    reranker: {use: gateway, model: reranker, base_url: "http://litellm:4000", top_n: 30, api_key_file: /run/bao/rag_api_gateway_key}
+    postprocessors:
+      - {use: dedupe, threshold: 0.85}
+      - {use: min-score, stage: rerank, threshold: 0.05, min_keep: 1}
+      - {use: max-per-document, n: 3}
 
   # ---- the same, with the dedicated search engines from Steps 12-13 instead of Postgres ----
   local-engines:

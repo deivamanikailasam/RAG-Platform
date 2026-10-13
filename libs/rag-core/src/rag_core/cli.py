@@ -11,6 +11,12 @@ rag delete  [--profile p] URI…                            remove sources from 
 rag enqueue [--profile p] [--group hr] [--delete] URI…    add jobs to the profile's queue
 rag worker  [--profile p] [--forever]                     take jobs from the queue
 
+Search (Step 32):
+rag search "question" --group hr [--classification internal] [-k 5] [--json] [--ingest FILE…]
+                                                          search as someone, with every score
+rag eval-search dataset.yaml [--variant …] [--no-ingest] [--fail-under recall=0.9] [--json]
+                                                          compare search variants on labelled questions
+
 A URI is file:///abs/path, s3://bucket/key, or a local path (turned into a file:// URI).
 """
 
@@ -21,6 +27,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -54,6 +61,32 @@ def main(argv: list[str] | None = None) -> int:
             p.add_argument("--delete", action="store_true")
         if name == "worker":
             p.add_argument("--forever", action="store_true")
+    p = sub.add_parser("search", help="search as a given person and show why each chunk ranked")
+    p.add_argument("question")
+    p.add_argument("--file", default=os.environ.get("RAG_CONFIG", "rag.yaml"))
+    p.add_argument("--profile")
+    p.add_argument("--group", action="append", default=[])
+    p.add_argument("--classification", action="append", default=[])
+    p.add_argument("--tenant", default="default")
+    p.add_argument("-k", type=int, default=5)
+    p.add_argument(
+        "--ingest", nargs="*", default=[], help="ingest these files first (in-memory profiles)"
+    )
+    p.add_argument("--json", action="store_true")
+    p = sub.add_parser("eval-search", help="compare search variants on a labelled dataset")
+    p.add_argument("dataset")
+    p.add_argument("--file", default=os.environ.get("RAG_CONFIG", "rag.yaml"))
+    p.add_argument("--profile")
+    p.add_argument("--variant", action="append", default=[])
+    p.add_argument("--no-ingest", action="store_true", help="the stores already hold the corpus")
+    p.add_argument("--json", action="store_true")
+    p.add_argument(
+        "--fail-under",
+        action="append",
+        default=[],
+        metavar="METRIC=VALUE",
+        help="exit 1 if a variant scores below, e.g. recall=0.8 (CI gate)",
+    )
     a = ap.parse_args(argv)
     try:
         if a.cmd == "components":
@@ -71,7 +104,11 @@ def main(argv: list[str] | None = None) -> int:
                 if params:
                     print(f"{'':51} {params}")
             return 0
+        if a.cmd == "eval-search":
+            return _eval_search(a)
         container = cfg.load(a.file, a.profile)
+        if a.cmd == "search":
+            return _search(a, container)
         if a.cmd in ("ingest", "delete", "enqueue", "worker"):
             return _ingestion(a, container)
         if a.action == "validate":
@@ -132,6 +169,68 @@ def _ingestion(a: argparse.Namespace, container: Container) -> int:
             f"{r.status:9} {r.chunks:4} chunks {r.seconds:6.2f}s   {r.uri}{'   ' + r.detail if r.detail else ''}{extra}"
         )
     return 1 if any(r.status == "failed" for r in results) else 0
+
+
+def _search(a: argparse.Namespace, c: Container) -> int:
+    from rag_core.ingest import IngestionPipeline, load_source
+    from rag_core.search import SearchPipeline
+    from rag_core.types import Access, Classification, Principal, Query
+
+    classes: tuple[Classification, ...] = tuple(a.classification) or ("public", "internal")
+    if a.ingest:
+        pipe = IngestionPipeline(c)
+        for path in a.ingest:
+            pipe.ingest(load_source(f"file://{Path(path).resolve()}",
+                                    Access("internal", tuple(a.group), a.tenant)))  # fmt: skip
+    who = Principal("cli", tuple(a.group), classes, a.tenant)
+    result = SearchPipeline(c).search(Query(a.question, who, k=a.k))
+    if a.json:
+        hits: list[dict[str, Any]] = [
+            {"id": h.chunk.id, "document": h.chunk.document_uri, "score": h.score, "scores": dict(h.scores),
+             "section": h.chunk.metadata.get("section", ""), "text": h.chunk.text} for h in result.hits]  # fmt: skip
+        print(json.dumps({"trace": result.trace, "hits": hits}, indent=2, default=str))
+        return 0
+    print(f"searched: {result.texts}")
+    print(f"pipeline: {result.trace['components']}")
+    print(f"counts:   {result.trace['counts']}   ms: {result.trace['ms']}")
+    for i, h in enumerate(result.hits, 1):
+        parts = " ".join(f"{k}={v:.3f}" for k, v in h.scores.items())
+        where = h.chunk.document_uri.rsplit("/", 1)[-1]
+        section = h.chunk.metadata.get("section", "")
+        print(f"{i}. {h.score:.4f}   {where}{' > ' + section if section else ''}   [{parts}]")
+        print(f"     {h.chunk.text[:110].replace(chr(10), ' ')}")
+    return 0
+
+
+def _eval_search(a: argparse.Namespace) -> int:
+    from rag_core import evaluate as ev
+
+    dataset = Path(a.dataset)
+    doc = ev.load_dataset(dataset)
+    profile = a.profile or os.environ.get("RAG_PROFILE", "default")
+    rows = [ev.run_variant(name, conf, doc, dataset.parent, ingest=not a.no_ingest)
+            for name, conf in ev.variant_configs(Path(a.file), profile, doc, a.variant).items()]  # fmt: skip
+    k = int(doc.get("k", 5))
+    if a.json:
+        print(json.dumps([r.row() | {"per_case": r.per_case} for r in rows], indent=2))
+    else:
+        print(f"{len(doc['questions'])} questions, profile {profile!r}, k={k}\n")
+        print(ev.format_table(rows, k))
+    failed = []
+    for rule in a.fail_under:
+        metric, _, value = rule.partition("=")
+        for r in rows:
+            if metric not in r.row():
+                raise ComponentError(f"--fail-under: unknown metric {metric!r} (recall, mrr, ndcg)")
+            if r.row()[metric] < float(value):
+                failed.append(f"{r.variant}: {metric} {r.row()[metric]} < {value}")
+    if any(r.leaks for r in rows):
+        failed += [
+            f"{r.variant}: {r.leaks} forbidden document(s) returned" for r in rows if r.leaks
+        ]
+    for f in failed:
+        print(f"FAIL: {f}", file=sys.stderr)
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

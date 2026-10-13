@@ -277,3 +277,31 @@ def test_postgres_manifest_round_trip(pg_dsn: str) -> None:
     assert [e.source_uri for e in m.all()] == ["file:///a"]
     m.delete("file:///a")
     assert m.get("file:///a") is None
+
+
+# ---- Step 32: the whole search pipeline on real Postgres ----------------------------------------
+
+
+def test_hybrid_search_on_postgres_end_to_end(pg_dsn: str) -> None:
+    """Step 32 on the real tables: the handbook ingested into pgvector + Postgres full-text search,
+    searched through the whole pipeline, scored by the same evaluation as the offline profile."""
+    from rag_core import evaluate as ev
+    from rag_core.registry import Container
+    from rag_core.search import SearchPipeline
+    from rag_core.types import Principal, Query
+
+    p = pg_params(pg_dsn, "handbook")
+    store = {"dsn_env": "RAG_TEST_DB_DSN", "collection": "handbook", "dimensions": DIMS,
+             "vector_type": p.vector_type}  # fmt: skip
+    doc = ev.load_dataset(ROOT / "examples/eval/handbook.yaml")
+    config = ev.variant_configs(ROOT / "rag.yaml", "offline", doc, ["all-together"])["all-together"]
+    config |= {"embedder": {"use": "hashing", "dimensions": DIMS}, "vector_store": {"use": "pgvector", **store},
+               "keyword_index": {"use": "postgres-fts", **store}}  # fmt: skip
+    scores = ev.run_variant("postgres", config, doc, ROOT / "examples/eval")
+    assert scores.leaks == 0
+    assert scores.recall >= 0.85, scores.per_case
+    # the rows carry Step 11's numeric document id (rag-api's policy check and audit use it)
+    staff = Principal("eval-staff", ("all-staff",), ("public", "internal"))
+    hits = SearchPipeline(Container(config, "pg")).search(Query("My VPN shows E-4021", staff)).hits
+    assert hits[0].chunk.document_uri.endswith("vpn-troubleshooting.md")
+    assert isinstance(hits[0].chunk.metadata["document_id"], int)

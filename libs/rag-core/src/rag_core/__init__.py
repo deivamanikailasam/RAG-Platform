@@ -6,5 +6,8 @@ registry     names -> factories, with validated parameters; the Container builds
 config       rag.yaml profiles with `extends`, "none" to switch a slot off, RAG__SLOT__PARAM overrides
 components   the built-in implementations (Step 30: token counters, LLMs, embedders, in-memory stores)
 testing      the conformance kit every implementation of a contract must pass
-cli          the `rag` command: components, config check | validate | show
+ingest       the ingestion pipeline and worker (Step 31)
+search       the search pipeline: transform, retrieve, fuse, rerank, post-process (Step 32)
+evaluate     recall@k, MRR, nDCG@k and leaks per search variant on a labelled dataset (Step 32)
+cli          the `rag` command: components, config, ingest, search, eval-search
 """

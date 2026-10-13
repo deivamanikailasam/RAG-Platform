@@ -39,7 +39,8 @@ def _content(data: bytes) -> object:
 
 
 def test_ingest_the_corpus_offline(capsys: pytest.CaptureFixture[str]) -> None:
-    files = sorted(str(p) for p in CORPUS.iterdir())
+    # files only: examples/corpus/handbook/ is Step 32's search-evaluation corpus
+    files = sorted(str(p) for p in CORPUS.iterdir() if p.is_file())
     # a failed source makes the exit code 1, so scripts and CI notice
     assert (
         rag_cli(["ingest", "--file", RAG_YAML, "--profile", "offline", "--group", "hr", *files])
