@@ -58,9 +58,11 @@ ignore = ["E501"]                   # line length is the formatter's job
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**" = ["S101"]            # assert is normal in tests
 "scripts/**"  = ["T20"]             # scripts may print
+"libs/rag-core/src/rag_core/cli.py" = ["T20"]               # the `rag` command prints (Step 30)
+"libs/rag-core/src/rag_core/testing/**" = ["S101"]          # the conformance kit asserts (Step 30)
 
 [tool.ruff.lint.isort]
-known-first-party = ["rag_common", "rag_api", "rag_evals"]
+known-first-party = ["rag_common", "rag_api", "rag_evals", "rag_core"]
 
 [tool.ruff.format]
 # Markdown is prose: its code blocks quote the build guide as written, so the formatter leaves
@@ -77,12 +79,18 @@ pretty = true
 files = [                           # add each new library/service as it's created
     "libs/rag-common/src",
     "libs/rag-evals/src",            # Step 26: the evaluation harness
+    "libs/rag-core/src",             # Step 30: the RAG core
+    "libs/rag-core/tests",           # Step 30: its tests are type-checked too
     "services/rag-api/src",          # Step 17
     "services/rag-api/tests",        # Step 17: the attack tests are type-checked too
     "scripts",
     "tests",
 ]
 plugins = ["pydantic.mypy"]          # so mypy understands pydantic models (Step 6)
+
+[[tool.mypy.overrides]]
+module = ["tokenizers", "tokenizers.*"]   # rag-core's optional extra (Step 30): not installed by default
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["libs", "services", "tests"]

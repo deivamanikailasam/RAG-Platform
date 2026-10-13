@@ -34,4 +34,5 @@ exceptions:               # metadata is missing or ambiguous: the licence a pers
 ignore:                   # our own workspace packages
   - rag-api
   - rag-common
+  - rag-core
   - rag-evals

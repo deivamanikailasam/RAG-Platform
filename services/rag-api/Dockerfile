@@ -11,6 +11,7 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 COPY libs/rag-common/pyproject.toml libs/rag-common/
 # Every workspace member's manifest must be present, or `uv sync --locked` fails (Step 27)
+COPY libs/rag-core/pyproject.toml libs/rag-core/
 COPY libs/rag-evals/pyproject.toml libs/rag-evals/
 COPY services/rag-api/pyproject.toml services/rag-api/
 RUN --mount=type=cache,target=/root/.cache/uv \
