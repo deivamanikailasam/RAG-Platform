@@ -107,6 +107,7 @@ def test_manifest_is_complete_and_strict() -> None:
         "trivy",
         "syft",
         "cosign",
+        "bao",  # Step 28: OpenBao server, CLI and agent
     }
     for name, t in tools.items():
         for plat in ("linux-amd64", "darwin-arm64"):

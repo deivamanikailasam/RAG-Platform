@@ -24,3 +24,20 @@ groups:
         annotations:
           summary: "Audit events cannot be stored: rag-api is refusing requests until they can"
           runbook: docs/runbooks/audit-log.md
+      # OpenBao (Step 28) is sealed: it holds its data but can't decrypt it, so it hands out nothing.
+      # Running services keep their current credentials until those expire (at most 1 hour).
+      # max(): after a restart an old series can linger at 0 next to the new one.
+      - alert: OpenBaoSealed
+        expr: max(vault_core_unsealed) < 1
+        for: 2m
+        labels: { severity: critical, service: openbao }
+        annotations:
+          summary: "OpenBao is sealed: run just vault-up before credentials expire"
+          runbook: docs/runbooks/openbao.md
+      # OpenBao couldn't write its audit log, so it REFUSES requests: no secret is handed out unrecorded.
+      - alert: OpenBaoAuditFailing
+        expr: sum(increase(vault_audit_log_request_failure[5m])) > 0
+        labels: { severity: critical, service: openbao }
+        annotations:
+          summary: "OpenBao cannot write its audit log and is refusing requests"
+          runbook: docs/runbooks/openbao.md

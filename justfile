@@ -368,7 +368,7 @@ ci-static:
 ci-test:
     uv run pytest -q
 
-# Prompts, cards, dashboards and alert rules: the "configuration as code" checks
+# Prompts, cards, dashboards, alert rules and OpenBao policies: the "configuration as code" checks
 ci-config:
     just prompts lint
     just prompts-check-main
@@ -376,6 +376,7 @@ ci-config:
     just cards docs --check
     just dashboards-check
     just alerts-test
+    just vault-check
 
 # Secrets, workflows, dependencies, licences, Dockerfile
 ci-supply-chain:
@@ -404,3 +405,96 @@ image-verify digest:
       --certificate-oidc-issuer https://token.actions.githubusercontent.com \
       --certificate-identity-regexp "^https://github.com/$(gh repo view --json nameWithOwner -q .nameWithOwner)/.github/workflows/release.yml@refs/heads/main$" > /dev/null && echo "signature OK"
     gh attestation verify "oci://ghcr.io/$(gh repo view --json nameWithOwner -q .nameWithOwner | tr '[:upper:]' '[:lower:]')/rag-api@{{digest}}" --repo "$(gh repo view --json nameWithOwner -q .nameWithOwner)"
+
+# ---- Vault: OpenBao (Step 28) ----
+# (the `compose` variable is defined at the top of this file, Step 9)
+export BAO_ADDR := env("BAO_ADDR", "http://127.0.0.1:8200")
+bao_init_file := "secrets/openbao-init.enc.json"
+
+# Once per new server: unseal keys + root token go STRAIGHT into a SOPS-encrypted file
+vault-init:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    test ! -e {{bao_init_file}} || { echo "{{bao_init_file}} exists: already initialised"; exit 1; }
+    bao operator init -key-shares=3 -key-threshold=2 -format=json \
+      | sops encrypt --filename-override {{bao_init_file}} --input-type json --output-type json /dev/stdin \
+      > {{bao_init_file}}.tmp
+    mv {{bao_init_file}}.tmp {{bao_init_file}}
+    echo "wrote {{bao_init_file}}: commit it. Next: just vault-unseal && just vault-setup-first"
+
+# After every OpenBao restart: the keys are decrypted into a pipe, never onto disk or a command line
+vault-unseal:
+    sops decrypt {{bao_init_file}} | uv run python scripts/vault_setup.py unseal
+
+# First configuration, with the root token (then: just vault-revoke-root)
+vault-setup-first:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export BAO_TOKEN="$(sops decrypt --extract '["root_token"]' {{bao_init_file}})"
+    sops exec-env secrets/dev.enc.env 'uv run python scripts/vault_setup.py setup'
+
+# Every later change: edit the files, run this with your admin login (just vault-login)
+vault-setup:
+    sops exec-env secrets/dev.enc.env 'uv run python scripts/vault_setup.py setup'
+
+# Retire the root token. Break-glass if ever needed: bao operator generate-root (needs 2 key shares)
+vault-revoke-root:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    BAO_TOKEN="$(sops decrypt --extract '["root_token"]' {{bao_init_file}})" bao token revoke -self
+    echo "root token revoked (the copy in {{bao_init_file}} is now useless)"
+
+# Your day-to-day login (platform-admin policy, 1 h, renewable to 8 h). Asks for the password.
+vault-login:
+    bao login -method=userpass username=admin
+
+# Store a secret: just vault-put rag-api gateway_key=RAG_API_GATEWAY_KEY (values come from SOPS env vars)
+vault-put path +pairs:
+    sops exec-env secrets/dev.enc.env 'uv run python scripts/vault_setup.py put {{path}} {{pairs}}'
+
+# Short-lived database login for you or a job, in .bao/<role>.json (0600)
+vault-creds role:
+    mkdir -p -m 700 .bao
+    uv run python scripts/vault_setup.py creds {{role}} --out .bao/{{role}}.json
+
+# Print a single-use, wrapped secret ID (valid 10 minutes) for an AppRole, e.g. for a job
+vault-secret-id role:
+    uv run python scripts/vault_setup.py secret-id {{role}}
+
+# Hand rag-api's agent a fresh single-use secret ID and (re)start it. Needed after every agent restart.
+vault-agent-start:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mkdir -p -m 700 .bao/rag-api
+    uv run python scripts/vault_setup.py role-id rag-api > .bao/rag-api/role_id
+    uv run python scripts/vault_setup.py secret-id rag-api > .bao/rag-api/secret_id
+    {{compose}} up -d --force-recreate --wait rag-api-agent
+    {{compose}} up -d rag-api
+
+# OpenBao policies in canonical format (part of ci-config)
+vault-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+    cp infra/config/openbao/policies/*.hcl "$tmp"/
+    for f in "$tmp"/*.hcl; do bao policy fmt "$f" > /dev/null; done
+    diff -ru infra/config/openbao/policies "$tmp" || { echo "fix with: bao policy fmt <file>"; exit 1; }
+
+# After a restart of OpenBao (or your Mac): unseal, then give the agent a new secret ID
+vault-up: vault-unseal vault-agent-start
+
+vault-status:
+    bao status || true
+    bao audit list
+    bao list sys/leases/lookup/database/creds/rag-api 2>/dev/null || echo "(no rag-api leases)"
+
+# One-time on an EXISTING rag-db volume (a new volume runs 03-openbao.sh by itself)
+vault-db-bootstrap:
+    {{compose}} exec -T rag-db bash < infra/config/rag-db/init/03-openbao.sh
+
+# After rag-api runs on OpenBao credentials: the shared roles stop logging in. Undo = roll back.
+vault-cutover:
+    {{compose}} exec -T rag-db psql -v ON_ERROR_STOP=1 -U postgres -d postgres < infra/config/rag-db/vault-cutover.sql
+
+vault-cutover-undo:
+    sed 's/NOLOGIN/LOGIN/' infra/config/rag-db/vault-cutover.sql | {{compose}} exec -T rag-db psql -v ON_ERROR_STOP=1 -U postgres -d postgres

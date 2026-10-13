@@ -43,3 +43,6 @@ evals/runs/
 
 # --- Pinned CI tools (Step 27): `just tools` downloads them here, checksum-verified ---
 .tools/
+
+# --- OpenBao (Step 28): the agent's role ID + single-use secret ID, short-lived database logins ---
+.bao/

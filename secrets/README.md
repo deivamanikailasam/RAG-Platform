@@ -44,3 +44,42 @@ Never run `sops -d … > .env`. If a secret leaks, follow
 
 > This repository does not ship `secrets/dev.enc.env`: it can only be produced with the owner's own
 > age key, so each machine creates it with `just secrets-init` as above.
+
+## OpenBao's unseal keys and root token (Step 28)
+
+`just vault-init` initialises OpenBao **once** and pipes its output straight into SOPS, so the
+plaintext never touches the disk:
+
+```bash
+bao operator init -key-shares=3 -key-threshold=2 -format=json \
+  | sops encrypt --filename-override secrets/openbao-init.enc.json --input-type json --output-type json /dev/stdin \
+  > secrets/openbao-init.enc.json
+```
+
+The file you then commit, `secrets/openbao-init.enc.json`, has this shape **before encryption**
+(dummy values shown; every real value becomes `ENC[AES256_GCM,…]`):
+
+```json
+{
+  "unseal_keys_b64": ["<share 1, base64>", "<share 2, base64>", "<share 3, base64>"],
+  "unseal_keys_hex": ["<share 1, hex>", "<share 2, hex>", "<share 3, hex>"],
+  "unseal_shares": 3,
+  "unseal_threshold": 2,
+  "recovery_keys_b64": [],
+  "recovery_keys_hex": [],
+  "recovery_keys_shares": 0,
+  "recovery_keys_threshold": 0,
+  "root_token": "<s.… root token: revoked by `just vault-revoke-root` right after setup>"
+}
+```
+
+- `just vault-unseal` decrypts it into a pipe (`sops decrypt … | vault_setup.py unseal`); 2 of the 3
+  shares unseal the server after every restart.
+- The root token is used once (`just vault-setup-first`) and then revoked (`just vault-revoke-root`);
+  the copy in the file is then useless. Break-glass: `bao operator generate-root` with 2 shares.
+- In a team, give each share to a different person, each encrypted to their own age key. Back up
+  your age key separately from the OpenBao volume: whoever holds 2 shares and the volume can read
+  every secret, and losing all shares loses the data for good.
+
+> This repository does not ship `secrets/openbao-init.enc.json`: it is created per server with the
+> owner's age key, as above. Never commit it unencrypted (the `secrets-encrypted` hook refuses).

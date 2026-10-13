@@ -145,3 +145,38 @@ tests:
           unless count by (label, prompt, version) (rag_prompt_info offset 5m)
         eval_time: 20m
         exp_samples: []
+
+  # 10. Step 28: OpenBao sealed for more than 2 minutes -> page. After unsealing, an old series
+  #     (cluster="") can linger at 0 next to the new one at 1: max() must NOT keep alerting.
+  - interval: 1m
+    input_series:
+      - series: 'vault_core_unsealed{cluster=""}'
+        values: "1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+      - series: 'vault_core_unsealed{cluster="vault-cluster-1a2b3c"}'
+        values: "_x9 1 1 1 1 1 1"
+    alert_rule_test:
+      - { eval_time: 3m, alertname: OpenBaoSealed, exp_alerts: [] }
+      - eval_time: 5m
+        alertname: OpenBaoSealed
+        exp_alerts:
+          - exp_labels: { severity: critical, service: openbao }
+            exp_annotations:
+              summary: "OpenBao is sealed: run just vault-up before credentials expire"
+              runbook: docs/runbooks/openbao.md
+      - { eval_time: 12m, alertname: OpenBaoSealed, exp_alerts: [] }   # stale 0 series ignored
+
+  # 11. Step 28: OpenBao can't write its audit log -> page at once (it is refusing requests).
+  - interval: 1m
+    input_series:
+      - series: "vault_audit_log_request_failure"
+        values: "0 0 0 2 5 5 5 5 5 5 5 5 5 5"
+    alert_rule_test:
+      - { eval_time: 2m, alertname: OpenBaoAuditFailing, exp_alerts: [] }
+      - eval_time: 4m
+        alertname: OpenBaoAuditFailing
+        exp_alerts:
+          - exp_labels: { severity: critical, service: openbao }
+            exp_annotations:
+              summary: "OpenBao cannot write its audit log and is refusing requests"
+              runbook: docs/runbooks/openbao.md
+      - { eval_time: 13m, alertname: OpenBaoAuditFailing, exp_alerts: [] }

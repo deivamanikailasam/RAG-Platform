@@ -107,14 +107,17 @@ def test_rag_db_is_tuned_for_vectors_and_observable() -> None:
 def test_four_role_passwords_come_from_secret_files() -> None:
     # Step 20 adds the monitoring role's password (rag_metrics, see tests/test_monitoring.py)
     # Step 23 adds the three audit-database roles (see tests/test_audit_db.py)
+    # Step 28 adds the bootstrap password for OpenBao's admin logins (see tests/test_vault.py)
     assert _rag_db()["secrets"] == [
         *ROLE_SECRETS,
         "rag_db_metrics_password",
         "audit_db_migrator_password",
         "audit_db_writer_password",
         "audit_db_reader_password",
+        "vault_admin_pg_password",
     ]
     secrets = _compose()["secrets"]
+    assert secrets["vault_admin_pg_password"] == {"environment": "VAULT_ADMIN_PG_PASSWORD"}
     for name, env in ROLE_SECRETS.items():
         assert secrets[name] == {"environment": env}
 

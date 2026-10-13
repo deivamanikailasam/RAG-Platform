@@ -94,7 +94,7 @@ def test_every_component_is_scraped_with_least_privilege() -> None:
     jobs = {j["job_name"]: j for j in _yaml(PROM / "prometheus.yml")["scrape_configs"]}
     assert set(jobs) == {
         "prometheus", "alertmanager", "otel-collector", "keycloak", "opa", "qdrant",
-        "postgres-rag", "tei", "tempo", "loki",
+        "postgres-rag", "tei", "tempo", "loki", "openbao",
     }  # fmt: skip
 
     def targets(job: str) -> list[str]:
@@ -105,6 +105,11 @@ def test_every_component_is_scraped_with_least_privilege() -> None:
     assert targets("keycloak") == ["keycloak:9000"]  # the management port, never published
     assert targets("postgres-rag") == ["postgres-exporter:9187"]
     assert targets("tei") == ["host.docker.internal:9083", "host.docker.internal:9084"]
+    # Step 28: OpenBao's metrics need no token (they hold counts, never secrets; tests/test_vault.py)
+    assert targets("openbao") == ["openbao:8200"]
+    assert jobs["openbao"]["metrics_path"] == "/v1/sys/metrics"
+    assert jobs["openbao"]["params"] == {"format": ["prometheus"]}
+    assert "authorization" not in jobs["openbao"]
     # bearer tokens come from secret FILES that Compose mounts into the Prometheus container
     assert jobs["opa"]["authorization"]["credentials_file"] == "/run/secrets/opa_metrics_token"
     qdrant = jobs["qdrant"]["authorization"]["credentials_file"]
@@ -149,6 +154,7 @@ def test_every_alert_has_a_severity_a_summary_and_an_existing_runbook() -> None:
         "RagSearchErrorBudgetFastBurn", "RagSearchErrorBudgetSlowBurn", "RagSearchSlow",
         "RagPolicyQueryMismatch", "KeycloakLoginFailuresHigh", "TargetDown",
         "OtelCollectorLosingData", "RagAuditWriteFailing",  # Step 23
+        "OpenBaoSealed", "OpenBaoAuditFailing",  # Step 28
     }  # fmt: skip
     for name, rule in alerts.items():
         assert rule["labels"]["severity"] in {"critical", "warning"}, name
@@ -163,6 +169,8 @@ def test_every_alert_has_a_severity_a_summary_and_an_existing_runbook() -> None:
         "RagSearchErrorBudgetFastBurn",
         "RagPolicyQueryMismatch",
         "RagAuditWriteFailing",
+        "OpenBaoSealed",  # Step 28: no new credentials until someone unseals
+        "OpenBaoAuditFailing",  # Step 28: OpenBao is refusing every request
     }
 
 
@@ -173,15 +181,17 @@ def test_collector_counters_are_named_explicitly_without_total() -> None:
     assert expr.count("or vector(0)") == 6
 
 
-def test_unit_tests_cover_every_rule_file_with_nine_cases() -> None:
+def test_unit_tests_cover_every_rule_file_with_eleven_cases() -> None:
     tests = _yaml(PROM / "tests" / "rules_test.yml")
     files = {(PROM / "tests" / f).resolve() for f in tests["rule_files"]}
     assert files == {p.resolve() for p in RULES.glob("*.yml")}
-    assert len(tests["tests"]) == 9  # Step 23 adds RagAuditWriteFailing, Step 24 a PromQL test
+    # Step 23 adds RagAuditWriteFailing, Step 24 a PromQL test, Step 28 the two OpenBao alerts
+    assert len(tests["tests"]) == 11
     tested = {c["alertname"] for t in tests["tests"] for c in t.get("alert_rule_test", [])}
     assert tested >= {
         "RagSearchErrorBudgetFastBurn", "RagSearchErrorBudgetSlowBurn", "RagSearchSlow",
         "RagPolicyQueryMismatch", "TargetDown", "OtelCollectorLosingData", "RagAuditWriteFailing",
+        "OpenBaoSealed", "OpenBaoAuditFailing",
     }  # fmt: skip
 
 

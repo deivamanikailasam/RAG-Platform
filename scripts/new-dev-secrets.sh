@@ -76,6 +76,9 @@ S3_AUDIT_ANCHOR_ACCESS_KEY=$(rand)
 S3_AUDIT_ANCHOR_SECRET_KEY=$(rand)
 S3_AUDIT_READER_ACCESS_KEY=$(rand)
 S3_AUDIT_READER_SECRET_KEY=$(rand)
+# --- OpenBao (Step 28): bootstrap password (rotated by OpenBao) and your admin login ---
+VAULT_ADMIN_PG_PASSWORD=$(rand)
+BAO_ADMIN_PASSWORD=$(rand)
 # --- Demo value used in this step ---
 DEMO_TOKEN=$(rand)
 EOF

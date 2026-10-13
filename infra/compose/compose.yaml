@@ -114,10 +114,11 @@ services:
       POSTGRES_PASSWORD_FILE: /run/secrets/rag_db_superuser_password
     secrets: [rag_db_superuser_password, rag_db_migrator_password, rag_db_app_password, rag_db_readonly_password,
               rag_db_metrics_password,                  # Step 20: the rag_metrics (pg_monitor) role
-              audit_db_migrator_password, audit_db_writer_password, audit_db_reader_password]   # Step 23: the audit database
+              audit_db_migrator_password, audit_db_writer_password, audit_db_reader_password,   # Step 23: the audit database
+              vault_admin_pg_password]                  # Step 28: bootstrap for 03-openbao.sh; rotated by OpenBao
     volumes:
       - rag-db-data:/var/lib/postgresql/data
-      - ../config/rag-db/init:/docker-entrypoint-initdb.d:ro  # one-time bootstrap: roles, extensions, schema (+ audit DB, Step 23)
+      - ../config/rag-db/init:/docker-entrypoint-initdb.d:ro  # one-time bootstrap: roles, extensions, schema (+ audit DB, Step 23; OpenBao logins, Step 28)
     command:
       - postgres
       - -c
@@ -463,11 +464,19 @@ services:
       RAG_API_LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}     # identifies the project; not secret
       RAG_API_AUDIT_DB_HOST: rag-db                           # Step 23: the audit database, as audit_writer
       RAG_API_PROMPT_LABEL: production                        # Step 24: which prompt versions run here; a staging stack sets: staging
+      # Step 28: database logins issued by OpenBao, kept fresh by rag-api-agent, read per connection
+      RAG_API_DB_CREDENTIALS_FILE: /run/bao/rag_db.json
+      RAG_API_AUDIT_DB_CREDENTIALS_FILE: /run/bao/audit_db.json
+    volumes:
+      - rag-api-bao:/run/bao:ro                               # Step 28: also holds rag_api_gateway_key and rag_api_opa_token
     secrets:
+      # Step 28: after the cut-over (just vault-cutover, then a quiet week), remove these four:
+      #   rag_api_gateway_key, rag_api_db_password, rag_api_opa_token, rag_api_audit_db_password.
+      # Until then they are the way back; where a file exists in /run/bao too, /run/bao wins.
       - rag_api_gateway_key                                   # -> /run/secrets/rag_api_gateway_key
       - rag_api_db_password                                   # -> /run/secrets/rag_api_db_password
       - rag_api_opa_token                                     # -> /run/secrets/rag_api_opa_token (Step 18)
-      - rag_api_langfuse_secret_key                           # -> /run/secrets/rag_api_langfuse_secret_key (Step 22)
+      - rag_api_langfuse_secret_key                           # stays in SOPS for now (moves the same way later) (Step 22)
       - rag_api_audit_db_password                             # -> /run/secrets/rag_api_audit_db_password (Step 23)
     ports:
       - "127.0.0.1:8000:8000"
@@ -485,11 +494,59 @@ services:
       litellm:  { condition: service_healthy }
       opa:      { condition: service_started }        # Step 18: no healthcheck in the static image
       otel-collector: { condition: service_started }  # Step 19: no shell, so no healthcheck
+      rag-api-agent:  { condition: service_healthy }  # Step 28: its credentials files exist
     logging: *to-collector                                    # Step 21: output to the Collector -> Loki
     restart: unless-stopped
     deploy:
       resources:
         limits: { memory: 512m, cpus: "1" }
+
+  openbao:                                                    # secrets issued on demand, short-lived and audited (Step 28)
+    image: openbao/openbao:2.7.1@sha256:6d2b93856e3fcf7b18ad855a0b51eaba474dc8b79cf554379ea32034797d2acf   # also on quay.io/openbao/openbao
+    entrypoint: ["bao", "server", "-config=/openbao/config/server.hcl"]
+    init: true                                                # a tiny PID 1 that passes on signals (SIGHUP reopens the audit log)
+    ulimits: { core: 0 }                                      # a crash must never write memory, with secrets in it, to disk
+    ports: ["127.0.0.1:8200:8200"]                            # your Mac only: the bao CLI and the just recipes
+    volumes:
+      - ../config/openbao/server.hcl:/openbao/config/server.hcl:ro
+      - openbao-data:/openbao/file                            # raft storage; OpenBao encrypts everything it writes here
+      - openbao-logs:/openbao/logs                            # the audit log
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:                                              # 200 only when unsealed and active
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8200/v1/sys/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    deploy: { resources: { limits: { cpus: "1", memory: 512M } } }
+    restart: unless-stopped
+    logging: *to-collector
+
+  rag-api-agent:                                              # OpenBao Agent: logs in for rag-api, keeps its files fresh (Step 28)
+    image: openbao/openbao:2.7.1@sha256:6d2b93856e3fcf7b18ad855a0b51eaba474dc8b79cf554379ea32034797d2acf   # same binary, agent mode
+    entrypoint: ["bao", "agent", "-config=/openbao/config/agent.hcl"]
+    user: "10001:10001"                                       # rag-api's user: only it can read the files
+    init: true
+    ulimits: { core: 0 }
+    volumes:
+      - ../config/openbao/agent-rag-api.hcl:/openbao/config/agent.hcl:ro
+      - ../../.bao/rag-api:/openbao/bootstrap                 # role_id + single-use secret ID (deleted after reading)
+      - rag-api-bao:/openbao/out                              # in memory, shared with rag-api only
+    depends_on:
+      openbao: { condition: service_healthy }
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "test", "-s", "/openbao/out/rag_db.json"]
+      interval: 5s
+      timeout: 2s
+      retries: 12
+    deploy: { resources: { limits: { cpus: "0.25", memory: 64M } } }
+    restart: "no"                                             # a restart needs a fresh secret ID: just vault-agent-start
+    logging: *to-collector
 
   prometheus:                                                 # metrics store + rule evaluation (Step 20)
     image: prom/prometheus:v3.13.4@sha256:87861b8cf91579109319ebc300f3f1060e6da9c05d6ae8ad15a20c879e84e32e   # 3.13 is the long-term-support line
@@ -725,6 +782,10 @@ volumes:
   langfuse-clickhouse-data:                                   # Langfuse traces and observations, 30 days via our retention job (Step 22)
   langfuse-clickhouse-logs:                                   # ClickHouse server logs (Step 22)
   langfuse-valkey-data:                                       # Langfuse job queue, append-only file (Step 22): queued jobs are not disposable
+  openbao-data:                                               # OpenBao raft storage (Step 28): encrypted; useless without 2 of the 3 unseal shares
+  openbao-logs:                                               # OpenBao audit log (Step 28): every request, secret values HMAC'd
+  rag-api-bao:                                                # tmpfs: never written to disk, gone when stopped (Step 28)
+    driver_opts: { type: tmpfs, device: tmpfs, o: "uid=10001,gid=10001,mode=0700,size=1m" }
 
 secrets:
   litellm_master_key:
@@ -813,3 +874,5 @@ secrets:
     environment: S3_AUDIT_READER_ACCESS_KEY     # audit-reader (Step 23): read/list rag-audit-archive only
   s3_audit_reader_secret_key:
     environment: S3_AUDIT_READER_SECRET_KEY
+  vault_admin_pg_password:
+    environment: VAULT_ADMIN_PG_PASSWORD        # bootstrap only (Step 28); rotated by OpenBao, after which only it knows the password

@@ -54,3 +54,8 @@ scrape_configs:
 
   - job_name: loki                            # Step 21: log storage health
     static_configs: [{ targets: ["loki:3100"] }]
+
+  - job_name: openbao                         # Step 28: sealed?, leases, audit failures (metrics hold no secrets)
+    metrics_path: /v1/sys/metrics
+    params: { format: [prometheus] }
+    static_configs: [{ targets: ["openbao:8200"] }]
