@@ -126,6 +126,21 @@ class QdrantStore:
         return from_distance(raw) if self.p.metric in ("l2", "l1") else raw
 
     @staticmethod
+    def payload(c: Chunk) -> dict[str, Any]:
+        """A chunk as a point's payload (the access fields are payload-indexed, Step 12)."""
+        return {"chunk_key": c.id, "source_uri": c.document_uri, "chunk_index": c.index, "text": c.text,
+                "embed_text": c.embed_text, "token_count": c.token_count, "parent_key": c.parent_id,
+                "tenant_id": c.access.tenant, "classification": c.access.classification,
+                "acl_groups": list(c.access.groups), "metadata": dict(c.metadata)}  # fmt: skip
+
+    @staticmethod
+    def chunk_of(pl: Mapping[str, Any]) -> Chunk:
+        return Chunk(id=pl["chunk_key"], document_uri=pl["source_uri"], index=pl["chunk_index"], text=pl["text"],
+                     token_count=pl["token_count"], access=Access(pl["classification"], tuple(pl["acl_groups"]),
+                     pl["tenant_id"]), embed_text=pl.get("embed_text") or "", parent_id=pl.get("parent_key"),
+                     metadata=pl.get("metadata") or {})  # fmt: skip
+
+    @staticmethod
     def point_id(chunk_id: str) -> str:
         return str(uuid.uuid5(NAMESPACE, chunk_id))
 
@@ -133,13 +148,11 @@ class QdrantStore:
         if len(chunks) != len(vectors):
             raise ValueError("chunks and vectors differ in length")
         self._ensure()
-        points = [{
-            "id": self.point_id(c.id), "vector": {self.p.vector_name: list(v)},
-            "payload": {"chunk_key": c.id, "source_uri": c.document_uri, "chunk_index": c.index, "text": c.text,
-                        "embed_text": c.embed_text, "token_count": c.token_count, "parent_key": c.parent_id,
-                        "tenant_id": c.access.tenant, "classification": c.access.classification,
-                        "acl_groups": list(c.access.groups), "metadata": dict(c.metadata)},
-        } for c, v in zip(chunks, vectors, strict=True)]  # fmt: skip
+        points = [{"id": self.point_id(c.id), "vector": {self.p.vector_name: list(v)}, "payload": self.payload(c)}
+                  for c, v in zip(chunks, vectors, strict=True)]  # fmt: skip
+        self._put(points)
+
+    def _put(self, points: list[dict[str, Any]]) -> None:
         for i in range(0, len(points), 256):
             self._call("PUT", "/points?wait=true", {"points": points[i : i + 256]})
 
@@ -192,11 +205,7 @@ class QdrantStore:
         })  # fmt: skip
         out = []
         for pt in res["points"]:
-            pl = pt["payload"]
-            chunk = Chunk(id=pl["chunk_key"], document_uri=pl["source_uri"], index=pl["chunk_index"], text=pl["text"],
-                            token_count=pl["token_count"], access=Access(pl["classification"], tuple(pl["acl_groups"]),
-                            pl["tenant_id"]), embed_text=pl.get("embed_text") or "", parent_id=pl.get("parent_key"),
-                            metadata=pl.get("metadata") or {})  # fmt: skip
+            chunk = self.chunk_of(pt["payload"])
             score = self._score(float(pt["score"]))
             out.append(ScoredChunk(chunk, score, {"dense": score}))
         return sorted(out, key=lambda h: -h.score)

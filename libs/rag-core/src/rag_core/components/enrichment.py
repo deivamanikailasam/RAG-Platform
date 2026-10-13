@@ -162,6 +162,9 @@ class GatewayEmbedderParams(_Strict):
     prompts_dir: str = "prompts"
     prompt_label: str = "production"  # staging sets RAG__EMBEDDER__INNER__PROMPT_LABEL=staging
     timeout: float = 120.0
+    # extension 02: ask the API for `dimensions` (Matryoshka models behind the gateway: OpenAI
+    # text-embedding-3, Gemini, Voyage, Jina v3, Cohere v4): the cut happens server-side
+    request_dimensions: bool = False
 
 
 class GatewayEmbedder:
@@ -196,7 +199,8 @@ class GatewayEmbedder:
             batch = list(texts[i : i + self.p.batch_size])
             r = self._http.post(
                 "embeddings",
-                json={"model": self.model, "input": batch},
+                json={"model": self.model, "input": batch}
+                | ({"dimensions": self.dimensions} if self.p.request_dimensions else {}),
                 headers={"Authorization": f"Bearer {self._key.get_secret_value()}"},
             )
             r.raise_for_status()

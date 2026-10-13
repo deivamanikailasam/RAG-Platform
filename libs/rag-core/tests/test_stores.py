@@ -182,6 +182,29 @@ def test_qdrant_changes_access_in_place(qdrant_url: str) -> None:
     check_access_update(lambda: qdrant_store(qdrant_url, f"reacl_{next(n)}"), HashingEmbedder(DIMS))
 
 
+def test_qdrant_sparse_vectors_conform(qdrant_url: str) -> None:
+    """Extension 02: BM25 sparse vectors in a Qdrant sparse-vector collection, IDF by Qdrant."""
+    import uuid
+
+    from rag_core.components.embeddings import (
+        Bm25Sparse,
+        Bm25SparseParams,
+        QdrantSparseIndex,
+        QdrantSparseParams,
+    )
+
+    os.environ["RAG_TEST_QDRANT_KEY"] = "test-admin-key"
+
+    def make() -> QdrantSparseIndex:
+        p = QdrantSparseParams(url=qdrant_url, collection=f"sparse_{uuid.uuid4().hex[:8]}",
+                               api_key_env="RAG_TEST_QDRANT_KEY", create_if_missing=True)  # fmt: skip
+        return QdrantSparseIndex(p, Bm25Sparse(Bm25SparseParams()))
+
+    check_keyword_index(make)
+    check_metadata_filters(make)
+    check_access_update(make)
+
+
 def test_qdrant_needs_its_key(qdrant_url: str) -> None:
     store = QdrantStore(
         QdrantParams(url=qdrant_url, collection="x", api_key_env=None, dimensions=DIMS)

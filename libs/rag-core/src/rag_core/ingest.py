@@ -66,6 +66,7 @@ def pipeline_hash(config: dict[str, Any]) -> str:
             "enrichers",
             "embedder",
             "token_counter",
+            "sparse_embedder",
         )
     }
     return hashlib.sha256(json.dumps(relevant, sort_keys=True, default=str).encode()).hexdigest()[
@@ -139,11 +140,12 @@ class IngestionPipeline:
                 with tracer.start_as_current_span(
                     "rag.ingest.embed", attributes={"rag.chunks": len(chunks)}
                 ):
-                    vectors = (
-                        self.embedder.embed_documents([c.indexed_text for c in chunks])
-                        if self.vectors
-                        else None
-                    )
+                    vectors = None
+                    if self.vectors is not None and hasattr(self.embedder, "embed_chunks"):
+                        # extension 02: document-aware embedders (late chunking) see the whole document
+                        vectors = self.embedder.embed_chunks(doc, chunks)
+                    elif self.vectors is not None:
+                        vectors = self.embedder.embed_documents([c.indexed_text for c in chunks])
                 with tracer.start_as_current_span("rag.ingest.index"):
                     # replace, don't append: chunks of the old version that no longer exist must go
                     self._delete_everywhere(source.uri)

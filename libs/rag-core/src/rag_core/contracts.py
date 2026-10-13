@@ -8,7 +8,8 @@ Kinds, in pipeline order:
     ingestion   parser · normalizer · pii · chunker · enricher · token_counter · embedder
     storage     vector_store · keyword_index · cache · queue
     query       query_transformer · retriever · fusion · reranker · postprocessor
-    answer      context_builder · generator · guard · memory
+    answer      compressor · context_builder · generator · guard · memory
+    (extension 02: sparse_embedder, used by the sparse keyword indexes)
 """
 
 from __future__ import annotations
@@ -70,6 +71,26 @@ class Embedder(Protocol):
 
 
 @runtime_checkable
+class DocumentEmbedder(Embedder, Protocol):
+    """Extension 02: an embedder that needs the whole document to embed its chunks (late
+    chunking). Ingestion calls embed_chunks instead of embed_documents when it is available."""
+
+    def embed_chunks(self, document: Document, chunks: Sequence[Chunk]) -> list[list[float]]: ...
+
+
+@runtime_checkable
+class SparseEmbedder(Protocol):
+    """Extension 02: text in, a weight per vocabulary id out ({id: weight}), e.g. BM25 or SPLADE."""
+
+    model: str
+    idf: bool  # True: the index multiplies by the inverse document frequency at search time
+
+    def embed_sparse_documents(self, texts: Sequence[str]) -> list[dict[int, float]]: ...
+
+    def embed_sparse_query(self, text: str) -> dict[int, float]: ...
+
+
+@runtime_checkable
 class VectorStore(Protocol):
     def upsert(self, chunks: Sequence[Chunk], vectors: Sequence[Sequence[float]]) -> None: ...
 
@@ -125,6 +146,14 @@ class PostProcessor(Protocol):
 
 
 @runtime_checkable
+class Compressor(Protocol):
+    """Extension 02: shorten (or drop) retrieved chunks for THIS question before the context is
+    built. Keeps each chunk's id, document and metadata, so citations still resolve."""
+
+    def compress(self, query: Query, hits: Sequence[ScoredChunk]) -> list[ScoredChunk]: ...
+
+
+@runtime_checkable
 class ContextBuilder(Protocol):
     def build(self, query: Query, candidates: Sequence[ScoredChunk]) -> Context: ...
 
@@ -172,8 +201,31 @@ class Verdict(Protocol):
 
 
 __all__ = [
-    "LLM", "Answer", "Chunk", "Chunker", "Context", "ContextBuilder", "Document", "Element",
-    "Embedder", "Enricher", "Fusion", "Generator", "Guard", "KeywordIndex", "Normalizer", "Parser",
-    "PiiRedactor", "PostProcessor", "QueryTransformer", "Reranker", "Retriever", "TokenCounter",
-    "VectorStore", "Verdict",
+    "LLM",
+    "Answer",
+    "Chunk",
+    "Chunker",
+    "Compressor",
+    "Context",
+    "ContextBuilder",
+    "Document",
+    "DocumentEmbedder",
+    "Element",
+    "Embedder",
+    "Enricher",
+    "Fusion",
+    "Generator",
+    "Guard",
+    "KeywordIndex",
+    "Normalizer",
+    "Parser",
+    "PiiRedactor",
+    "PostProcessor",
+    "QueryTransformer",
+    "Reranker",
+    "Retriever",
+    "SparseEmbedder",
+    "TokenCounter",
+    "VectorStore",
+    "Verdict",
 ]  # fmt: skip

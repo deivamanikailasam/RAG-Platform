@@ -12,6 +12,7 @@ Order of work, and why:
               Step 32's search; naive, corrective, adaptive, agentic, graph or sql otherwise
    check    → the caller's own post-check (e.g. OPA in rag-api), via context_for
    guards   → context checks (Step 34): documents that give orders are dropped
+   compress → extension 02: keep only what matters for the question (token savings in the trace)
    abstain  → nothing relevant found: say so, without calling a model
    context  → numbered <doc> blocks within a token budget
    generate → the registered prompt, the answer model; streamed or whole
@@ -36,6 +37,7 @@ from opentelemetry import trace
 
 from rag_core.components.architectures import Standard
 from rag_core.components.basics import ApproxTokenCounter
+from rag_core.components.compression import compress_all
 from rag_core.components.conversation import cache_key
 from rag_core.components.generation import (
     AnswerParams,
@@ -90,6 +92,9 @@ class AnswerPipeline:
         self.memory = container.get("memory") if container.has("memory") else None
         self.cache = container.get("cache") if container.has("cache") else None
         self.guards = container.get("guards") if container.has("guards") else []
+        # extension 02: shorten the retrieved chunks for the question before the context is built
+        self.compressors = container.get("compressors") if container.has("compressors") else []
+        self.counter = counter
 
     # ------------------------------------------------------------------ guards (Step 34)
 
@@ -183,6 +188,12 @@ class AnswerPipeline:
         hits, stop = self._guard("context", query, hits, trace_data)
         if stop is not None:
             return None, stop
+        if self.compressors and hits:
+            with tracer.start_as_current_span("rag.compress") as span:
+                hits, info = compress_all(self.compressors, query, hits, self.counter)
+                span.set_attributes({"rag.compress.tokens_before": info["tokens_before"],
+                                     "rag.compress.tokens_after": info["tokens_after"]})  # fmt: skip
+            trace_data["compression"] = info
         if not hits and self.p.abstain_without_hits:
             trace_data["abstained_reason"] = "no relevant documents"
             return None, Answer(text=self.p.abstain_text, abstained=True, trace=trace_data)

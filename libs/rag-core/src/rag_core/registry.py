@@ -90,9 +90,9 @@ SLOTS: dict[str, str] = {
     "reranker": "reranker", "postprocessors": "postprocessor", "context_builder": "context_builder",
     "generator": "generator", "guards": "guard", "cache": "cache", "memory": "memory",
     "queue": "queue", "manifest": "manifest", "pipeline": "pipeline", "graph_store": "graph_store",
-    "search_cache": "search_cache",
+    "search_cache": "search_cache", "compressors": "compressor", "sparse_embedder": "sparse_embedder",
 }  # fmt: skip
-PLURAL = {"parsers", "normalizers", "enrichers", "postprocessors", "guards"}
+PLURAL = {"parsers", "normalizers", "enrichers", "postprocessors", "guards", "compressors"}
 
 
 def _explain(e: ValidationError) -> str:

@@ -17,30 +17,36 @@ profiles:
     parsers: [markdown, html, pdf, docx, csv, text]
     normalizers: [unicode, boilerplate]
     pii: {use: regex, strategy: mask}
+    # fixed | recursive | structure | sentence-window | semantic | parent-child; extension 02 adds
+    # hierarchical | proposition | code (docs/extensions/02-…)
     chunker: {use: structure, max_tokens: 400, overlap_tokens: 40, min_tokens: 60}
+    # + metadata (dates, language, doc type, keywords, entities) | llm-metadata | summary | summary-tree
     enrichers: [context-header]
+    # wrap it: instructed (query/passage prefixes) | matryoshka (fewer dimensions); or late-chunking
     embedder: {use: hashing, dimensions: 256}
     vector_store: memory              # {use: memory, metric: cosine}: cosine | dot | l2 | l1 (extension 01)
-    keyword_index: memory-bm25
+    keyword_index: memory-bm25         # or sparse / qdrant-sparse with  sparse_embedder: bm25 | splade-tei
     manifest: memory
     queue: memory
     # search (Step 32)
     query_transformer: with-history   # identity | expand-terms | with-history | rewrite | multi-query | hyde | decompose | step-back | self-query | chain
-    retriever: {use: hybrid, candidates: 30}     # dense | keyword | hybrid | ensemble | router
+    retriever: {use: hybrid, candidates: 30}     # dense | keyword | hybrid | ensemble | router | section
     fusion: {use: rrf, k: 60}                    # rrf | weighted | relative-score | dbsf | combsum | combmnz | borda
     # search_cache: {use: memory, ttl_seconds: 600}   # cached search results: memory | valkey (extension 01)
     # metadata filters: `rag search --filter department=hr`, or "filter" in /v1/search (docs/extensions/01-…)
-    reranker: {use: term-overlap, top_n: 30}     # offline stand-in for a cross-encoder
+    reranker: {use: term-overlap, top_n: 30}     # offline stand-in for a cross-encoder (maxsim: ColBERT-style)
     postprocessors:
       - {use: dedupe, threshold: 0.85}
       - {use: recency, weight: 0.15, half_life_days: 730}   # needs an "updated" date in metadata
       - {use: max-per-document, n: 3}
+    # extension 02 post-processors: auto-merge | section-expand | summary-expand (with the matching chunker/enricher)
     # answers (Step 33)
     # the architecture (Step 35): naive | standard | corrective | self-reflective | adaptive | agentic | graph | sql
     #   graph also needs  graph_store: memory  and  enrichers: [context-header, graph-entities]
     #   sql needs tables: {expense_limits: {path: examples/tables/expense_limits.csv, groups: [all-staff]}}
     #   compare them on your own questions: uv run rag eval-answers examples/eval/handbook.yaml
     pipeline: {use: standard, search_k: 8, uncited: flag}
+    # compressors: [{use: extractive, threshold: 0.3}]   # extractive | embedding-filter | llm-extract | summarize | llmlingua
     context_builder: {use: numbered, max_tokens: 3000, order: relevance}   # relevance | lost-in-middle | document
     generator: {use: extractive, max_sentences: 3}   # no model offline; "llm" uses the registered prompt
     memory: {use: memory, max_turns: 10}

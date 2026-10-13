@@ -2,7 +2,7 @@
 
 # Catalogue of switchable components
 
-103 components in 25 kinds. Switch any of them with one line in rag.yaml: `<slot>: {use: <name>, <setting>: <value>}`. `rag components --kind <kind>` shows the same.
+128 components in 27 kinds. Switch any of them with one line in rag.yaml: `<slot>: {use: <name>, <setting>: <value>}`. `rag components --kind <kind>` shows the same.
 
 ## token_counter: Counting tokens (Step 30)
 
@@ -42,8 +42,11 @@
 
 | Name | What it does | Settings (default) | Tested |
 |---|---|---|---|
+| `code` | source code cut at top-level definitions (language from the extension); symbols and line numbers recorded | `max_tokens` (400), `overlap_tokens` (40), `language` (None) | live |
 | `fixed` | every N tokens with overlap; ignores structure (baseline) | `max_tokens` (400), `overlap_tokens` (40) | live |
+| `hierarchical` | a tree of any depth (document > section > subsection > paragraph); leaves know their ancestors (for auto-merge, section-expand) | `leaf_tokens` (200), `leaf_overlap` (0), `max_node_tokens` (2000), `index_sections` (False) | live |
 | `parent-child` | search small chunks, give the model their larger parent section | `parent_tokens` (1200), `child_tokens` (200), `child_overlap` (20) | live |
+| `proposition` | atomic self-contained facts (LLM, grounded-checked; rule-based offline); passage kept for window-expand | `passage_tokens` (300), `use_llm` (True), `llm_slot` ('llm'), `min_overlap` (0.5), `max_propositions` (40) | live |
 | `recursive` | paragraphs, then sentences, then words: only as fine as needed | `max_tokens` (400), `overlap_tokens` (40) | live |
 | `semantic` | cuts where the topic changes (sentence-embedding similarity drops); slower to ingest | `max_tokens` (400), `overlap_tokens` (40), `breakpoint_percentile` (90) | live |
 | `sentence-window` | one sentence per chunk for precise matching; neighbours kept for the answer | `window` (2) | live |
@@ -56,15 +59,22 @@
 | `context-header` | embeds "Title > Section" with each chunk (free, strong) | `template` ('{header}\n\n{text}') | live |
 | `graph-entities` | record named things (codes, acronyms, phrases, terms) per chunk in the graph store | `terms` ([]), `codes` (True), `acronyms` (True), `title_phrases` (True) | live |
 | `llm-context` | contextual retrieval: an LLM situates each chunk in its document (one call per chunk) | `max_document_chars` (24000) | live |
+| `llm-metadata` | an LLM fills a declared metadata schema (per document or chunk); values type- and enum-checked | `fields`, `scope` ('document'), `llm_slot` ('llm'), `max_chars` (8000), `retries` (1), `prefix` ('') | mocked |
+| `metadata` | rule-based metadata for filters: dates, language, doc type, keywords (TF-IDF/YAKE), entities (regex) | `extract` (['dates', 'language', 'do…), `keywords` (5), `keyword_method` ('tfidf'), `entity_kinds` (['code', 'money', 'percen…), `doc_types` (None), `day_first` (True), `prefix` (''), `overwrite` (False) | live |
 | `questions` | adds the questions each chunk answers to what is embedded (one LLM call per chunk) | `n` (3) | live |
+| `summary` | one summary per document, indexed as a chunk (document summary index) and/or attached to every chunk | `max_sentences` (5), `index` (True), `attach` (False), `use_llm` (True), `llm_slot` ('llm'), `min_overlap` (0.5), `max_input_tokens` (8000) | live |
+| `summary-tree` | RAPTOR: cluster chunks, summarise clusters recursively (LLM, extractive offline), index the summaries | `cluster_size` (5), `max_levels` (3), `min_chunks` (3), `max_sentences` (4), `use_llm` (True), `llm_slot` ('llm'), `min_overlap` (0.5), `max_input_tokens` (6000) | live |
 
 ## embedder: Turning text into vectors (Step 31)
 
 | Name | What it does | Settings (default) | Tested |
 |---|---|---|---|
 | `cached` | wraps any embedder: the same text is never embedded twice (LRU) | `inner`, `max_items` (100000) | live |
-| `gateway` | any embedding model behind the LiteLLM gateway, batched, dimension-checked | `model` ('embedder'), `dimensions` (1024), `base_url` ('http://litellm:4000/v1'), `api_key_env` ('LLM_GATEWAY_KEY'), `api_key_file` (None), `batch_size` (32), `query_instruction` ('Instruct: Given a questi…), `query_prompt` (None), `prompts_dir` ('prompts'), `prompt_label` ('production'), `timeout` (120.0) | mocked |
+| `gateway` | any embedding model behind the LiteLLM gateway, batched, dimension-checked | `model` ('embedder'), `dimensions` (1024), `base_url` ('http://litellm:4000/v1'), `api_key_env` ('LLM_GATEWAY_KEY'), `api_key_file` (None), `batch_size` (32), `query_instruction` ('Instruct: Given a questi…), `query_prompt` (None), `prompts_dir` ('prompts'), `prompt_label` ('production'), `timeout` (120.0), `request_dimensions` (False) | mocked |
 | `hashing` | offline, deterministic word-hash vectors (tests, CI, demos) | `dimensions` (256) | live |
+| `instructed` | query vs passage prefixes for e5/bge/nomic/Qwen3-style models (presets or your own) | `inner`, `preset` ('none'), `query_prefix` (None), `passage_prefix` (None) | live |
+| `late-chunking` | embed the whole document, pool token vectors per chunk (offline hashing; TEI token embeddings as reference) | `backend` ('hashing'), `dimensions` (256), `url` ('http://host.docker.inter…), `max_tokens` (8192), `window_overlap` (0.25), `window` (8), `timeout` (120.0) | live |
+| `matryoshka` | keep the first N dimensions of a Matryoshka-trained model's vectors (smaller, faster index) | `inner`, `dimensions` (256), `normalise` (True) | live |
 
 ## vector_store: Storing vectors (Step 31)
 
@@ -82,6 +92,8 @@
 | `memory-bm25` | BM25 keyword ranking in memory (dev, tests) | `k1` (1.5), `b` (0.75) | live |
 | `opensearch` | OpenSearch BM25 with Step 13's analyzers and synonyms; permission-filtered | `url` ('https://opensearch:9200'), `index` ('rag-chunks'), `user_env` ('OPENSEARCH_USER'), `password_env` ('OPENSEARCH_PASSWORD'), `verify` ('/run/secrets/opensearch_…), `vector_field` ('embedding'), `dimensions` (1024), `timeout` (30.0), `keyword_suffix` ('') | live |
 | `postgres-fts` | Postgres full-text search on the same tables (no extra service) Needs extra: `postgres`. | `dsn_env` ('RAG_DB_DSN'), `host` ('rag-db'), `port` (5432), `dbname` ('rag'), `credentials_file` (None), `collection` ('default'), `embedding_model` ('embedder'), `dimensions` (1024), `vector_type` ('halfvec'), `query_instruction` (''), `max_chunk_tokens` (512), `ef_search` (80), `text_search_config` ('english'), `pool_size` (4) | live |
+| `qdrant-sparse` | sparse vectors (BM25/SPLADE) in a Qdrant collection, IDF by Qdrant; payload-filtered by access and metadata | `url` ('http://qdrant:6333'), `collection` ('rag_chunks_sparse'), `api_key_env` ('QDRANT_API_KEY'), `vector_name` ('sparse'), `idf` (None), `create_if_missing` (False), `metadata_indexes` ({}), `timeout` (30.0) | live |
+| `sparse` | sparse-vector search in memory with the sparse_embedder slot (BM25 offline by default, or SPLADE) | `idf` (None) | live |
 
 ## manifest: Remembering what was ingested (Step 31)
 
@@ -121,6 +133,7 @@
 | `hybrid` | vector + keyword search, merged by the fusion slot (default rrf) | `candidates` (30), `parallel` (True) | live |
 | `keyword` | keyword search (keyword_index) | `candidates` (30), `parallel` (True) | live |
 | `router` | route each question to a named collection/profile/retriever (keyword rules, or an LLM) | `routes`, `default` (None), `mode` ('rules'), `llm_slot` ('llm'), `multi` (False) | live |
+| `section` | "section 4.2" or a heading title in the question: that exact section first, then the usual results | `inner` (None), `scan` (10), `max_tokens` (2000), `max_chunks` (80), `require_cue` (True) | live |
 
 ## fusion: Combining result lists (Step 32)
 
@@ -134,13 +147,22 @@
 | `rrf` | reciprocal rank fusion: ranks only, no tuning (default) | `weights` ({}), `k` (60) | live |
 | `weighted` | min-max normalised scores, weighted sum | `weights` ({'dense': 0.5, 'sparse': …) | live |
 
+## sparse_embedder: Sparse (word-weight) vectors (extension 02)
+
+| Name | What it does | Settings (default) | Tested |
+|---|---|---|---|
+| `bm25` | BM25 term weights as sparse vectors (IDF applied by the index); offline | `k1` (1.2), `b` (0.75), `avg_length` (150) | live |
+| `splade-tei` | SPLADE learned sparse vectors from TEI's /embed_sparse (expands to related words) | `url` ('http://host.docker.inter…), `query_url` (None), `model` ('naver/splade-v3'), `batch_size` (32), `timeout` (60.0) | mocked |
+
 ## reranker: Re-ordering candidates (Step 32)
 
 | Name | What it does | Settings (default) | Tested |
 |---|---|---|---|
+| `colbert` | a ColBERT model in-process (PyLate): learned token vectors, MaxSim Needs extra: `pylate`. | `top_n` (30), `max_chars` (2000), `fail_open` (True), `model` ('lightonai/GTE-ModernColB…), `device` (None) | reference |
 | `cross-encoder` | in-process cross-encoder (sentence-transformers); no server Needs extra: `sentence-transformers`. | `top_n` (30), `max_chars` (2000), `fail_open` (True), `model` ('BAAI/bge-reranker-v2-m3'), `device` (None) | reference |
 | `gateway` | cross-encoder via the gateway's /rerank (TEI locally; Cohere/Voyage/Jina in cloud) | `top_n` (30), `max_chars` (2000), `fail_open` (True), `model` ('reranker'), `base_url` ('http://litellm:4000'), `api_key_env` ('LLM_GATEWAY_KEY'), `api_key_file` (None), `timeout` (30.0) | mocked |
 | `llm` | listwise LLM reranking (judge model): few candidates, high cost | `top_n` (10), `max_chars` (600), `fail_open` (True), `llm_slot` ('judge_llm') | mocked |
+| `maxsim` | multi-vector late interaction (ColBERT MaxSim) over hashed token vectors; offline | `top_n` (30), `max_chars` (2000), `fail_open` (True), `dimensions` (128), `window` (2) | live |
 | `tei` | cross-encoder straight to TEI's /rerank (no gateway: no budgets or logs) | `top_n` (30), `max_chars` (2000), `fail_open` (True), `url` ('http://host.docker.inter…), `timeout` (30.0) | mocked |
 | `term-overlap` | offline baseline: weighted query-term coverage (tests, CI) | `top_n` (30), `max_chars` (2000), `fail_open` (True), `phrase_bonus` (0.5) | live |
 
@@ -148,13 +170,26 @@
 
 | Name | What it does | Settings (default) | Tested |
 |---|---|---|---|
+| `auto-merge` | enough children of one parent retrieved (hierarchical chunks): return the parent instead, recursively | `threshold` (0.5), `min_children` (2), `max_levels` (3) | live |
 | `dedupe` | drop near-duplicate chunks | `threshold` (0.85) | live |
 | `max-per-document` | cap chunks per document | `n` (2) | live |
 | `min-score` | drop candidates below a score | `threshold`, `stage` (None), `min_keep` (0) | live |
 | `mmr` | diversify: relevant AND different (uses the embedder) | `lambda_` (0.7) | live |
 | `parent-expand` | replace matched child chunks by their parent section | none | live |
 | `recency` | blend relevance with freshness (half-life) | `field` ('updated'), `half_life_days` (365), `weight` (0.2), `missing` (0.5) | live |
+| `section-expand` | replace a hit by the whole section it belongs to, within a token budget; hits of one section merge | `max_tokens` (1200), `include_subsections` (False), `max_hits` (8), `max_chunks` (60) | live |
+| `summary-expand` | a retrieved summary brings its document's best detailed chunks for the question | `per_summary` (3), `keep_summary` (True) | live |
 | `window-expand` | replace a matched sentence by its window | none | live |
+
+## compressor: Compressing the context (extension 02)
+
+| Name | What it does | Settings (default) | Tested |
+|---|---|---|---|
+| `embedding-filter` | drop chunks or sentences whose embedding similarity to the question is below a threshold | `threshold` (0.3), `level` ('chunk'), `min_keep` (1) | live |
+| `extractive` | keep only the sentences relevant to the question (term overlap or embedding similarity) | `method` ('overlap'), `threshold` (0.2), `max_sentences` (0), `neighbours` (0), `drop_empty` (False) | live |
+| `llm-extract` | an LLM copies only the relevant sentences of each chunk (LLMChainExtractor); verified against the source | `llm_slot` ('llm'), `max_chars` (6000), `verify` (True), `fail_open` (True) | mocked |
+| `llmlingua` | token-level prompt compression with LLMLingua-2 (a small model drops uninformative tokens) Needs extra: `llmlingua`. | `model` ('microsoft/llmlingua-2-xl…), `rate` (0.5), `llmlingua2` (True), `force_tokens` (['\n', '.', '?', '!']), `device` ('cpu') | reference |
+| `summarize` | an LLM summarises each long chunk for the question; ungrounded summaries are discarded | `llm_slot` ('llm'), `min_tokens` (150), `max_sentences` (3), `min_overlap` (0.6), `max_chars` (12000) | mocked |
 
 ## context_builder: Packing the context (Step 33)
 

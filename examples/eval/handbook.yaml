@@ -38,6 +38,16 @@ variants:
   hybrid+rerank+recency: {retriever: hybrid, reranker: {use: term-overlap, top_n: 30}, postprocessors: [{use: recency, weight: 0.15, half_life_days: 730}]}
   hybrid+mmr+per-doc:    {retriever: hybrid, reranker: none, postprocessors: [{use: mmr, lambda: 0.7}, {use: max-per-document, n: 1}]}
   all-together:          {retriever: hybrid, query_transformer: with-history, reranker: {use: term-overlap, top_n: 30}, postprocessors: [dedupe, {use: recency, weight: 0.15, half_life_days: 730}, {use: max-per-document, n: 2}]}
+  # extension 02: chunking, indexing and embedding options, side by side on the same questions
+  hierarchical+merge:    {retriever: hybrid, reranker: none, chunker: {use: hierarchical, leaf_tokens: 120}, postprocessors: [auto-merge, {use: max-per-document, n: 2}]}
+  proposition:           {retriever: hybrid, reranker: none, chunker: {use: proposition, use_llm: false}, postprocessors: [window-expand, {use: max-per-document, n: 2}]}
+  summary-tree:          {retriever: hybrid, reranker: none, enrichers: [context-header, summary-tree]}
+  metadata+summary:      {retriever: hybrid, reranker: none, enrichers: [context-header, metadata, summary]}
+  sparse-bm25:           {retriever: hybrid, reranker: none, keyword_index: sparse, sparse_embedder: bm25}
+  late-chunking:         {retriever: dense, reranker: none, embedder: {use: late-chunking, dimensions: 256}}
+  matryoshka-128:        {retriever: dense, reranker: none, embedder: {use: matryoshka, dimensions: 128, inner: {use: hashing, dimensions: 256}}}
+  hybrid+maxsim:         {retriever: hybrid, reranker: {use: maxsim, top_n: 30}}
+  section-retriever:     {retriever: section, reranker: none}
 
 # Architectures (Step 35): `rag eval-answers` builds each one on the same profile and questions.
 architectures:

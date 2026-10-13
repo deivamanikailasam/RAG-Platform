@@ -111,6 +111,12 @@ ignore_missing_imports = true
 module = ["docling", "docling.*", "presidio_analyzer", "presidio_anonymizer", "reportlab", "reportlab.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+# extension 02: LLMLingua prompt compression and PyLate's ColBERT (status "reference": both pull
+# PyTorch, so they are not locked here; a project that wants them installs them itself)
+module = ["llmlingua", "llmlingua.*", "pylate", "pylate.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["libs", "services", "tests"]
 addopts = "-ra --strict-markers --import-mode=importlib"
