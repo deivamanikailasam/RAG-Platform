@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from rag_core.components.basics import cosine, gateway_key, words
 from rag_core.registry import Container, register, spec
@@ -260,7 +260,13 @@ def _with_history(p: HistoryParams, c: Container) -> WithHistory:
 class ChainParams(_Strict):
     steps: list[dict[str, Any]] = Field(
         min_length=1
-    )  # e.g. [{use: rewrite}, {use: multi-query, n: 2}]
+    )  # e.g. [normalize, {use: rewrite}, {use: multi-query, n: 2}]
+
+    @field_validator("steps", mode="before")
+    @classmethod
+    def _names_as_steps(cls, v: Any) -> Any:
+        """A bare name is a step with default settings, as in every other list slot."""
+        return [{"use": x} if isinstance(x, str) else x for x in v] if isinstance(v, list) else v
 
 
 class ChainTransformer:

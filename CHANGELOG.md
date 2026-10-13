@@ -57,6 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `query_transformer: {use: chain, steps: [normalize, …]}` works as `rag.yaml`'s comment and the extension 04 docs write it: a bare name in `steps` is a step with default settings (it used to fail validation with "Input should be a valid dictionary"), with a test.
 - `just vault-put rag-api … opa_token=RAG_API_OPA_TOKEN` works as the steps print it: the secrets generator writes `RAG_API_OPA_TOKEN` (a copy of `OPA_API_TOKEN`), `.env.example` documents it, and `vault-put` names any missing variable instead of failing with a bare KeyError.
 - `just promote` can commit: `deploy` is an allowed type in the conventional-pre-commit hook (and in `CONTRIBUTING.md`), with a test that keeps the recipe and the hook in step.
 - Ingestion and lifecycle examples use the bucket that exists (`s3://rag-raw-docs/…`, created by `scripts/s3_setup.py`) instead of the guide's `rag-originals`; a test checks every `s3://` example in docs, code and tests.

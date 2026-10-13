@@ -254,6 +254,10 @@ def test_offline_transformers_and_chain() -> None:
                                                              {"use": "multi-query", "n": 2}]})  # fmt: skip
     out = c.get("query_transformer").transform(q)
     assert out == ["Can I WFH on Fridays? (work from home)", "alt one", "alt two"]
+    # a bare name is a step with default settings, as rag.yaml's comment and the docs write it
+    short = offline(query_transformer={"use": "chain", "steps": ["normalize", "with-history"]})
+    assert short.validate() == []
+    assert short.get("query_transformer").transform(q2) == ["VPN E-4021 how do I fix it?"]
 
 
 # ---------------------------------------------------------------- rerankers

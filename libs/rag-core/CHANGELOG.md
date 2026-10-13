@@ -21,6 +21,9 @@ to contracts, the SDK, the CLI, component names and settings, rag.yaml or the pa
   Additive: structure chunks gain `heading`, `section_path`, `section_numbers` metadata (ids
   unchanged); oversized code blocks are now cut between lines instead of at sentence ends.
 
+- Fix: a `chain` query transformer's `steps` accept bare names (`steps: [normalize, with-history]`), as
+  every other list slot does.
+
 ## 1.0.0 (Step 38)
 First stable release: the public API is fixed for 1.x.
 - Contracts and types; 94 registered components in 24 kinds (docs/catalogue.md)
