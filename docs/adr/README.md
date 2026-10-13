@@ -34,5 +34,6 @@
 | [0030](0030-build-rag-on-a-shared-core-of-switchable-components.md) | Build RAG on a shared core of switchable components | Accepted |
 | [0031](0031-ingest-through-a-replace-not-append-pipeline.md) | Ingest through one replace-not-append pipeline, redacting before storing | Accepted |
 | [0032](0032-search-through-a-switchable-hybrid-pipeline.md) | Search through one switchable pipeline: hybrid retrieval, fusion, reranking | Accepted |
+| [0033](0033-answer-with-checked-citations-and-abstention.md) | Answer from numbered sources, check citations, abstain rather than guess | Accepted |
 
 New ADR: `just adr "Short title"`, then fill it in and add a row here.
