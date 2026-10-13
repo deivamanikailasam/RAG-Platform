@@ -1,0 +1,124 @@
+# rag-core's own copy of the platform's rag.yaml (Step 38): projects include it as
+#   include: {platform: "rag-core:platform.yaml"}
+# and extend platform/offline, platform/local, platform/production. Kept identical to the
+# platform's rag.yaml by `just sync-profiles` and a test.
+# Which component fills each slot of the RAG pipeline, per environment (Steps 30-35).
+# `rag components` lists everything that can go here; `rag config check --profile <p>` builds it.
+# Switch one thing without editing this file: RAG__RERANKER__USE=none, RAG__CHUNKER__MAX_TOKENS=300
+# Secrets never go here: components take the NAME of an environment variable (api_key_env) or of a
+# file the OpenBao agent writes (credentials_file, url_file, api_key_file, key_file).
+version: 1
+profiles:
+  # ---- runs anywhere, with nothing else running: tests, CI, demos, a new laptop ----
+  offline:
+    token_counter: approx
+    llm: {use: scripted, default: "I don't know."}
+    # ingestion (Step 31)
+    parsers: [markdown, html, pdf, docx, csv, text]
+    normalizers: [unicode, boilerplate]
+    pii: {use: regex, strategy: mask}
+    chunker: {use: structure, max_tokens: 400, overlap_tokens: 40, min_tokens: 60}
+    enrichers: [context-header]
+    embedder: {use: hashing, dimensions: 256}
+    vector_store: memory
+    keyword_index: memory-bm25
+    manifest: memory
+    queue: memory
+    # search (Step 32)
+    query_transformer: with-history   # identity | expand-terms | with-history | rewrite | multi-query | hyde | decompose | step-back | chain
+    retriever: {use: hybrid, candidates: 30}     # dense | keyword | hybrid
+    fusion: {use: rrf, k: 60}                    # rrf | weighted | dbsf
+    reranker: {use: term-overlap, top_n: 30}     # offline stand-in for a cross-encoder
+    postprocessors:
+      - {use: dedupe, threshold: 0.85}
+      - {use: recency, weight: 0.15, half_life_days: 730}   # needs an "updated" date in metadata
+      - {use: max-per-document, n: 3}
+    # answers (Step 33)
+    # the architecture (Step 35): naive | standard | corrective | self-reflective | adaptive | agentic | graph | sql
+    #   graph also needs  graph_store: memory  and  enrichers: [context-header, graph-entities]
+    #   sql needs tables: {expense_limits: {path: examples/tables/expense_limits.csv, groups: [all-staff]}}
+    #   compare them on your own questions: uv run rag eval-answers examples/eval/handbook.yaml
+    pipeline: {use: standard, search_k: 8, uncited: flag}
+    context_builder: {use: numbered, max_tokens: 3000, order: relevance}   # relevance | lost-in-middle | document
+    generator: {use: extractive, max_sentences: 3}   # no model offline; "llm" uses the registered prompt
+    memory: {use: memory, max_turns: 10}
+    cache: {use: memory, ttl_seconds: 3600}          # memory | valkey | semantic
+    # guardrails (Step 34), in the order they run within each stage
+    guards:
+      - {use: size, max_chars: 2000}            # input
+      - {use: injection, threshold: 0.6}        # input: prompt injection / jailbreak patterns
+      - {use: pii, stage: input}                # input: mask personal data in questions
+      - {use: topics}                           # input: refuse legal / medical / investment advice
+      - {use: context-injection}                # context: drop documents that carry instructions
+      - {use: groundedness, on_hit: flag}       # output: sentences the sources don't support
+      - {use: pii, stage: output}               # output: personal data in answers
+      - {use: secrets}                          # output: keys, tokens, passwords
+      - {use: toxicity}                         # output: toxic language (word list baseline)
+
+  # ---- the platform on your Mac (Compose / OrbStack): real models and stores ----
+  local:
+    extends: offline
+    # Step 32: the gateway key and the PII key are files OpenBao Agent writes (Step 28), re-read on every use
+    llm: {use: gateway, model: qwen-fast, base_url: "http://litellm:4000/v1", api_key_file: /run/bao/rag_api_gateway_key}
+    judge_llm: {use: gateway, model: qwen-quality, base_url: "http://litellm:4000/v1", api_key_file: /run/bao/rag_api_gateway_key}
+    pii: {use: regex, strategy: pseudonymise, key_file: /run/bao/pii_hmac_key}
+    embedder:
+      use: cached
+      inner: {use: gateway, model: embedder, dimensions: 1024, base_url: "http://litellm:4000/v1", api_key_file: /run/bao/rag_api_gateway_key,
+              query_prompt: query-instruction, prompts_dir: /app/prompts}   # Step 24's registered instruction
+    vector_store: {use: pgvector, dsn_env: null, credentials_file: /run/bao/rag_db.json, collection: default}
+    keyword_index: {use: postgres-fts, dsn_env: null, credentials_file: /run/bao/rag_db.json, collection: default}
+    manifest: {use: postgres, dsn_env: null, credentials_file: /run/bao/rag_db.json, collection: default}
+    queue: {use: valkey-streams, url_file: /run/bao/valkey_url}
+    # Step 33: the answer model (qwen-quality) differs from the helper model (llm: qwen-fast)
+    answer_llm: {use: gateway, model: qwen-quality, base_url: "http://litellm:4000/v1", api_key_file: /run/bao/rag_api_gateway_key}
+    generator: {use: llm, llm_slot: answer_llm, prompt: rag-answer, prompts_dir: /app/prompts, prompt_label: production}
+    memory: {use: valkey, url_file: /run/bao/valkey_url, ttl_seconds: 86400}
+    cache: {use: valkey, url_file: /run/bao/valkey_url, ttl_seconds: 3600}
+    reranker: {use: gateway, model: reranker, base_url: "http://litellm:4000", top_n: 30, api_key_file: /run/bao/rag_api_gateway_key}
+    query_transformer: {use: rewrite, llm_slot: llm}   # follow-ups made standalone (no call without history)
+    # guards (Step 34): inherited from offline. To catch rephrased attacks too, add a model-based judge
+    # (uses judge_llm) or a vendor / in-house guard service, then re-run `rag eval-guards --profile local`:
+    #   guards: [..., {use: llm-judge, stage: input}, {use: webhook, url: "http://guard:8000/check"}]
+    postprocessors:
+      - {use: dedupe, threshold: 0.85}
+      - {use: min-score, stage: rerank, threshold: 0.05, min_keep: 1}
+      - {use: recency, weight: 0.15, half_life_days: 730}
+      - {use: max-per-document, n: 3}
+
+  # ---- the same, with the dedicated search engines from Steps 12-13 instead of Postgres ----
+  local-engines:
+    extends: local
+    vector_store: {use: qdrant, url: "http://qdrant:6333", collection: rag_chunks, dimensions: 1024}
+    keyword_index: {use: opensearch, url: "https://opensearch:9200", index: rag-chunks,
+                    user_env: OPENSEARCH_INDEXER_USER, password_env: OPENSEARCH_INDEXER_PASSWORD}
+    # the manifest stays in Postgres: it records what is in the engines
+
+  # ---- Step 36: a profile for the NEXT collection (blue/green re-index) ----
+  # `rag reindex --profile local --to local-v2 --apply` rebuilds every source from its original into
+  # default_v2 with a new embedder; compare with eval-search, then switch RAG_API_RAG_PROFILE by PR.
+  local-v2:
+    extends: local
+    embedder:
+      use: cached
+      inner: {use: gateway, model: embedder-v2, dimensions: 1024, base_url: "http://litellm:4000/v1",
+              api_key_file: /run/bao/rag_api_gateway_key, query_prompt: query-instruction, prompts_dir: /app/prompts}
+    vector_store: {use: pgvector, dsn_env: null, credentials_file: /run/bao/rag_db.json, collection: default_v2}
+    keyword_index: {use: postgres-fts, dsn_env: null, credentials_file: /run/bao/rag_db.json, collection: default_v2}
+    manifest: {use: postgres, dsn_env: null, credentials_file: /run/bao/rag_db.json, collection: default_v2}
+
+  # ---- staging and production on Kubernetes (Step 37): the local stack's components, stricter ----
+  # `rag config readiness --profile production` must pass before a release is promoted.
+  production:
+    extends: local
+    pipeline: {use: standard, search_k: 8, uncited: abstain, stream: checked}   # nothing unchecked is shown
+    guards:
+      - {use: size, max_chars: 2000}
+      - {use: injection, threshold: 0.6}
+      - {use: pii, stage: input}
+      - {use: topics}
+      - {use: context-injection}
+      - {use: groundedness, on_hit: flag}
+      - {use: pii, stage: output}
+      - {use: secrets}
+      - {use: toxicity}

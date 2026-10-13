@@ -228,3 +228,14 @@ def _load_builtins() -> None:
 
     for ep in entry_points(group="rag_core.components"):
         ep.load()
+    # ... or named in RAG_PLUGINS (Step 38): for a container that copies a project's code next to
+    # the platform image without installing it, e.g. RAG_PLUGINS=hr_assistant.components
+    import os
+
+    for name in filter(None, (m.strip() for m in os.environ.get("RAG_PLUGINS", "").split(","))):
+        try:
+            importlib.import_module(name)
+        except ImportError as e:
+            raise ComponentError(
+                f"RAG_PLUGINS names {name!r}, which can't be imported: {e}"
+            ) from None

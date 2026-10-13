@@ -1,7 +1,7 @@
 [project]
 name = "rag-core"
-version = "0.1.0"
-description = "The reusable RAG core (Steps 30-35): contracts, switchable components, pipelines"
+version = "1.0.0"
+description = "The reusable RAG core (Steps 30-38): contracts, switchable components, pipelines, SDK, standards"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "rag-common",

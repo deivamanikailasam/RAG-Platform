@@ -11,6 +11,13 @@
 
 Selecting: `RAG_PROFILE=dev` (or an argument). Overriding one value without editing the file:
 `RAG__RERANKER__TOP_N=5`, `RAG__RERANKER__USE=none` (double underscores = nesting; values are YAML).
+
+Including the platform's tested profiles (Step 38), so a project's rag.yaml holds only what differs:
+
+    version: 1
+    include: {platform: "rag-core:platform.yaml"}     # or a path relative to this file
+    profiles:
+      offline: {extends: platform/offline, chunker: {max_tokens: 250}}
 """
 
 from __future__ import annotations
@@ -26,6 +33,43 @@ import yaml
 from rag_core.registry import ComponentError, Container
 
 ENV_PREFIX = "RAG__"
+# The platform's profiles, shipped inside rag-core (Step 38): `include: {platform: rag-core:platform.yaml}`
+PACKAGED = Path(__file__).parent / "profiles"
+
+
+def read(path: Path | str, _depth: int = 0) -> dict[str, Any]:
+    """A rag.yaml with its includes expanded: included profiles appear as '<name>/<profile>'."""
+    path = Path(path)
+    raw = yaml.safe_load(path.read_text()) or {}
+    if not isinstance(raw, Mapping):
+        raise ComponentError(f"{path}: expected a mapping with 'version' and 'profiles'")
+    doc = dict(raw)
+    includes = doc.pop("include", None) or {}
+    if not includes:
+        return doc
+    if _depth > 3:
+        raise ComponentError(f"{path}: includes nested more than 3 deep")
+    if not isinstance(includes, Mapping):
+        raise ComponentError(
+            f"{path}: include must map names to files, e.g. {{platform: rag-core:platform.yaml}}"
+        )
+    profiles = dict(doc.get("profiles") or {})
+    for name, ref in includes.items():
+        ref = str(ref)
+        source = (
+            PACKAGED / ref.removeprefix("rag-core:")
+            if ref.startswith("rag-core:")
+            else path.parent / ref
+        )
+        if not source.is_file():
+            raise ComponentError(f"{path}: include {name!r}: {source} not found")
+        for pname, body in (read(source, _depth + 1).get("profiles") or {}).items():
+            body = dict(body or {})
+            if body.get("extends"):  # an included profile extends profiles of its own file
+                body["extends"] = f"{name}/{body['extends']}"
+            profiles[f"{name}/{pname}"] = body
+    doc["profiles"] = profiles
+    return doc
 
 
 def _merge(base: dict[str, Any], over: Mapping[str, Any]) -> dict[str, Any]:
@@ -92,7 +136,7 @@ def load(
 ) -> Container:
     profile = profile or (env if env is not None else os.environ).get("RAG_PROFILE", "default")
     try:
-        doc = yaml.safe_load(Path(path).read_text())
+        doc = read(path)  # includes expanded (Step 38)
     except OSError as e:
         raise ComponentError(f"cannot read {path}: {e.strerror}") from None
     except yaml.YAMLError as e:

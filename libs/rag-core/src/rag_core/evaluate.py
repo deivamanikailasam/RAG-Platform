@@ -155,7 +155,7 @@ def variant_configs(rag_yaml: Path, profile: str, doc: dict[str, Any], only: lis
     """The profile, with each variant's changes merged on top (same rules as `extends`).
     `key` picks the dataset's section: "variants" (search) or "architectures" (Step 35)."""
     try:
-        base_doc = yaml.safe_load(rag_yaml.read_text())
+        base_doc = cfg.read(rag_yaml)  # with the platform profiles it includes (Step 38)
     except (OSError, yaml.YAMLError) as e:
         raise ComponentError(f"{rag_yaml}: {e}") from None
     variants = doc.get(key) or {"as-configured": {}}
