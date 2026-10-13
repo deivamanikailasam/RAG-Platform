@@ -9,7 +9,7 @@
 > swappable part. This handbook explains each technique in everyday terms, when to pick it, what it
 > costs, what else exists, and the exact line in [`rag.yaml`](../../rag.yaml) that switches it.
 
-Every component listed here is in the generated [catalogue](../catalogue.md) (128 components in 27
+Every component listed here is in the generated [catalogue](../catalogue.md) (144 components in 28
 kinds, with every setting and default). The steps that built them: [30](../steps/step-30-rag-core-contracts-and-components.md)
 (core), [31](../steps/step-31-ingestion-pipeline.md) (ingestion), [32](../steps/step-32-retrieval-and-ranking.md)
 (retrieval), [33](../steps/step-33-augmentation-and-generation.md) (answers),
@@ -325,6 +325,11 @@ Changing the *question* before searching.
 **Switch:** `query_transformer: {use: rewrite, llm_slot: llm}`; for one run
 `RAG__QUERY_TRANSFORMER__USE=multi-query`. The `llm` slot is the fast model (`qwen-fast`).
 
+**As named pipelines** ([extension 03](../extensions/03-more-rag-architectures.md#3-query-side-presets-rag-fusion-hyde-conversational)):
+`pipeline: rag-fusion` (also `multi-query`: each rephrasing searched on its own, fused with RRF,
+reranked against the original question), `pipeline: hyde` and `pipeline: conversational` (rewrite +
+memory) do the same with their own settings, a trace, and a no-model mode for offline runs.
+
 ## 12. Context packing and generation
 
 **Context packing** decides what the model sees: `context_builder: {use: numbered, max_tokens: 3000,
@@ -448,20 +453,32 @@ guardrails, all pluggable via `webhook` ([ADR-0034](../adr/0034-layered-guardrai
 
 ## 18. RAG architectures
 
-The `pipeline` slot picks the overall strategy. All eight share memory, guards, cache, the access
-post-check, context packing, citation checks and audit ([ADR-0035](../adr/0035-rag-architectures-as-switchable-pipelines.md)).
+The `pipeline` slot picks the overall strategy. All of them share memory, guards, cache, the access
+post-check, context packing, citation checks and audit ([ADR-0035](../adr/0035-rag-architectures-as-switchable-pipelines.md));
+the ones marked E03 came with [extension 03](../extensions/03-more-rag-architectures.md)
+([ADR-0041](../adr/0041-more-rag-architectures-a-contents-store-a-durable-graph-and-mcp-tools.md)).
 
 | Architecture | In plain words | Choose when | Cost |
 |---|---|---|---|
 | `naive` | Dense top-k only, no transforms or reranking | A baseline to prove the extras pay | Lowest |
 | `standard` (default) | "Advanced RAG": configured search → context → generate → cite | Most projects | Moderate |
-| conversational | `standard` (or any) + `memory` + `rewrite`/`with-history` | Chat assistants | + rewrite call |
+| `vector` (E03) | Dense search only, but with the configured transformer, reranker and post-processors | Measuring dense search; no keyword index | Like standard, minus keyword search |
+| `keyword` (E03) | Keyword (BM25) search only, reranked: vectorless, no embeddings | No embedding model allowed; exact codes and names | Lowest |
+| `pageindex` / `vectorless` (E03) | A model walks each document's table of contents and reads the chosen sections (heading overlap offline); no embeddings; needs `toc_store: memory` | Long, well-structured documents; explainable retrieval | 2 small calls |
+| `rag-fusion` / `multi-query` (E03) | N model-written rephrasings searched in parallel, fused by RRF, reranked | Users word things differently from the documents | 1 call + N searches |
+| `hyde` (E03) | Searches with a model-written hypothetical answer passage as well as the question | Short questions, long documents | 1 call |
+| `conversational` (E03) | Rewrites a follow-up into a standalone question (needs `memory`), then standard | Chat assistants | 1 call per follow-up |
 | `corrective` | Grades retrieved chunks; broadens the search or abstains when they're poor (CRAG) | Wrong context is worse than no answer (policy, compliance) | + grading |
 | `self-reflective` | Checks the answer's support; retrieves wider and regenerates if poor (Self-RAG style) | Every answer must be verified (+ `stream: checked`) | Up to `max_rounds` generations |
 | `adaptive` | Routes per question: no retrieval for small talk, splits compound questions, else standard | Mixed chat traffic | Small router cost |
 | `agentic` | A model plans searches step by step (multi-hop), up to `max_steps` | Investigations across documents | Several LLM calls |
 | `graph` | Entities and their neighbours add chunks, fused with search (local GraphRAG) | Facts connected by named entities | Entity extraction at ingestion |
 | `sql` | A model writes read-only SQL over **permitted** tables; the result is cited (+ documents) | Numbers, totals, limits in tables | SQL safety controls |
+| `table` (E03) | The CSV rows that match the question, cited; no model | Lookups in spreadsheets (aggregates: `sql`) | Free |
+| `long-context` (E03) | Whole documents when the best ones fit the context budget, else chunks | A few short documents answer most questions | More tokens |
+| `flare` (E03) | Searches for the answer's uncited, unsupported or hedged sentences, then regenerates | Answers that hedge or leave claims uncited | + 1 generation when weak |
+| `speculative` (E03) | The fast model drafts from evidence subsets in parallel; the quality model picks one | Many passages; a fast and a quality model | N short drafts + 1 check |
+| `graph-global` (E03) | Communities of entities (label propagation) with summaries answer "main themes" questions; others go local | Big-picture questions across documents | Entities at ingestion; summaries |
 
 ```yaml
 pipeline: {use: corrective, search_k: 8, uncited: abstain}
@@ -475,10 +492,17 @@ pipeline: {use: sql, tables: {expense_limits: {path: examples/tables/expense_lim
 For one run: `RAG__PIPELINE__USE=adaptive`, or
 `RAG__PIPELINE__USE=graph RAG__GRAPH_STORE__USE=memory RAG__ENRICHERS='[context-header, graph-entities]'`.
 
+GraphRAG extras (extension 03): `enrichers: [context-header, llm-entities]` has a model extract entities
+**and relations** (schema-checked, offline fallback); `graph_store: postgres` keeps the graph durable
+and shared (migration `20261016000000_graph_store.sql`). Agents can call search and answer as MCP
+tools with `rag mcp` (identity fixed at launch; see the [trust model](../extensions/03-more-rag-architectures.md#7-agents-rag-mcp)).
+
 Quick pick, first yes wins: small talk → `adaptive`; numbers in tables → `sql`; facts from several places
 → `agentic` (or `graph`); wrong context worse than none → `corrective`; every answer checked →
-`self-reflective`; otherwise → `standard`. Tiny corpus → long context instead of retrieval.
-**Alternatives:** LangGraph/LlamaIndex workflows (wrap as an architecture plugin), Microsoft GraphRAG.
+`self-reflective`; otherwise → `standard`. Tiny corpus → `long-context`. "Main themes" → `graph-global`.
+No embeddings → `keyword` or `pageindex`.
+**Alternatives:** LangGraph/LlamaIndex workflows (wrap as an architecture plugin), Microsoft GraphRAG,
+LightRAG, Neo4j (as a `graph_store` plugin).
 
 ## 19. How to know a change helped
 
@@ -534,6 +558,15 @@ ingesting the handbook. In production: online evaluation per release
 | Chunks full of pronouns | `late-chunking` with a long-context model |
 | Exact terms in Qdrant, or synonyms in keyword search | `qdrant-sparse` with `bm25`, or `splade-tei` |
 | Source code | `chunker: code` |
+| No embedding model allowed | `pipeline: keyword`, or `pageindex` + `toc_store` |
+| Long structured manuals, explainable retrieval | `pipeline: pageindex` |
+| Vague questions, very different wording | `pipeline: rag-fusion` or `hyde` |
+| A few short documents | `pipeline: long-context` |
+| Answers hedge or leave claims uncited | `pipeline: flare` |
+| "What are the main themes?" | `pipeline: graph-global` + `llm-entities` |
+| Graph must survive restarts | `graph_store: postgres` |
+| Lookups in CSV tables | `pipeline: table` (totals: `sql`) |
+| An AI agent should use the knowledge base | `rag mcp --subject … --group …` |
 
 See also: [glossary](../glossary.md) for every term, [catalogue](../catalogue.md) for every setting,
 [architecture overview](../architecture/overview.md) for where each stage runs.

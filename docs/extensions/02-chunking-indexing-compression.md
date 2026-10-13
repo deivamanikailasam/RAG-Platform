@@ -339,9 +339,9 @@ compressors: [{use: llm-extract, llm_slot: llm}]  # or summarize; llmlingua afte
 Filters by section and by extracted metadata:
 
 ```bash
-# section numbers are strings: use the JSON form (key=4.2 would compare with the NUMBER 4.2)
+# section numbers are strings; key=value matches the text as typed too (extension 03)
 uv run rag search "parental leave" --profile offline --group hr --classification internal \
-    --ingest handbook.md --filter '{"section_numbers": "4.2"}'
+    --ingest handbook.md --filter section_numbers=4.2
 uv run rag search "leave" --filter '{"section_path": "Staff handbook > 4 Leave"}' …
 uv run rag search "contract terms" --filter doc_type=contract --filter 'date_latest>=2025-01-01' …
 # one word switches the retriever (its candidates/parallel settings are accepted as they are)
@@ -423,8 +423,9 @@ offline`, offline hashing embedder, 25 questions; your corpus and models will di
 >   would be embedded alone: use `late-chunking` as the outermost embedder.
 > - **Expecting `section` to work on unstructured text.** It needs headings (Markdown, HTML, Word,
 >   Docling); plain text has none.
-> - **`--filter section_numbers=4.2` on the command line.** `key=value` reads 4.2 as a number, and
->   section numbers are stored as text: use `--filter '{"section_numbers": "4.2"}'`.
+> - **`--filter section_numbers=4.2` before extension 03.** `key=value` read 4.2 as a number, while
+>   section numbers are stored as text. Fixed in extension 03 (equality matches the text as typed and
+>   its number reading); the JSON form `--filter '{"section_numbers": "4.2"}'` works everywhere.
 > - **`structure` with `min_tokens` and numbered sections.** Tiny sections are joined to the next one
 >   under their *common* path, so a short 4.1 and 4.2 become one chunk labelled "4". For section
 >   lookups set `min_tokens: 0` (or use `hierarchical`).

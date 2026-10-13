@@ -15,6 +15,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | ACL (access control list, Valkey) | Per-user rules for which keys (`~pattern`), pub/sub channels (`&pattern`) and commands (`+@category`, `-@category`) a user may use; `user default off` disables anonymous access. | 15 |
 | Action (GitHub) | A reusable workflow step published by someone else (`actions/checkout`): third-party code that runs inside your job with its token, so it is pinned by commit SHA. | 27 |
 | Active parameters | In a Mixture of Experts model, the parameters actually used for each token (about 3B in Qwen3.6-35B-A3B, the "A3B"); they set the speed. | 7 |
+| Active retrieval (FLARE) | Retrieving again *while* answering, for the parts the answer is unsure of. FLARE (Forward-Looking Active REtrieval) searches with low-confidence sentences; here `pipeline: flare` finds uncited, unsupported or hedged sentences in a draft, searches for them and regenerates. | E03 |
 | Adaptive RAG, query routing | Choosing a strategy per question (no retrieval for small talk, one search, or several for a compound question) instead of spending the same effort on every question; the `adaptive` architecture. | 35 |
 | Admin events (Keycloak) | Keycloak's record of every administrative change (user created, group membership added, lockout cleared), with the full details when enabled; audit evidence for "who changed what". | 16 |
 | Admission control | Checks the Kubernetes API server runs on every object (after authentication and authorization, before storing it); mutating admission fills defaults, validating admission refuses what breaks the rules. | 29 |
@@ -130,12 +131,15 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Command category (Valkey) | A named group of commands used in ACLs, e.g. `@dangerous` (FLUSHALL, KEYS, CONFIG, DEBUG…) or `@admin`; `+@all -@dangerous` means everything except those. | 15 |
 | Command Line Tools | Apple's free kit of basic developer programs: compiler, `make`, `git`, system headers. | 1 |
 | Commit | A save point in git history, with a message explaining what changed and why. | 4 |
+| Community (graph) | A group of entities mentioned together much more often than with others, such as "MFA, Okta Verify, VPN errors"; GraphRAG summarises each community to answer questions about whole topics. | E03 |
+| Community detection | Splitting a graph into communities. `graph-global` uses label propagation (or connected components), deterministically; Leiden and Louvain (Neo4j GDS, Microsoft GraphRAG) find better, hierarchical ones. | E03 |
 | Compiler | A program that turns human-written source code into a program the computer can run. | 1 |
 | Component (rag-core) | One implementation of a contract, registered under a kind and a name, e.g. the `memory` vector store or the `gateway` LLM. | 30 |
 | Compose project | The group of containers, networks and volumes one Compose file starts, sharing a name (`name: rag-platform`) that prefixes every container (`rag-platform-litellm-1`). | 9 |
 | ConfigMap | A Kubernetes object holding non-secret configuration, e.g. the OpenBao Agent's config file. | 29 |
 | Configuration as code | Keeping settings (which component fills each slot) in a reviewed, versioned file such as `rag.yaml`, checked by CI like code. | 30 |
 | Conformance test | The same test suite run against every implementation of a contract (rag-core's conformance kit), so any one can replace another; its access checks fail with "LEAK". | 30 |
+| Connected components | The groups of nodes linked by any path; the simplest community detection (one weak link joins two topics into one). | E03 |
 | Consumer group | A set of workers sharing one stream; each message goes to exactly one worker in the group, and the group remembers what was delivered and acknowledged. | 15 |
 | Container | A running copy of an image: a self-contained "apartment" with a program and everything it needs. | 3 |
 | Container orchestration | Running containers across machines automatically: placing, restarting, scaling and updating them; what Kubernetes does. | 29 |
@@ -218,6 +222,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Document summary index | One summary per document, indexed next to its chunks, so broad questions find the right document; its best detailed chunks are then added. `enrichers: [summary]` + `summary-expand`. | E02 |
 | Dot product (inner product) | Multiply two vectors number by number and add up: large when they point the same way AND are long. Equals cosine similarity for unit-length vectors. `metric: dot`. | E01 |
 | Downstream | Everything that depends on a component, directly or through others; what an impact analysis lists. | 25 |
+| Drafter and verifier | In speculative RAG, the fast model that writes several short draft answers (drafter) and the stronger model that reads them and picks the best (verifier). | E03 |
 | Drift | When the dependency list (`pyproject.toml`) and the lockfile (`uv.lock`) no longer match; `uv sync --locked` catches it. | 2 |
 | Dual logging | Docker keeping a local copy of a container's recent output even when a remote logging driver (like `fluentd`) ships it elsewhere, so `docker compose logs` keeps working. | 21 |
 | Dynamic secret | A secret created on request, for one client, with an expiry. It didn't exist before you asked, and it is gone after its lease ends. | 28 |
@@ -230,6 +235,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Endpoint | A specific URL path on a server, e.g. `/v1/chat/completions` or `/health`. | 7 |
 | Enrichment (ingestion) | Adding context to what is embedded for a chunk (its title and section, an LLM-written context, the questions it answers) without changing the text that is shown and cited. | 31 |
 | Ensemble retriever | Several retrievers (dense, keyword, another collection, another model) run in parallel and their lists fused with per-member weights. `retriever: {use: ensemble, members: […]}`. | E01 |
+| Entity and relation extraction | Finding the named things in a text and how they are connected ("MFA *uses* Okta Verify"); the `llm-entities` enricher asks a model for both as JSON and checks it against a schema. | E03 |
 | Entry point | A standard Python packaging hook: a package declares "my components live in this module" under `rag_core.components`, and rag-core loads them. | 30 |
 | Envelope encryption | Values are locked with a random data key, and the data key is locked separately for each recipient, so adding a person never means re-encrypting every value by hand. | 6 |
 | Environment parity | Staging is built from the same parts as production (same base, same production component), so "it worked in staging" means something. | 37 |
@@ -285,7 +291,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Graceful degradation | Continuing with reduced quality or features instead of failing completely, e.g. skipping reranking and flagging the answer when the reranker is down. | 10 |
 | Grafana | Dashboards and visualisation for metrics, logs and traces. | 20 |
 | Grant / flow | A standard recipe for getting a token: authorization code + PKCE (web apps), device flow (CLIs), client credentials (machines). The password grant (ROPC) is switched off. | 16 |
-| GraphRAG (local and global search) | Using a knowledge graph to find related information: local search follows the entities near the question (built in here as `graph`); global search summarises whole communities of entities to answer "what are the main themes?". | 35 |
+| GraphRAG (local and global search) | Using a knowledge graph to find related information: local search follows the entities near the question (`graph`); global search summarises whole communities of entities to answer "what are the main themes?" (`graph-global`, extension 03). | 35 |
 | Grounded check | A deterministic test that a model's output (summary, proposition, extract) is made of the source's words, applied before it is indexed or shown; a refusal or invention fails it and the offline method is used instead. | E02 |
 | Groundedness | Whether each claim in an answer is supported by the sources the model was given; checked here lexically (content words and exact numbers must appear in the sources). | 34 |
 | Group (Keycloak) | A set of users who are "with" each other (department, team). It decides what you may SEE: its name goes into the token's `groups` claim and matches documents' `acl_groups`. | 16 |
@@ -360,9 +366,11 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | KV v2 | OpenBao's key/value secrets engine, version 2: stores fixed secrets (here the gateway key and OPA token) with a version history. Data lives under `secret/data/…`, versions under `secret/metadata/…`. | 28 |
 | Label (metric) | A key=value pair that identifies one slice of a metric, e.g. `outcome="error"`, `job="opa"`, `service_version="0.1.0"`. Every distinct label combination is its own time series. | 20 |
 | Label (prompt) | A movable pointer from an environment to a prompt version ("production uses version 1, staging uses version 2"), kept in `prompts/labels.yaml`. | 24 |
+| Label propagation | A community-detection method: every node starts with its own label and repeatedly takes the label most of its neighbours have, until nothing changes. Simple, fast, and deterministic when nodes and ties are processed in a fixed order. | E03 |
 | Langfuse | Open-core (MIT) LLM observability: traces with content, prompts, datasets and scores; owned by ClickHouse, Inc. | 22 |
 | Late chunking | Embedding a whole document with a long-context model and then averaging the token vectors inside each chunk, so each chunk's vector keeps its context (what "it" refers to). `embedder: late-chunking`. | E02 |
 | Late interaction (MaxSim) | Scoring a passage by taking, for each question token, its most similar passage token, and averaging: how ColBERT compares one-vector-per-token representations. | E02 |
+| Launch identity | The person (or token) an MCP server acts for, fixed by whoever starts it, never by the model: `rag mcp --subject … --group …` or `--token-file`. | E03 |
 | launchd | macOS's built-in service manager: starts programs at login and restarts them if they crash (agents live in `~/Library/LaunchAgents/`). | 7 |
 | Layout analysis | Working out a page's reading order, columns, tables and figures (Docling does this; plain text extraction doesn't). | 31 |
 | Learned sparse retrieval (SPLADE) | A model writes a weight for each vocabulary word, including related words the text doesn't contain; searched like keywords, with some sense of meaning. `sparse_embedder: splade-tei`. | E02 |
@@ -392,6 +400,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Login events (Keycloak) | Keycloak's record of sign-ins and failures (`LOGIN`, `LOGIN_ERROR`, …) with time, IP address and client; kept 30 days here. | 16 |
 | LogQL | Loki's query language: pick streams by label (`{service_name="rag-api"}`), then filter lines (`|= "text"`) and parse them (`| json`). | 21 |
 | Loki | Grafana's log store: indexes only a few labels per stream and keeps the text in compressed chunks that are scanned at query time, so it is cheap to run. | 21 |
+| Long-context routing | Deciding per question whether to send whole documents (when the best ones fit the model's context budget) instead of retrieved chunks; `pipeline: long-context`. | E03 |
 | Lost in the middle | Models notice the start and end of a long context more than the middle; the `lost-in-middle` order puts the best chunks at both ends. | 33 |
 | Luhn check | A simple checksum on card numbers; used to avoid redacting random digit strings that aren't cards. | 31 |
 | macOS Keychain | The Mac's built-in encrypted password store, unlocked by your login; home for personal tokens. | 6 |
@@ -404,6 +413,8 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Master key | The gateway's root credential (`LITELLM_MASTER_KEY`); it can do everything, so it is for admins only. | 9 |
 | Matryoshka embeddings | Embeddings trained so their first part is already a useful smaller embedding; keep the first N numbers, re-normalise, and save storage at a small quality cost. | 8 |
 | Max parallel requests (concurrency limit) | How many requests one key may have in flight at once; crucial when every app shares one GPU. | 10 |
+| MCP (Model Context Protocol) | An open protocol through which AI assistants and agents discover and call external tools (JSON-RPC 2.0 messages, here over stdin/stdout). `rag mcp` offers the platform's search and answer as two tools. | E03 |
+| MCP tool | A named action an MCP server offers, with a JSON Schema for its arguments (`tools/list`) and a result made of content blocks (`tools/call`). | E03 |
 | MDM | Mobile Device Management: how company IT installs and controls software on employees' Macs (e.g. Jamf, Kandji). | 1 |
 | Meaning space | The many-dimensional map an embedding model places texts on, where similar meanings sit close together. | 8 |
 | Memory bandwidth | How fast data moves between memory and the GPU; each decoded token reads the model's weights, so it is the speed limit for tokens per second. | 7 |
@@ -474,6 +485,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Oversampling | Fetching more candidates than needed (e.g. 4 × k) from a fast, approximate or compressed search so that rescoring with the full vectors can still find the true top k. | E01 |
 | Package manager | A program that installs, updates and removes other software and tracks what's installed. | 1 |
 | Packaged profiles / include | The platform's tested `rag.yaml` profiles shipped inside rag-core (`rag_core/profiles/platform.yaml`); a project includes and extends them and writes only what differs. | 38 |
+| PageIndex (reasoning-based retrieval) | Vectorless retrieval in which a model reads a document's table of contents and chooses the sections to read, as a person would, instead of searching by similarity; `pipeline: pageindex` with `toc_store: memory`. | E03 |
 | PAP (Policy Administration Point) | Where the rules are written and changed; here Git and pull requests on `policies/`. | 18 |
 | Parent-child chunking (small-to-big) | Searching small child chunks for precision, then giving the model the larger parent section they belong to. | 31 |
 | Parent / child span | Spans nest: a request's server span is the parent of the steps inside it, which can have children of their own; this nesting draws the waterfall. | 19 |
@@ -568,6 +580,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | RAG architecture | The overall design of how a RAG system gathers context and checks its answer (naive, advanced, corrective, agentic…); here, the component in the `pipeline` slot. | 35 |
 | `rag doctor` | Checks a project against the platform standards: configuration, readiness, evaluation sets, CI gates and governance files. | 38 |
 | `rate()` / `increase()` | PromQL functions for counters: `rate` is the per-second speed over a window, `increase` the total growth over it. Both handle counter resets when a process restarts; neither can see a counter's first appearance as growth. | 20 |
+| RAG-Fusion | Rewording a question several ways, searching with each, and merging the result lists with reciprocal rank fusion so passages found by several rewordings rise; `pipeline: rag-fusion` (also `multi-query`). | E03 |
 | RAPTOR | Recursive Abstractive Processing for Tree-Organized Retrieval (2024): cluster chunks, summarise each cluster, then cluster and summarise the summaries; all levels are indexed. `enrichers: [summary-tree]`. | E02 |
 | Rate limit (RPM / TPM) | How many requests per minute / tokens per minute a key may use; going over returns 429 Too Many Requests. | 10 |
 | Raw zone (bronze) | The part of a data platform holding immutable original data, from which everything else can be rebuilt. | 14 |
@@ -717,6 +730,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Sparse vector | A vector that's mostly zeros, stored as (position, value) pairs; used for keyword-like retrieval (SPLADE, BM25-style). | 12 |
 | SPDX licence id | The standard short name for a licence (`apache-2.0`, `mit`), so tools can compare them. | 25 |
 | Speculative decoding | A small draft model guesses a few tokens ahead and the big model checks them in one pass, speeding up decoding (`--draft-model`). | 7 |
+| Speculative RAG | Several drafts written in parallel by a small model from different subsets of the evidence, one of which a larger model picks; faster and cheaper than one long generation over everything. `pipeline: speculative`. | E03 |
 | SQLite authorizer | A callback SQLite runs for every action a statement wants to take (read a table, write, attach a database…); here it allows only reading the tables the person may see. | 35 |
 | Squash merge | Merging a PR so all its small commits become one clean commit on `main`. | 4 |
 | src layout | Putting a package's code under `src/<name>/` so tests import the installed package, not the raw folder. | 4 |
@@ -726,6 +740,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Staged files | The files you have `git add`-ed: exactly what the next commit will contain, and what hooks check. | 5 |
 | Standards as code | Rules written down with ids and checked by a program (`rag doctor`), not only by reviewers. | 38 |
 | Status: live / mocked / reference | How a rag-core component is tested here: against the real service, against its exact HTTP requests, or not at all (needs heavy extras). | 30 |
+| Stdio transport | Running a tool server as a child process of the client and exchanging messages on its standard input and output: local, single-user, no network port. | E03 |
 | Stemming | Reducing words to a common root ("Fridays" → "fridai") so variations of a word match. | 13 |
 | Step-back prompting | An LLM writes a more general question about the principle behind the user's question; searching both finds the background policy as well as the specific rule. | 32 |
 | Stream (Loki) | All log lines that share exactly the same set of labels; each unique label combination is a separate stream, so labels must have few values. | 21 |
@@ -743,6 +758,8 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Synonyms (search) | Rules treating different terms as equivalent ("wfh" = "work from home" = "remote work"), best applied at query time with `synonym_graph`. | 13 |
 | System card | A short document about an application built from models and data: purpose, users, human oversight, risk assessment. | 25 |
 | Table lock | A lock on a whole table; `LOCK TABLE … IN EXCLUSIVE MODE` lets only one writer append at a time (so the chain can't fork) while readers carry on. | 23 |
+| Table of contents tree | A document's headings as a tree (document → chapter → section), each node pointing at its text; what `pageindex` navigates. | E03 |
+| Table QA | Answering questions from tables: `table` looks up matching rows (no model, no arithmetic); `sql` lets a model write read-only SQL (totals, counts, comparisons). | E03 |
 | Tamper-evident vs tamper-proof | Evident: changes can't be hidden. Proof: changes are impossible. Nothing digital is tamper-proof against its own administrators; evident is the honest goal. | 23 |
 | Target (system under test) | The thing an evaluation runs against: here, retrieval-with-policy as a persona, or one prompt version on one model. | 26 |
 | Team (LiteLLM) | A group of virtual keys sharing a budget and a model list, e.g. a department or product. | 10 |
@@ -799,6 +816,8 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | ValidatingAdmissionPolicy | Your own admission rule, written in CEL and run inside the API server (GA since Kubernetes 1.30): no extra controller needed. | 29 |
 | Valkey | The open-source (BSD), Redis-compatible in-memory store maintained under the Linux Foundation, forked from Redis in 2024 after Redis's licence change. | 15 |
 | Vault (HashiCorp) | The best-known secrets manager. Its licence changed to BUSL-1.1 in 2023 (not open source); we say "Vault" for the idea and use OpenBao, its open-source fork. | 28 |
+| Vector RAG | Retrieval by embedding similarity only; `pipeline: vector` keeps the configured reranker and post-processors, unlike the bare `naive` baseline. | E03 |
+| Vectorless RAG | RAG without embeddings: keyword (BM25) search (`pipeline: keyword`) or contents-page navigation (`pipeline: pageindex`, also `vectorless`). | E03 |
 | Verdict | A guard's decision: allow, flag, redact or block, with reasons. | 34 |
 | Version (prompt) | One frozen edition of a prompt, a file `prompts/<name>/v<N>.yaml`; `rag-answer@2` always means the same text. | 24 |
 | Versioning / version ID | Keeping every overwrite of an object as a separate version, each with its own ID, so nothing is silently lost. | 14 |
