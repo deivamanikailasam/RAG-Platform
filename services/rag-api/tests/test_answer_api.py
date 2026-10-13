@@ -65,6 +65,18 @@ def test_answer_with_citations_and_an_audit_record(client: TestClient, idp: Fake
     assert "three days" not in json.dumps(event.details)
 
 
+def test_every_answer_record_names_the_release(client: TestClient, idp: FakeIdP, audit: FakeAudit,
+                                               answerer: AnswerPipeline,
+                                               monkeypatch: pytest.MonkeyPatch) -> None:  # fmt: skip
+    """Step 37: online evaluation compares the canary with the stable release by this field."""
+    monkeypatch.delenv("RAG_API_RELEASE", raising=False)
+    ask(client, idp, {"question": "How many days a week can I work from home?"})
+    assert audit.events[-1].details["release"] == "dev"  # outside Kubernetes
+    monkeypatch.setenv("RAG_API_RELEASE", "5c4b3a291")  # the pod-template hash Argo Rollouts sets
+    ask(client, idp, {"question": "How many days a week can I work from home?"})
+    assert audit.events[-1].details["release"] == "5c4b3a291"
+
+
 def test_follow_up_in_a_session(client: TestClient, idp: FakeIdP, answerer: AnswerPipeline) -> None:
     ask(
         client,

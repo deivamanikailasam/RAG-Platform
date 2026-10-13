@@ -4,6 +4,8 @@ rag components [--kind reranker] [--json]                 what can be switched, 
 rag config check    [--file rag.yaml] [--profile dev]     build every component of a profile
 rag config validate [--file rag.yaml] [--profile prod]    names and parameters only: no services
 rag config show     [--file rag.yaml] [--profile dev]     the resolved profile (after extends + env)
+rag config readiness [--file rag.yaml] [--profile production]
+                                                          fit for production? (Step 37; exit 1 on errors)
 
 Ingestion (Step 31):
 rag ingest  [--profile p] [--group hr] [--classification internal] [--tenant t] [--force] URI…
@@ -40,6 +42,13 @@ rag reacl URI --group hr --classification confidential [--tenant t]
                                                           new permissions in every store, now
 rag reindex --profile local --to local-v2 [--apply]       rebuild from the originals into a new collection
 
+Production (Step 37):
+rag online-eval (--events audit.jsonl | --dsn-file F | --dsn-env V) [--since-hours 24]
+                [--candidate R --baseline R] [--group-by release] [--limit error_rate=0.02]
+                [--on-insufficient wait|pass|fail] [--queue review.jsonl] [--json verdict.json]
+                                                          answer quality per release from the audit log
+                                                          exit 0 pass, 1 fail, 3 not enough data yet
+
 A URI is file:///abs/path, s3://bucket/key, or a local path (turned into a file:// URI).
 """
 
@@ -65,7 +74,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--kind")
     p.add_argument("--json", action="store_true")
     p = sub.add_parser("config", help="check, validate or show a profile of rag.yaml")
-    p.add_argument("action", choices=["check", "show", "validate"])
+    p.add_argument("action", choices=["check", "show", "validate", "readiness"])
     p.add_argument("--file", default=os.environ.get("RAG_CONFIG", "rag.yaml"))
     p.add_argument("--profile")
     for name in ("ingest", "delete", "enqueue", "worker"):
@@ -153,6 +162,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument("--json", action="store_true")
     _lifecycle_parsers(sub)
+    _online_parser(sub)
     a = ap.parse_args(argv)
     try:
         if a.cmd == "components":
@@ -174,6 +184,8 @@ def main(argv: list[str] | None = None) -> int:
             return _eval_search(a)
         if a.cmd == "eval-answers":
             return _eval_answers(a)
+        if a.cmd == "online-eval":
+            return _online_eval(a)
         container = cfg.load(a.file, a.profile)
         if a.cmd in LIFECYCLE:
             return _lifecycle(a, container)
@@ -185,6 +197,8 @@ def main(argv: list[str] | None = None) -> int:
             return _ask(a, container)
         if a.cmd in ("ingest", "delete", "enqueue", "worker"):
             return _ingestion(a, container)
+        if a.action == "readiness":
+            return _readiness(container)
         if a.action == "validate":
             problems = container.validate()
             for prob in problems:
@@ -211,6 +225,83 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
 
+def _readiness(container: Container) -> int:
+    """Step 37: fit for production, not just buildable. Errors fail; warnings are for a person."""
+    from rag_core import readiness
+
+    findings = readiness.check(container.config)
+    for f in findings:
+        print(f)
+    errors = sum(f.level == "error" for f in findings)
+    print(f"profile {container.profile!r}: {errors} error(s), {len(findings) - errors} warning(s)")
+    return 1 if errors else 0
+
+
+def _online_parser(sub: Any) -> None:
+    """Step 37: answer quality per release, from the audit log and feedback."""
+    p = sub.add_parser(
+        "online-eval", help="answer quality per release from the audit log (Step 37)"
+    )
+    src = p.add_mutually_exclusive_group(required=True)
+    src.add_argument("--events", type=Path, help="audit events exported as JSON lines")
+    src.add_argument(
+        "--dsn-file", type=Path, help="a file holding the audit_reader DSN (OpenBao Agent)"
+    )
+    src.add_argument("--dsn-env", help="the NAME of an environment variable holding the DSN")
+    p.add_argument("--since-hours", type=float, default=24.0)
+    p.add_argument("--group-by", default="release", choices=["release", "prompt", "model", "all"])
+    p.add_argument("--candidate", help="the group under test (the canary's release)")
+    p.add_argument("--baseline", help="the group to compare with (the stable release)")
+    p.add_argument("--margin", type=float, default=0.02, help="ignore differences up to this")
+    p.add_argument("--z", type=float, default=1.645, help="one-sided z threshold (1.645 = 95%%)")
+    p.add_argument("--min-n", type=int, default=50, help="fewer events than this: insufficient")
+    p.add_argument("--limit", action="append", default=[], metavar="METRIC=VALUE",
+                   help="an absolute ceiling, e.g. error_rate=0.02")  # fmt: skip
+    p.add_argument("--on-insufficient", default="wait", choices=["wait", "pass", "fail"],
+                   help="too few answers: exit 3 (wait), 0 (pass) or 1 (fail)")  # fmt: skip
+    p.add_argument("--queue", type=Path, help="write the answers to review here (JSON lines)")
+    p.add_argument("--json", type=Path, help="write the verdict here")
+
+
+def _online_eval(a: argparse.Namespace) -> int:
+    from rag_core import online
+
+    if a.events:
+        events: Any = online.load_jsonl(a.events)
+    else:  # pragma: no cover - needs the audit database
+        dsn = a.dsn_file.read_text().strip() if a.dsn_file else os.environ.get(a.dsn_env, "")
+        if not dsn:
+            raise ComponentError(f"no DSN in {a.dsn_file or '$' + a.dsn_env}")
+        events = online.load_db(dsn, a.since_hours)
+    groups, queue = online.collect(events, a.group_by)
+    print(online.format_report(groups) + "\n")
+    if a.queue:
+        a.queue.write_text("".join(json.dumps(q) + "\n" for q in queue))
+        print(f"{len(queue)} answer(s) to review -> {a.queue}\n")
+    if not (a.candidate and a.baseline):
+        return 0
+    limits = {}
+    for rule in a.limit:
+        metric, _, value = rule.partition("=")
+        if metric not in online.WORSE_IF_HIGHER or not value:
+            raise ComponentError(
+                f"--limit {rule!r}: use METRIC=VALUE with one of {online.WORSE_IF_HIGHER}"
+            )
+        limits[metric] = float(value)
+    empty = online.Stats()
+    verdict = online.compare(groups.get(a.candidate, empty), groups.get(a.baseline, empty),
+                             names=(a.candidate, a.baseline), margin=a.margin, z=a.z, min_n=a.min_n,
+                             limits=limits)  # fmt: skip
+    print(f"{a.candidate} vs {a.baseline}: {verdict.status.upper()}")
+    for ch in verdict.checks:
+        print(f"   {ch.status:12} {ch.metric:18} {ch.detail}")
+    if a.json:
+        a.json.write_text(verdict.to_json() + "\n")
+    if verdict.status == "insufficient":
+        return {"wait": 3, "pass": 0, "fail": 1}[a.on_insufficient]
+    return 1 if verdict.status == "fail" else 0
+
+
 LIFECYCLE = ("retention", "erase-source", "erase-subject", "reacl", "reindex")
 
 
@@ -233,6 +324,10 @@ def _lifecycle_parsers(sub: Any) -> None:
             )
         if name == "erase-source":
             p.add_argument("uris", nargs="+")
+            # Step 37: legal holds live in the retention file; erasing a held source needs a reason
+            p.add_argument("--rules", help="the retention YAML whose legal_holds apply")
+            p.add_argument("--override-hold", default="", metavar="REASON",
+                           help="erase despite a legal hold (legal's decision, recorded)")  # fmt: skip
         if name == "erase-subject":
             p.add_argument("--subject", help="the person's token subject: their conversations go")
             p.add_argument("--tenant", default="default")
@@ -261,8 +356,10 @@ def _lifecycle(a: argparse.Namespace, c: Container) -> int:
     elif a.cmd == "erase-source":
         pipe = IngestionPipeline(c)
         report = lc.LifecycleReport("erase-source", a.apply)
+        policy = lc.load_retention(Path(a.rules)) if a.rules else None
         for uri in (_uri(u) for u in a.uris):
-            report.items += lc.erase_source(pipe, uri, apply=a.apply).items
+            report.items += lc.erase_source(pipe, uri, apply=a.apply, policy=policy,
+                                            override_hold=a.override_hold).items  # fmt: skip
     elif a.cmd == "erase-subject":
         if not a.subject and not a.identifiers:
             raise ComponentError("erase-subject needs --subject and/or --identifier")
@@ -278,11 +375,13 @@ def _lifecycle(a: argparse.Namespace, c: Container) -> int:
     else:
         report = lc.reindex(c, cfg.load(a.file, a.to), apply=a.apply)
     if a.json:
-        print(json.dumps({"action": report.action, "applied": report.applied, "items": report.items},
-                         indent=2, default=str))  # fmt: skip
+        print(json.dumps({"action": report.action, "applied": report.applied, "items": report.items,
+                          "held": report.held}, indent=2, default=str))  # fmt: skip
     else:
         for item in report.items:
             print("   " + "   ".join(f"{k}={v}" for k, v in item.items()))
+        for item in report.held:  # reported, never hidden: a hold is a decision someone owns
+            print("   HELD " + "   ".join(f"{k}={v}" for k, v in item.items()))
         print(report.summary())
     return 1 if any(i.get("status") == "failed" for i in report.items) else 0
 

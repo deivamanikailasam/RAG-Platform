@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 import uuid
 from collections.abc import AsyncIterator, Callable, Iterator
@@ -479,6 +480,12 @@ class AnswerOut(BaseModel):
     citations: list[CitationOut]
 
 
+def _release() -> str:
+    """Which build this pod runs (Step 37): the pod-template hash Argo Rollouts gives each release,
+    so online evaluation can compare the canary with the stable release. "dev" outside Kubernetes."""
+    return os.environ.get("RAG_API_RELEASE") or "dev"
+
+
 def _answer_id() -> str:
     return current_trace_id() or uuid.uuid4().hex
 
@@ -555,6 +562,7 @@ def answer(
             model=str(getattr(answerer.generator, "model", "?")), question_chars=len(req.question),
             session=req.session_id is not None, usage=dict(a.usage) if a else {},
             guards=_verdicts(a), blocked=a.blocked if a else None,
+            release=_release(),  # Step 37: online evaluation compares releases by this
         ))  # fmt: skip
 
     if not req.stream:

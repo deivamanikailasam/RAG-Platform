@@ -2,6 +2,7 @@
 
     rag retention --rules retention.yaml [--apply]        delete what has outlived its rule
     rag erase-source s3://bucket/key [--apply]            a document gone from everywhere, all versions
+                     [--rules retention.yaml --override-hold "reason"]   (Step 37: legal holds)
     rag erase-subject --email jane@… [--apply]            a person's conversations, cached answers, and
                                                           which documents mention them
     rag reacl <uri> --group hr --classification …         new permissions, everywhere, now
@@ -13,6 +14,7 @@ returns a report that the caller records (rag-api's audit log, or the job's outp
 
 from __future__ import annotations
 
+import datetime as dt
 import fnmatch
 import time
 from dataclasses import dataclass, field
@@ -39,11 +41,31 @@ class RetentionRule(BaseModel):
     reason: str = ""  # the record or policy that sets it, e.g. "Records Authority class 12.3"
 
 
+class LegalHold(BaseModel):
+    """Step 37: while a dispute, investigation or audit is open, matching sources must not be
+    deleted by retention, and erasure needs an explicit, recorded override."""
+
+    model_config = ConfigDict(extra="forbid")
+    match: str  # glob on the source URI
+    matter: str  # the case or request it belongs to, e.g. "LIT-2026-014"
+    until: dt.date | None = None  # None: until someone removes it (the usual case)
+
+    def active(self, today: dt.date) -> bool:
+        return self.until is None or today <= self.until
+
+
 class RetentionPolicy(BaseModel):
     model_config = ConfigDict(extra="forbid")
     version: int = 1
     rules: list[RetentionRule]
     default_keep_days: int | None = None  # None: sources no rule matches are kept
+    legal_holds: list[LegalHold] = []
+
+    def hold_for(self, uri: str, today: dt.date | None = None) -> LegalHold | None:
+        today = today or dt.datetime.now(dt.UTC).date()
+        return next(
+            (h for h in self.legal_holds if h.active(today) and fnmatch.fnmatch(uri, h.match)), None
+        )
 
 
 def load_retention(path: Path) -> RetentionPolicy:
@@ -58,10 +80,12 @@ class LifecycleReport:
     action: str
     applied: bool
     items: list[dict[str, Any]] = field(default_factory=list)
+    held: list[dict[str, Any]] = field(default_factory=list)  # Step 37: kept by a legal hold
 
     def summary(self) -> str:
         verb = "done" if self.applied else "would be done (dry run; add --apply)"
-        return f"{self.action}: {len(self.items)} item(s) {verb}"
+        kept = f", {len(self.held)} kept by a legal hold" if self.held else ""
+        return f"{self.action}: {len(self.items)} item(s) {verb}{kept}"
 
 
 def apply_retention(pipeline: IngestionPipeline, policy: RetentionPolicy, *, apply: bool = False,
@@ -79,6 +103,12 @@ def apply_retention(pipeline: IngestionPipeline, policy: RetentionPolicy, *, app
             continue
         age_days = (now - entry.updated_at) / DAY
         if age_days > keep:
+            hold = policy.hold_for(entry.source_uri, dt.datetime.fromtimestamp(now, dt.UTC).date())
+            if hold is not None:  # a legal hold wins over every retention rule
+                report.held.append(
+                    {"uri": entry.source_uri, "matter": hold.matter, "age_days": round(age_days, 1)}
+                )
+                continue
             item = {"uri": entry.source_uri, "age_days": round(age_days, 1), "keep_days": keep,
                     "rule": rule.match if rule else "default", "reason": rule.reason if rule else ""}  # fmt: skip
             if apply:
@@ -91,12 +121,27 @@ def apply_retention(pipeline: IngestionPipeline, policy: RetentionPolicy, *, app
 
 
 def erase_source(
-    pipeline: IngestionPipeline, uri: str, *, apply: bool = False, s3_client: Any = None
+    pipeline: IngestionPipeline,
+    uri: str,
+    *,
+    apply: bool = False,
+    s3_client: Any = None,
+    policy: RetentionPolicy | None = None,
+    override_hold: str = "",
 ) -> LifecycleReport:
     """A document must be forgotten: every store, the graph, the manifest, the cache, and for an
-    s3:// original EVERY object version (Step 14 keeps versions, so deleting the latest isn't enough)."""
+    s3:// original EVERY object version (Step 14 keeps versions, so deleting the latest isn't enough).
+    Under a legal hold (Step 37) it refuses unless `override_hold` gives the reason (legal decides
+    between an erasure request and a hold; the reason goes into the report and the audit trail)."""
     report = LifecycleReport("erase-source", apply)
     item: dict[str, Any] = {"uri": uri}
+    hold = policy.hold_for(uri) if policy else None
+    if hold is not None:
+        if not override_hold:
+            raise ComponentError(
+                f'{uri} is under legal hold {hold.matter}: erasing needs --override-hold "reason"'
+            )
+        item["legal_hold_overridden"] = {"matter": hold.matter, "reason": override_hold}
     if uri.startswith("s3://"):
         bucket, _, key = uri[len("s3://") :].partition("/")
         if s3_client is None:

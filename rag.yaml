@@ -102,3 +102,19 @@ profiles:
     vector_store: {use: pgvector, dsn_env: null, credentials_file: /run/bao/rag_db.json, collection: default_v2}
     keyword_index: {use: postgres-fts, dsn_env: null, credentials_file: /run/bao/rag_db.json, collection: default_v2}
     manifest: {use: postgres, dsn_env: null, credentials_file: /run/bao/rag_db.json, collection: default_v2}
+
+  # ---- staging and production on Kubernetes (Step 37): the local stack's components, stricter ----
+  # `rag config readiness --profile production` must pass before a release is promoted.
+  production:
+    extends: local
+    pipeline: {use: standard, search_k: 8, uncited: abstain, stream: checked}   # nothing unchecked is shown
+    guards:
+      - {use: size, max_chars: 2000}
+      - {use: injection, threshold: 0.6}
+      - {use: pii, stage: input}
+      - {use: topics}
+      - {use: context-injection}
+      - {use: groundedness, on_hit: flag}
+      - {use: pii, stage: output}
+      - {use: secrets}
+      - {use: toxicity}

@@ -27,7 +27,7 @@ from rag_core.components.conversation import (
 )
 from rag_core.components.opensearch import OpenSearchKeywordIndex, OpenSearchParams
 from rag_core.ingest import IngestionPipeline
-from rag_core.registry import Container
+from rag_core.registry import ComponentError, Container
 from rag_core.testing.conformance import check_access_update
 from rag_core.types import Access, Principal, Source, Turn
 
@@ -148,6 +148,48 @@ class FakeS3:
 
     def delete_object(self, Bucket: str, Key: str, VersionId: str) -> None:  # noqa: N803
         self.deleted.append((Key, VersionId))
+
+
+def test_a_legal_hold_wins_over_retention() -> None:
+    """Step 37: while a matter is open, held sources are kept (and reported), whatever the rules."""
+    c = handbook()
+    m = c.get("manifest")
+    old = uri_of(c, "annual-leave-2021.md")
+    m.put(replace(m.get(old), updated_at=time.time() - 40 * lc.DAY))
+    policy = lc.load_retention(ROOT / "examples/retention.yaml")
+    policy.legal_holds = [lc.LegalHold(match="*annual-leave-*", matter="LIT-2026-014")]
+    report = lc.apply_retention(IngestionPipeline(c), policy, apply=True)
+    assert report.items == []
+    assert report.held == [{"uri": old, "matter": "LIT-2026-014", "age_days": 40.0}]
+    assert m.get(old) is not None  # kept
+    assert "1 kept by a legal hold" in report.summary()
+    # a hold that ended yesterday holds nothing
+    policy.legal_holds = [lc.LegalHold(match="*annual-leave-*", matter="LIT-2026-014",
+                                       until=__import__("datetime").date(2020, 1, 1))]  # fmt: skip
+    assert [i["uri"] for i in lc.apply_retention(IngestionPipeline(c), policy).items] == [old]
+    # the deployed rules file parses, holds included
+    deployed = lc.load_retention(ROOT / "deploy/base/rag-ingest/retention.yaml")
+    assert deployed.hold_for("s3://rag-originals/tickets/2025/42.md") is not None
+    assert deployed.hold_for("s3://rag-originals/tickets/2024/42.md") is None
+
+
+def test_erasure_under_a_legal_hold_needs_a_recorded_override() -> None:
+    c = offline()
+    uri = "s3://rag-originals/tickets/2025/42.md"
+    IngestionPipeline(c).ingest(Source(uri, b"# Ticket\n\nThe customer disputes the invoice.",
+                                       access=Access("internal", ("support",))))  # fmt: skip
+    policy = lc.RetentionPolicy(rules=[], legal_holds=[lc.LegalHold(match="*/tickets/2025/*",
+                                                                     matter="LIT-2026-014")])  # fmt: skip
+    with pytest.raises(ComponentError, match="under legal hold LIT-2026-014"):
+        lc.erase_source(IngestionPipeline(c), uri, apply=True, policy=policy, s3_client=FakeS3())
+    assert c.get("manifest").get(uri) is not None  # refused: nothing was deleted
+    report = lc.erase_source(IngestionPipeline(c), uri, apply=True, policy=policy, s3_client=FakeS3(),
+                             override_hold="Legal: erasure request ER-77 outweighs the hold")  # fmt: skip
+    assert report.items[0]["legal_hold_overridden"] == {
+        "matter": "LIT-2026-014",
+        "reason": "Legal: erasure request ER-77 outweighs the hold",
+    }
+    assert c.get("manifest").get(uri) is None
 
 
 def test_erase_source_removes_every_version_and_every_copy() -> None:

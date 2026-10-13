@@ -383,8 +383,10 @@ ci-config:
     just compliance-check
 
 # rag.yaml: every profile names real components with valid settings (Step 30), no services needed
+# Step 37: and the production profile must be fit for production (no stand-ins, the required guards)
 rag-config-check:
-    for p in offline local local-engines; do uv run rag config validate --profile $p; done
+    for p in offline local local-engines production; do uv run rag config validate --profile $p; done
+    uv run rag config readiness --profile production
 
 # Search quality gate (Step 32): the shipped search settings must keep finding the handbook answers,
 # and must never return a forbidden document. Offline: no models or stores needed.
