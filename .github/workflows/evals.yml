@@ -1,0 +1,48 @@
+# Model evaluations need the real models, which run on the Mac: a self-hosted runner (Step 26 + 27).
+name: evals
+
+on:
+  pull_request:
+    paths:
+      - prompts/**
+      - evals/**
+      - libs/rag-evals/**
+      - services/rag-api/src/rag_api/search.py
+      - policies/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:  # one evaluation at a time: the GPU is shared
+  group: evals
+  cancel-in-progress: false
+
+jobs:
+  evals:
+    name: evaluate retrieval and the staging prompt
+    # NEVER run code from forks on your own machine: a fork's PR could run anything there.
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, macOS, ARM64, rag-models]
+    environment: evals  # requires an approval before it runs (repository settings -> Environments)
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - run: just evals run retrieval
+      - run: |
+          # Run folders start with a timestamp, so the last name is the newest run.
+          # shellcheck disable=SC2012
+          just evals gate "$(ls -d evals/runs/*-retrieval-* | tail -1)"
+      - run: just evals run answer --prompt rag-answer --label staging
+      - run: |
+          # Run folders start with a timestamp, so the last name is the newest run.
+          # shellcheck disable=SC2012
+          just evals gate "$(ls -d evals/runs/*-answer-* | tail -1)"
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: eval-runs
+          path: evals/runs/
+          retention-days: 90
