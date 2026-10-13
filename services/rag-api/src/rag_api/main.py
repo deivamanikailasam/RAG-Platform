@@ -89,6 +89,10 @@ ANSWER_TIME = meter.create_histogram(
 FEEDBACK = meter.create_counter(
     "rag.answer.feedback", unit="{rating}", description="Thumbs up/down by reason"
 )
+# Guardrails (Step 34): every verdict other than allow, by guard, stage and action
+GUARD_VERDICTS = meter.create_counter(
+    "rag.guard.verdicts", unit="{verdict}", description="Guard verdicts other than allow (Step 34)"
+)
 
 REQUIRED_PROMPTS = ("query-instruction",)  # prompts this service can't run without
 
@@ -469,7 +473,9 @@ class AnswerOut(BaseModel):
     answer_id: str  # send it back with /v1/feedback; it is also the trace id (Steps 19-23)
     text: str
     abstained: bool
-    blocked: str | None
+    blocked: (
+        bool  # a guard stopped it (Step 34); the text is a fixed message, the reason is audited
+    )
     citations: list[CitationOut]
 
 
@@ -486,6 +492,14 @@ def _citations(a: Answer, context_ids: dict[str, int]) -> list[CitationOut]:
 
 def _outcome(a: Answer) -> str:
     return "blocked" if a.blocked else "abstained" if a.abstained else "answered"
+
+
+def _verdicts(a: Answer | None) -> list[dict[str, Any]]:
+    """Guard verdicts for the audit log and metrics: names, stages, actions, reasons. Never text."""
+    found = list(a.trace.get("guards", [])) if a is not None else []
+    for v in found:
+        GUARD_VERDICTS.add(1, {"guard": v["guard"], "stage": v["stage"], "action": v["action"]})
+    return found
 
 
 @app.post("/v1/answer", response_model=None)
@@ -505,6 +519,7 @@ def answer(
     who = CorePrincipal(p.subject, tuple(sorted(f.groups)), levels, tenant)
     started, answer_id = time.perf_counter(), _answer_id()
     context_ids: dict[str, int] = {}
+    completed: dict[str, bool] = {}  # was the answer itself in the first audit record?
 
     def post_check(hits: list[ScoredChunk]) -> list[ScoredChunk]:
         """OPA re-checks every document before it can reach the model (as /v1/search does)."""
@@ -530,6 +545,7 @@ def answer(
         if context is not None:
             context_ids.update({h.chunk.id: document_id(h.chunk) for h in context.chunks})
         a = final or early
+        completed["recorded"] = a is not None
         record_or_refuse(audit, audit_event(
             p, "answer", "allowed", "documents", answer_id=answer_id,
             context_ids=sorted(set(context_ids.values())),
@@ -538,6 +554,7 @@ def answer(
             prompts=[str(getattr(answerer.generator, "prompt_ref", "?"))],
             model=str(getattr(answerer.generator, "model", "?")), question_chars=len(req.question),
             session=req.session_id is not None, usage=dict(a.usage) if a else {},
+            guards=_verdicts(a), blocked=a.blocked if a else None,
         ))  # fmt: skip
 
     if not req.stream:
@@ -551,7 +568,7 @@ def answer(
             raise
         ANSWERS.add(1, {"outcome": _outcome(a)})
         ANSWER_TIME.record(time.perf_counter() - started, {"stream": False})
-        return AnswerOut(answer_id=answer_id, text=a.text, abstained=a.abstained, blocked=a.blocked,
+        return AnswerOut(answer_id=answer_id, text=a.text, abstained=a.abstained, blocked=bool(a.blocked),
                          citations=_citations(a, context_ids))  # fmt: skip
 
     events = answerer.stream(req.question, who, session_id=req.session_id, post_check=post_check,
@@ -577,7 +594,15 @@ def answer(
                     a: Answer = ev.data
                     ANSWERS.add(1, {"outcome": _outcome(a)})
                     yield frame("done", AnswerOut(answer_id=answer_id, text=a.text, abstained=a.abstained,
-                                                  blocked=a.blocked, citations=_citations(a, context_ids)).model_dump())  # fmt: skip
+                                                  blocked=bool(a.blocked), citations=_citations(a, context_ids)).model_dump())  # fmt: skip
+                    if not completed.get("recorded"):
+                        # streaming: after "done", the record is completed (best effort: the text is
+                        # already sent). Output guard verdicts, the citations and usage land here.
+                        record_best_effort(audit, audit_event(
+                            p, "answer.completed", "allowed", "documents", answer_id=answer_id,
+                            cited_ids=sorted({context_ids.get(c.chunk_id, -1) for c in a.citations}),
+                            result=_outcome(a), guards=_verdicts(a), blocked=a.blocked, usage=dict(a.usage),
+                        ))  # fmt: skip
         # the model failed mid-answer: tell the client, never a half answer as "done"
         except Exception:
             ANSWERS.add(1, {"outcome": "error"})
