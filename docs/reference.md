@@ -980,6 +980,7 @@ Run from the repository root. `just` with no arguments lists every recipe.
 | `uv run rag online-eval --events audit.jsonl \| --dsn-file F [--candidate A --baseline B] [--queue review.jsonl] [--json verdict.json] [--on-insufficient wait\|pass\|fail]` | Answer quality per release; exit 0 pass, 1 fail, 3 wait (`just online-eval`) |
 | `uv run rag erase-source <uri> --rules retention.yaml [--override-hold "reason"] [--apply]` | Erasure that respects legal holds |
 | `just gates <env> sha256:… [evidence] [alertmanager]` · `just gates-record <check> sha256:… pass "summary"` | Check the promotion gates · record evidence (CI) |
+| `just gates-evidence sha256:… [out]` | Run the five offline checks and record each result (release.yml's `evidence` job) |
 | `just promote <env> sha256:… ["INC-123: reason"]` | Gates, then the digest pull request; a reason = break glass |
 | `just dr-drill "2026-10-13 08:59:00+00"` | Restore into a new cluster at that second, compare, delete |
 | `just vendor argo-rollouts\|cnpg\|barman-cloud <version>` | Upgrade a vendored operator, recording its hash |

@@ -48,3 +48,6 @@ evals/runs/
 
 # --- OpenBao (Step 28): the agent's role ID + single-use secret ID, short-lived database logins ---
 .bao/
+
+# --- Promotion evidence (Step 37): build artefacts from release.yml, downloaded per digest; never committed ---
+release-evidence/

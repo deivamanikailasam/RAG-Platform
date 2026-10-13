@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import datetime as dt
 import importlib.util
+import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -14,6 +16,7 @@ from types import ModuleType
 from typing import Any
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 A = "sha256:" + "a" * 64
@@ -182,3 +185,62 @@ def test_cli(envs: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> 
     assert gates.main(["check", "staging", A, "--evidence", str(out)]) == 0
     assert gates.main(["check", "staging", B, "--evidence", str(out)]) == 1
     assert "BLOCKED: evidence image-verify: missing" in capsys.readouterr().err
+
+
+# --- CI records the evidence (release.yml -> just gates-evidence) ---------------------------------
+
+
+def _release() -> dict[str, Any]:
+    return dict(yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text()))
+
+
+def test_release_records_evidence_for_the_published_digest() -> None:
+    jobs = _release()["jobs"]
+    assert jobs["publish"]["outputs"]["digest"] == "${{ steps.build.outputs.digest }}"
+    job = jobs["evidence"]
+    assert job["needs"] == ["publish"]
+    assert not any(v == "write" for v in job["permissions"].values())  # read-only
+    run = next(s for s in job["steps"] if "gates-evidence" in s.get("run", ""))
+    assert run["run"] == 'just gates-evidence "$DIGEST"'
+    assert run["env"]["DIGEST"] == "${{ needs.publish.outputs.digest }}"  # via env: no injection
+    upload = next(s for s in job["steps"] if "upload-artifact" in s.get("uses", ""))
+    assert upload["if"] == "always()"  # failed checks are evidence too
+    assert upload["with"]["path"] == "release-evidence/"
+    assert "release-evidence/" in (ROOT / ".gitignore").read_text().splitlines()
+
+
+def test_gates_evidence_records_every_offline_check_staging_needs() -> None:
+    recipe = (ROOT / "justfile").read_text().split("\ngates-evidence ", 1)[1].split("\n\n", 1)[0]
+    recorded = re.findall(r"^\s+check ([\w-]+) ", recipe, re.M)
+    assert recorded == gates.load_rules()["environments"]["staging"]["evidence"] == OFFLINE
+
+
+def test_gates_evidence_runs_and_records_pass_and_fail(tmp_path: Path) -> None:
+    """The REAL recipe, with stand-in cosign and gh (no registry here): every check gets a file."""
+    if shutil.which("just") is None:
+        pytest.skip("just not installed (uv tool install rust-just)")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "cosign").write_text("#!/bin/sh\nexit 0\n")
+    (bin_dir / "gh").write_text(
+        '#!/bin/sh\ncase "$1" in repo) echo owner/rag-platform ;;'
+        ' attestation) echo "Verification succeeded!" ;; esac\n'
+    )
+    for f in bin_dir.iterdir():
+        f.chmod(0o755)
+    env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"}
+    out = tmp_path / "ev"
+    r = subprocess.run(["just", "gates-evidence", A, str(out)], cwd=ROOT, env=env,  # noqa: S603, S607
+                       capture_output=True, text=True, check=False)  # fmt: skip
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert gates.check("staging", A, evidence=out) == []
+    assert (
+        "catch rate 1.000"
+        in json.loads((out / f"{'a' * 12}-guard-eval.json").read_text())["summary"]
+    )
+    # cosign says no: image-verify is recorded as failed, the recipe fails, the gate blocks
+    (bin_dir / "cosign").write_text("#!/bin/sh\necho 'no matching signatures' >&2\nexit 1\n")
+    r = subprocess.run(["just", "gates-evidence", A, str(out)], cwd=ROOT, env=env,  # noqa: S603, S607
+                       capture_output=True, text=True, check=False)  # fmt: skip
+    assert r.returncode == 1
+    assert any("image-verify: status 'fail'" in p for p in gates.check("staging", A, evidence=out))

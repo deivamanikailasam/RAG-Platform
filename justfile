@@ -660,6 +660,31 @@ gates env digest evidence="release-evidence" alertmanager="":
 gates-record name digest status summary="":
     uv run python scripts/gates.py record {{name}} {{digest}} {{status}} --summary "{{summary}}"
 
+# Run every offline promotion check for a digest on THIS commit and record each result, pass or fail,
+# in release-evidence/ (release.yml runs it after each publish; online-eval is recorded from staging)
+[positional-arguments]
+gates-evidence digest out="release-evidence":
+    #!/usr/bin/env bash
+    set -uo pipefail
+    digest="$1" evidence_dir="$2"
+    [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "not an image digest: $digest" >&2; exit 2; }
+    failed=0
+    check() {  # check <evidence name> <summary lines (regex)> <command...>
+      local name="$1" pick="$2" status=pass out summary; shift 2
+      out="$("$@" 2>&1)" || { status=fail; failed=1; }
+      printf '%s\n' "$out" | tail -n 15
+      summary=""   # a pass keeps the result lines; a failure keeps the error (the last line)
+      [ "$status" = fail ] || summary="$(printf '%s\n' "$out" | grep -E "$pick" | tr -s ' ' | paste -sd ';' - | cut -c1-200)"
+      [ -n "$summary" ] || summary="$(printf '%s\n' "$out" | grep -v '^[[:space:]]*$' | tail -n 1 | cut -c1-200)"
+      uv run python scripts/gates.py record "$name" "$digest" "$status" --summary "$summary" --out "$evidence_dir"
+    }
+    check image-verify '^signature OK$|Verification succeeded' just image-verify "$digest"  # Step 27
+    check readiness "^profile 'production'" uv run rag config readiness --profile production
+    check search-eval '^(variant|all-together) ' just search-eval                   # Step 32
+    check guard-eval 'catch rate|false positive rate' just guard-eval               # Step 34
+    check answer-eval '^(architecture|standard) ' just answer-eval                  # Step 35
+    exit "$failed"
+
 # Answer quality per release from the audit log (as audit_reader); --candidate/--baseline compare
 online-eval *args:
     sops exec-env secrets/dev.enc.env 'AUDIT_READER_DSN="{{audit_reader_dsn}}" uv run rag online-eval --dsn-env AUDIT_READER_DSN {{args}}'

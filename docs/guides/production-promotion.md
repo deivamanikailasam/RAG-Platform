@@ -159,7 +159,7 @@ SHA and every tool binary to a SHA-256 ([`ci/tools.yaml`](../../ci/tools.yaml)).
 | Workflow | When | What |
 |---|---|---|
 | [`ci.yml`](../../.github/workflows/ci.yml) | Every PR and `main` | `checks` (`just ci-static`, `ci-test` with a Postgres service, `ci-config`, `policy-check`), `supply-chain` (gitleaks on full history, actionlint, zizmor, pip-audit on `uv.lock`, licence policy, Trivy on the Dockerfile and the Kubernetes manifests), `image` (Buildx build, Trivy image scan failing on fixable HIGH/CRITICAL, Syft SBOM) |
-| [`release.yml`](../../.github/workflows/release.yml) | Merge to `main` | Push `ghcr.io/<owner>/<repo>/rag-api` **by digest**, sign it keylessly with cosign (Sigstore), attach SBOM and SLSA provenance attestations; the run summary prints the digest |
+| [`release.yml`](../../.github/workflows/release.yml) | Merge to `main` | `publish`: push `ghcr.io/<owner>/<repo>/rag-api` **by digest**, sign it keylessly with cosign (Sigstore), attach SBOM and SLSA provenance attestations; the run summary prints the digest. `evidence` (read-only): `just gates-evidence <digest>` on the same commit, uploaded as the `release-evidence` artefact |
 | [`evals.yml`](../../.github/workflows/evals.yml) | PRs touching prompts, evals, the harness, search or policies; manual | Live evaluations on a **self-hosted Mac runner** with the models, behind the `evals` environment's approval |
 
 Reproduce CI on your Mac: `just ci` (and `just image-scan` for the image job). After a merge:
@@ -171,21 +171,34 @@ just image-verify sha256:<digest>      # "signature OK" + provenance verified, b
 
 ### Recording evidence for the gates
 
-The gates read small JSON files per digest and check, written by `just gates-record`:
+The gates read small JSON files per digest and check, in `release-evidence/`, named
+`<first 12 hex of the digest>-<check>.json`. **CI writes the offline ones for you:** after each
+publish, `release.yml`'s `evidence` job checks out the image's commit and runs
 
 ```bash
-just gates-record image-verify sha256:<digest> pass "cosign + attestation verified"
-just gates-record readiness    sha256:<digest> pass "production: 0 errors"
-just gates-record search-eval  sha256:<digest> pass "recall@5 0.96, 0 leaks"
-just gates-record guard-eval   sha256:<digest> pass "catch 1.00, fp 0.00"
-just gates-record answer-eval  sha256:<digest> pass "context_recall 1.00"
-# prod only, from staging's online evaluation:
-just gates-record online-eval  sha256:<digest> pass "candidate vs previous: pass"
+just gates-evidence sha256:<digest>    # image-verify, readiness, search-eval, guard-eval, answer-eval
 ```
 
-Files land in `release-evidence/` as `<first 12 hex of the digest>-<check>.json`. **The workflows in this
-repository don't yet call `gates-record`**: wire each check's result into the release pipeline (as a
-build artefact the promoting person downloads into `release-evidence/`) before relying on the gates.
+which runs each check and records its result, pass **or fail**, with the result lines as the summary
+(a failed check is evidence too: the gates then say *why* they block). The job fails if any check
+failed, and always uploads the folder as the run's `release-evidence` artefact (kept 90 days; the gates
+accept evidence up to 14 days old). The run summary prints the commands; to use it on your Mac:
+
+```bash
+gh run download <release run id> -n release-evidence -D release-evidence
+just gates staging sha256:<digest>     # or straight to: just promote staging sha256:<digest>
+```
+
+`online-eval` (prod only) comes from staging, not CI: run the comparison against staging's audit log
+and record the verdict by hand into the same folder:
+
+```bash
+just online-eval --candidate <release> --baseline <previous release>
+just gates-record online-eval sha256:<digest> pass "candidate vs previous: pass"
+```
+
+`just gates-record <check> sha256:<digest> pass|fail "summary"` records any single check by hand (for
+example after re-running one locally with `just gates-evidence sha256:<digest>`).
 
 ---
 
@@ -374,7 +387,6 @@ legal hold.
 | Hostnames, storage, buckets, Prometheus | `sso.example.com`, `fast-ssd`, `s3://example-rag-db-backups/…`, `http://prometheus.monitoring.svc:9090` | Your IdP, SSD storage class (with volume expansion), backup bucket (other region, versioned, Object Lock), Prometheus address |
 | Encrypted secrets files | `secrets/dev.enc.env`, `secrets/openbao-init.enc.json` (not in the repo by design) | `just secrets-init`, `just vault-init` on the right machine; production secrets live in the platform's OpenBao, never in this repo |
 | Evaluation baselines | `evals/baselines/` (empty) | `just evals run …` against the real models, then `just evals baseline <run>` and commit with the reason |
-| Evidence recording in CI | `.github/workflows/*` | Add `just gates-record` steps per check and keep `release-evidence/` as an artefact (section 4) |
 
 ### GitHub settings (not in files; set them in the UI)
 

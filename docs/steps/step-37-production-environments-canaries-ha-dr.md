@@ -271,6 +271,7 @@ The justfile gets the recipes (in the "Production (Step 37)" section):
 
 ```bash
 just gates-record search-eval sha256:3f1c…9e0f pass "recall@8 0.96"     # CI records each check
+just gates-evidence sha256:3f1c…9e0f                                     # run + record all five offline checks (release.yml)
 just gates staging sha256:3f1c…9e0f                                       # may it go to staging?
 just gates prod sha256:3f1c…9e0f release-evidence http://alertmanager.staging:9093
 just promote staging sha256:3f1c…9e0f                                     # verify, gates, one-line PR
@@ -843,7 +844,7 @@ holds. `just compliance-docs` regenerated the threat model and controls pages (1
 | `infra/config/prometheus/rules/rag-answers.yml` | Answer-quality recording rules and six alerts. |
 | `infra/config/prometheus/tests/rag_answers_test.yml` | Five promtool unit tests for them. |
 | `ci/tools.yaml` (changed), `.github/workflows/ci.yml` (changed) | promtool 3.13.4 as a pinned, checksum-verified tool, installed in CI. |
-| `justfile` (changed) | `gates`, `gates-record`, `online-eval`, `dr-drill`, `vendor`; `promote` runs the gates (break glass); `alerts-test` with pinned promtool; `rag-config-check` with readiness; `k8s-check` and `k8s-scan` cover the new folders; `k8s-bootstrap` uses `common/projects.yaml`. |
+| `justfile` (changed) | `gates`, `gates-record`, `gates-evidence`, `online-eval`, `dr-drill`, `vendor`; `promote` runs the gates (break glass); `alerts-test` with pinned promtool; `rag-config-check` with readiness; `k8s-check` and `k8s-scan` cover the new folders; `k8s-bootstrap` uses `common/projects.yaml`. |
 | `.pre-commit-config.yaml`, `.gitleaks.toml`, `.trivyignore.yaml`, `.gitignore` (changed) | Allow the vendored operator manifests (size, an image name in a Secret), accept a Trivy false positive on agent templates, and stop ignoring `deploy/data/`. |
 
 **Tests**
@@ -868,6 +869,13 @@ holds. `just compliance-docs` regenerated the threat model and controls pages (1
 
 ## Notes for this repository
 
+- **Evidence is recorded by CI.** The chapter says CI writes the evidence files but shows no workflow change.
+  Here `release.yml` has a read-only `evidence` job after `publish`: on the image's commit it runs
+  `just gates-evidence <digest>` (an addition: it runs `image-verify`, `rag config readiness --profile
+  production`, `search-eval`, `guard-eval` and `answer-eval`, and records each result, pass or fail, with
+  `gates.py record`), then uploads `release-evidence/` as the `release-evidence` artefact. `online-eval` stays
+  a manual record from staging. `tests/test_gates.py` checks the wiring and runs the recipe with stand-in
+  `cosign`/`gh`; `release-evidence/` is git-ignored.
 - **Vendored manifests are the real upstream files.** `deploy/argo-rollouts/install/upstream/install.yaml`,
   `deploy/cnpg/install/upstream/cnpg.yaml` and `barman-cloud.yaml` were downloaded from the projects' GitHub
   releases; their SHA-256s match the ones the guide records. They are large, so the large-file hook excludes

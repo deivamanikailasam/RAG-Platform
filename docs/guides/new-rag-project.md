@@ -162,8 +162,8 @@ where those exist: in the project's container or the cluster.)
 
 ## Step 6 · Ship it
 
-1. **CI** on every PR runs `just check` (pin the workflow's action SHAs). Add the platform's evidence
-   recording (`gates-record`) for readiness and the three evaluations, as described in
+1. **CI** on every PR runs `just check` (pin the workflow's action SHAs). Copy the platform's evidence
+   job (`release.yml` → `evidence`, running `just gates-evidence <digest>` after each publish), as described in
    [production-promotion.md §4](production-promotion.md#4-build-ci-signed-and-attested-images).
 2. **Image:** build the `Dockerfile` (platform image by digest + your files), scan and sign it with the
    same release workflow pattern as the platform's [`release.yml`](../../.github/workflows/release.yml).
