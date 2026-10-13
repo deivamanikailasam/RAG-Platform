@@ -92,6 +92,9 @@ class IngestionPipeline:
         self.hash = pipeline_hash(dict(container.config))
         # lineage / audit hook: Step 25's OpenLineage emitter or Step 23's audit log plug in here
         self.on_event = on_event or (lambda e: None)
+        # Step 33: any change to the index starts a new cache epoch, so no cached answer outlives
+        # the documents it was based on (a Valkey cache does this for every replica at once)
+        self.cache = container.get("cache") if container.has("cache") else None
 
     def ingest(self, source: Source, force: bool = False) -> IngestResult:
         start = time.monotonic()
@@ -164,11 +167,15 @@ class IngestionPipeline:
         if self.manifest:
             self.manifest.delete(uri)
         result = IngestResult(uri, "deleted", n, seconds=time.monotonic() - start)
+        if self.cache is not None:
+            self.cache.invalidate()
         self.on_event({"event": "rag.ingest", "uri": uri, "status": "deleted", "chunks": n})
         return result
 
     def _done(self, source: Source, result: IngestResult, start: float) -> IngestResult:
         result = replace(result, seconds=round(time.monotonic() - start, 3))
+        if self.cache is not None and result.status == "indexed":
+            self.cache.invalidate()
         if self.manifest is not None and result.status in ("indexed", "failed", "skipped"):
             self.manifest.put(
                 ManifestEntry(
