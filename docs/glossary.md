@@ -8,6 +8,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | 0.0.0.0 / * | "Every interface": a port bound here is reachable by anyone who can reach your machine on the network. | 3 |
 | 401 vs 403 | 401 Unauthorized means "I don't know who you are" (no token, or a bad one); 403 Forbidden means "I know who you are, and the answer is no" (a valid token without the needed role). | 17 |
 | ABAC (attribute-based access control) | Access rules based on facts (attributes) about the person and the thing, such as classification, clearance or department, rather than just roles; what OPA evaluates here. | 18 |
+| Abstention | Saying "I don't know" when the sources don't contain the answer; a correct answer, not a failure. Here it happens without a model call when search finds nothing, and when the model says so or (with `uncited: abstain`) cites nothing. | 33 |
 | Access token | The short-lived (5-minute) token an app shows to an API on every call; it carries who you are, your groups and roles, and when it expires. | 16 |
 | Acknowledgement (XACK) | A worker's "done" signal for a stream message. Until it arrives, the message stays pending for that worker. | 15 |
 | ACL (access control list, Valkey) | Per-user rules for which keys (`~pattern`), pub/sub channels (`&pattern`) and commands (`+@category`, `-@category`) a user may use; `user default off` disables anonymous access. | 15 |
@@ -44,6 +45,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Audience (`aud`) | The claim saying who a token is meant for (here `rag-api`). An API must reject tokens meant for someone else. | 16 |
 | Audit device (OpenBao) | Where OpenBao records every request and response, one JSON line each, with secret values replaced by HMACs. Declared in server.hcl; if no audit device can write, OpenBao refuses to answer. | 28 |
 | Audit log | A permanent, minimal record of security-relevant actions (who, what, when, result), kept for years and protected from tampering. Not for debugging. | 23 |
+| Augmentation, grounding | Adding retrieved documents to the prompt so the model answers from them, not from its own memory; the "A" in RAG. | 33 |
 | Auth method | How a client proves who it is to OpenBao (AppRole, userpass, OIDC, Kubernetes…). Success gives a token with policies attached. | 28 |
 | Authentication vs authorisation | Who are you? (sign-in) versus what may you do? (permissions). Keycloak does the first and carries the facts (groups, roles) for the second. | 16 |
 | Authorisation policy | The written rules that say who may do which action and see which things; here `policies/rag/authz/authz.rego` plus its `data.json`. | 18 |
@@ -73,6 +75,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Budget / budget period | The maximum spend (here in shadow dollars) a key or team may reach before requests are refused, and how often it resets (e.g. `30d`). | 10 |
 | Burn rate | How fast an error budget is being used, relative to the allowed pace. 1× spends it exactly over the period; 14.4× spends a 28-day budget in about 2 days (page); 6× in about 5 days (ticket). | 20 |
 | Cache hit / miss | Hit: the answer was already stored and comes back in milliseconds. Miss: it had to be computed (the LLM ran) and is then stored. | 15 |
+| Cache invalidation, epoch | Making old cached answers unusable when documents change; here, by bumping a counter (the epoch) that is part of every cache key, after every ingest or delete. | 33 |
 | Cache key | The value a cache looks answers up by. It must include everything that changes the answer (prompt with retrieved context, model, parameters, user's permission scope, tenant), or answers leak between users. | 15 |
 | Cache poisoning | A wrong, stale or someone-else's answer stored in a cache and then served to other requests, e.g. because the cache key left out the permission scope. | 15 |
 | Cap (deny overrides) | A limit that beats any grant: a contractor in `executives` still only reaches `internal`, because caps in `capped_groups` always win over group clearances. | 18 |
@@ -85,6 +88,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Chunking strategy | The rule that decides where a document is cut into chunks: every N tokens, by paragraphs then sentences, along headings, by sentence, where the topic changes, or small children inside big parents. | 31 |
 | CI (continuous integration) | Automatically checking every change (lint, types, tests, scans) on a fresh machine, so problems are found before they're merged. | 27 |
 | Ciphertext | The scrambled, encrypted version of a value; unreadable without the right key. | 6 |
+| Citation, attribution | Saying which source each claim came from (`[doc n]`), so a person can check it; checked here against the documents the model was actually shown. | 33 |
 | Claim | One field in a token's payload, such as `iss`, `sub`, `groups` or `exp`. | 16 |
 | Clearance | The highest classification (public < internal < confidential < restricted) a person may read, taken from their groups; no known group means no clearance at all. | 18 |
 | CLI | Command-line interface: a program you control by typing commands. | 1 |
@@ -113,6 +117,8 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Container runtime | The software that downloads images and runs containers (OrbStack, Docker Desktop, Colima, Podman). | 3 |
 | Content addressing | Naming an object by a hash of its content (`sha256`), so identical files share a name and changes are detectable. | 14 |
 | Content hash | A fingerprint (here SHA-256) computed from every byte of a file; any edit, even one character or a line ending, changes it. | 24 |
+| Context compression | Keeping only the sentences of a chunk that matter for the question, so more sources fit in the budget. | 33 |
+| Context packing | Choosing which retrieved chunks fit the token budget and in what order, and numbering them as `<doc id="n">` blocks. | 33 |
 | Context propagation | Passing the trace id from one service to the next (in the `traceparent` HTTP header) so their spans join one trace. | 19 |
 | Context window | The maximum number of tokens (prompt + answer) a model can handle at once. | 7 |
 | Contextual retrieval | Having an LLM write one or two sentences placing each chunk in its document, and embedding them with the chunk (Anthropic, 2024); fewer failed retrievals for one LLM call per chunk. | 31 |
@@ -120,6 +126,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Control plane | The parts of Kubernetes that decide (API server, etcd, scheduler, controllers), as opposed to the nodes that run the containers. | 29 |
 | Controller / reconciliation | A loop that compares desired state with actual state and fixes the difference, forever; Kubernetes is made of them, and Argo CD is one too. | 29 |
 | Conventional Commits | A commit-message format `type(scope)!: description` (e.g. `feat(gateway): …`) readable by people and tools. | 4 |
+| Conversation memory | The earlier turns of a chat, kept per person and session (and forgotten after a TTL) so follow-up questions make sense. | 33 |
 | Cooldown | Temporarily skipping a backend that keeps failing (LiteLLM: 30 s after 3 failures in a minute), so requests stop piling onto it. | 10 |
 | CORS | Browser rules for which websites may call a server from inside a web page; too open (`*`) and any site you visit could call your local model. | 7 |
 | Cosine similarity | A score for how closely two vectors point the same way: near 1 = very similar meaning, near 0 = unrelated. For unit-length vectors it equals the dot product. | 8 |
@@ -184,6 +191,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | etcd | The key-value database where Kubernetes stores every object. | 29 |
 | Evaluation (eval) | Running a system on test cases and scoring the results. | 26 |
 | Eviction / maxmemory policy | What a memory-capped store deletes when it is full. `volatile-lru` removes the least-recently-used keys that have a TTL; `allkeys-lru` may remove any key, including queued jobs. | 15 |
+| Exact / semantic cache | Reusing a stored answer for the same question (same normalised words) or for one with nearly the same meaning (embedding similarity); only among people who can see exactly the same documents. | 33 |
 | Exemplar | A sample trace id attached to one metric data point, so a dot on a graph links straight to a real request's trace. | 21 |
 | EXPLAIN | Asks Postgres how it will run a query, e.g. whether it uses an index; `EXPLAIN ANALYZE` also runs it and shows real timings. | 11 |
 | Explain API | Adding `"explain": true` to a search so OpenSearch returns the arithmetic behind each score (tf, idf, length adjustment). | 13 |
@@ -218,6 +226,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Group (Keycloak) | A set of users who are "with" each other (department, team). It decides what you may SEE: its name goes into the token's `groups` claim and matches documents' `acl_groups`. | 16 |
 | Grouping (alerts) | Alertmanager combining related alerts (same `alertname` and `service` here) into one notification instead of one per time series. | 20 |
 | halfvec | A pgvector type that stores each number in 2 bytes instead of 4: half the storage, negligible quality loss for embeddings. | 11 |
+| Hallucination | A fluent, confident answer that isn't supported by the sources (or by reality). | 33 |
 | Hash | A short fingerprint calculated from a file's contents; change one byte and it changes completely. | 2 |
 | Hash chain | Records linked by including each previous record's hash in the next one's hash, so editing any record breaks every later link. | 23 |
 | Head (hash chain) | The newest hash of a chain; it summarises the entire chain up to that point. | 23 |
@@ -296,6 +305,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | LogQL | Loki's query language: pick streams by label (`{service_name="rag-api"}`), then filter lines (`|= "text"`) and parse them (`| json`). | 21 |
 | Log–trace correlation | Putting the trace and span id in every log line, so you can jump from a trace to the exact log lines of that request and back. | 19 |
 | Loki | Grafana's log store: indexes only a few labels per stream and keeps the text in compressed chunks that are scanned at query time, so it is cheap to run. | 21 |
+| Lost in the middle | Models notice the start and end of a long context more than the middle; the `lost-in-middle` order puts the best chunks at both ends. | 33 |
 | macOS Keychain | The Mac's built-in encrypted password store, unlocked by your login; home for personal tokens. | 6 |
 | maintenance_work_mem | Postgres memory for maintenance work such as building indexes; HNSW builds are much faster when the graph fits in it. | 11 |
 | Manifest (audit archive) | A small file describing one archived batch of audit events: first and last row, head hash, previous head and the segment's checksum. | 23 |
@@ -513,6 +523,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Semantic conventions | Agreed attribute names (`http.request.method`, `gen_ai.request.model`) so every tool understands the data. | 19 |
 | Semantic Versioning | MAJOR.MINOR.PATCH version numbers: breaking change → major, `feat` → minor, `fix` → patch. | 4 |
 | Sentence window | A chunking strategy that searches single sentences (precise) and gives the model the sentences around the match (context). | 31 |
+| Server-sent events (SSE) | A simple web standard for a server to push a stream of `event:` / `data:` messages over one HTTP response; how `/v1/answer` streams its meta, delta and done events. | 33 |
 | Service (Kubernetes) | A stable name and address for a set of pods, found by labels and a selector; an ExternalName Service is just a DNS alias. | 29 |
 | Service account | A non-human identity tied to a confidential client, used with client credentials (e.g. `service-account-ingestion-worker`). | 16 |
 | Service graph | Who-calls-whom metrics (`traces_service_graph_request_total{client, server}`) that Tempo computes from client/server spans; Grafana draws them as boxes and arrows. | 21 |
@@ -586,6 +597,7 @@ The number in brackets is the step where the term first appears; see [`docs/step
 | Time series | One metric with one exact set of labels, sampled over time, e.g. `rag_search_requests_total{outcome="ok"}`. | 20 |
 | Token | The unit a model reads and writes: roughly ¾ of an English word. | 7 |
 | Token (OpenBao) | What a successful OpenBao login returns: a credential with policies and a TTL, sent as `X-Vault-Token` on every request. Not the same as a model's token. | 28 |
+| Token budget | The share of the model's context window given to retrieved documents (3000 tokens by default), leaving room for the instructions, the question and the answer. | 33 |
 | Token filter | An analyzer step that changes the token stream: lowercase, synonyms, stemming. | 13 |
 | Token introspection (RFC 7662) | Asking the identity provider "is this token still valid?" on every request: instant revocation, at the cost of a network call each time. | 17 |
 | Token revocation | Cancelling a token before it expires. With local validation it only takes full effect when the (5-minute) access token expires. | 17 |
