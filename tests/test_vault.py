@@ -221,6 +221,11 @@ def configured(env: Env) -> Env:
         # Step 32: the PII pseudonymisation key (the agent refuses to render anything without it)
         "pii_hmac_key": "pii-key-from-bao",
     })  # fmt: skip
+    # Step 37: the ingestion worker's own secrets (its own gateway key, queue and object-store keys)
+    vs.put_secret(env.bao(), "rag-ingest", {
+        "gateway_key": "gw-key-for-ingest", "valkey_url": "redis://rag_ingest:pw@valkey:6379/0",
+        "s3_access_key": "AK-ingest", "s3_secret_key": "SK-ingest", "pii_hmac_key": "pii-key-from-bao",
+    })  # fmt: skip
     return env
 
 
@@ -544,7 +549,12 @@ def cluster(tmp_path_factory: pytest.TempPathFactory) -> Iterator[ApiServer]:
         )
     server = ApiServer(tmp_path_factory.mktemp("kube")).start()
     try:
-        for ns, sa in (("rag", "rag-api"), ("rag", "other"), ("sandbox", "rag-api")):
+        for ns, sa in (
+            ("rag", "rag-api"),
+            ("rag", "rag-ingest"),
+            ("rag", "other"),
+            ("sandbox", "rag-api"),
+        ):
             server.kubectl("create", "namespace", ns, check=False)
             server.kubectl("create", "serviceaccount", sa, "-n", ns)
         yield server
@@ -573,14 +583,14 @@ def k8s_trusted(configured: Env, cluster: ApiServer) -> Env:
     assert done == [
         "jwt auth at kubernetes-jwt/",
         f"trusts 1 cluster signing key(s), issuer {issuer}",
-        "1 kubernetes role(s)",
+        "2 kubernetes role(s)",  # rag-api and, since Step 37, rag-ingest
     ]
     return configured
 
 
-def jwt_login(env: Env, token: str) -> httpx.Response:
+def jwt_login(env: Env, token: str, role: str = "rag-api") -> httpx.Response:
     with env.http() as c:
-        return c.post(f"auth/{vs.K8S_MOUNT}/login", json={"role": "rag-api", "jwt": token})
+        return c.post(f"auth/{vs.K8S_MOUNT}/login", json={"role": role, "jwt": token})
 
 
 def test_a_pod_logs_in_with_its_service_account(k8s_trusted: Env, cluster: ApiServer) -> None:
@@ -674,3 +684,39 @@ def test_pod_agent_logs_in_with_the_projected_token(k8s_trusted: Env, cluster: A
     finally:
         agent.terminate()
         agent.wait(10)
+
+
+def test_the_ingestion_worker_has_its_own_identity(k8s_trusted: Env, cluster: ApiServer) -> None:
+    """Step 37: the worker logs in as rag-ingest and gets its own leases and secrets, none of
+    rag-api's; and neither service account can log in as the other."""
+    r = jwt_login(k8s_trusted, k8s_token(cluster, account="rag-ingest"), role="rag-ingest")
+    assert r.status_code == 200, r.text
+    auth = r.json()["auth"]
+    assert auth["policies"] == ["default", "rag-ingest"]
+    bao = k8s_trusted.bao(auth["client_token"])
+    lease = creds(k8s_trusted, "rag-ingest", auth["client_token"])
+    assert "-rag-inge-" in lease["data"]["username"]  # its own (truncated) name in pg_stat_activity
+    with k8s_trusted.pg(lease["data"]["username"], lease["data"]["password"], "rag") as conn:
+        assert conn.execute("SHOW statement_timeout").fetchone() == ("5min",)
+    assert (
+        bao.call("GET", "secret/data/rag-ingest")["data"]["data"]["gateway_key"]
+        == "gw-key-for-ingest"
+    )
+    reader = creds(k8s_trusted, "audit-reader", auth["client_token"])["data"]
+    with k8s_trusted.pg(reader["username"], reader["password"], "audit") as conn:
+        conn.execute(
+            "SELECT count(*) FROM audit.events"
+        )  # online evaluation reads the log, never writes
+        with pytest.raises(
+            (psycopg.errors.ReadOnlySqlTransaction, psycopg.errors.InsufficientPrivilege)
+        ):
+            conn.execute("SELECT audit.append('u', 'c', 'search', 'allowed', 'documents')")
+    for path in ("database/creds/rag-api", "database/creds/audit-writer", "secret/data/rag-api"):
+        with pytest.raises(vs.BaoError, match="403"):
+            bao.call("GET", path)
+    # rag-api's token can't use rag-ingest's role, and the other way round
+    assert jwt_login(k8s_trusted, k8s_token(cluster), role="rag-ingest").status_code in (400, 403)
+    assert jwt_login(k8s_trusted, k8s_token(cluster, account="rag-ingest")).status_code in (
+        400,
+        403,
+    )

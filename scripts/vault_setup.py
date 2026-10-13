@@ -7,6 +7,7 @@
     just vault-creds rag-readonly               short-lived database login for a person or a job
     just vault-unseal                           after every OpenBao restart (keys from the SOPS file)
     just vault-k8s-trust                        let rag-api pods log in with their service account (Step 29)
+                                                and the ingestion worker with its own (rag-ingest, Step 37)
 
 Talks to the HTTP API directly (BAO_ADDR, BAO_TOKEN), so every call is visible and testable.
 """
@@ -84,8 +85,8 @@ class AppRole:
 
 
 CONNECTIONS = (
-    DbConnection("rag-db", "rag", "vault_admin_rag", ("rag-api", "rag-readonly")),
-    DbConnection("audit-db", "audit", "vault_admin_audit", ("audit-writer",)),
+    DbConnection("rag-db", "rag", "vault_admin_rag", ("rag-api", "rag-readonly", "rag-ingest")),
+    DbConnection("audit-db", "audit", "vault_admin_audit", ("audit-writer", "audit-reader")),
 )
 ROLES = (
     DbRole("rag-api", "rag-db", "rag_app", "1h", "24h",
@@ -95,6 +96,14 @@ ROLES = (
             "SET default_transaction_read_only = on")),
     DbRole("audit-writer", "audit-db", "audit_writer", "1h", "24h",
            ("SET search_path = audit", "SET statement_timeout = '5s'")),
+    # Step 37: the ingestion worker's own leases (same privileges as rag-api today; its own name in
+    # pg_stat_activity and the audit trail, and revocable on its own), and read-only audit access
+    # for online evaluation
+    DbRole("rag-ingest", "rag-db", "rag_app", "1h", "24h",
+           ("SET search_path = rag, public", "SET statement_timeout = '300s'")),
+    DbRole("audit-reader", "audit-db", "audit_reader", "1h", "4h",
+           ("SET search_path = audit", "SET statement_timeout = '60s'",
+            "SET default_transaction_read_only = on")),
 )  # fmt: skip
 APPROLES = (
     AppRole("rag-api", ("rag-api",)),
@@ -111,7 +120,10 @@ class K8sRole:
 
 
 # Step 29: pods in Kubernetes log in with their own service account token (no secret ID)
-K8S_ROLES = (K8sRole("rag-api", "rag", "rag-api", ("rag-api",)),)
+K8S_ROLES = (
+    K8sRole("rag-api", "rag", "rag-api", ("rag-api",)),
+    K8sRole("rag-ingest", "rag", "rag-ingest", ("rag-ingest",)),  # Step 37: its own identity
+)
 K8S_MOUNT = "kubernetes-jwt"
 K8S_AUDIENCE = "openbao"
 

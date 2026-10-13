@@ -17,6 +17,8 @@ CREATE ROLE vault_admin_rag   LOGIN CREATEROLE PASSWORD :'admin_pw';
 CREATE ROLE vault_admin_audit LOGIN CREATEROLE PASSWORD :'admin_pw';
 GRANT rag_app, rag_readonly TO vault_admin_rag   WITH ADMIN OPTION;
 GRANT audit_writer          TO vault_admin_audit WITH ADMIN OPTION;
+-- Step 37: online evaluation reads the audit log with short-lived audit_reader leases
+GRANT audit_reader          TO vault_admin_audit WITH ADMIN OPTION;
 -- revoking a lease ends that user's open sessions first (pg_terminate_backend)
 GRANT pg_signal_backend TO vault_admin_rag, vault_admin_audit;
 GRANT CONNECT ON DATABASE rag   TO vault_admin_rag;

@@ -109,7 +109,7 @@ def test_agent_sidecar_matches_openbao_role() -> None:
     source = token["projected"]["sources"][0]["serviceAccountToken"]
     assert source["audience"] == vs.K8S_AUDIENCE
     assert source["expirationSeconds"] <= 3600
-    (role,) = vs.K8S_ROLES
+    role = next(r for r in vs.K8S_ROLES if r.name == "rag-api")  # Step 37 added rag-ingest
     sa = next(d for d in docs if d["kind"] == "ServiceAccount")
     assert (sa["metadata"]["name"], sa["metadata"]["namespace"]) == (
         role.service_account,
