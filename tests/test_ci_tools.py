@@ -108,6 +108,9 @@ def test_manifest_is_complete_and_strict() -> None:
         "syft",
         "cosign",
         "bao",  # Step 28: OpenBao server, CLI and agent
+        "kubectl",  # Step 29: the envtest bundle, for the Kubernetes tests and the manifest scan
+        "kube-apiserver",
+        "etcd",
     }
     for name, t in tools.items():
         for plat in ("linux-amd64", "darwin-arm64"):

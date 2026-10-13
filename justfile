@@ -379,7 +379,7 @@ ci-config:
     just alerts-test
     just vault-check
 
-# Secrets, workflows, dependencies, licences, Dockerfile
+# Secrets, workflows, dependencies, licences, Dockerfile, Kubernetes manifests
 ci-supply-chain:
     gitleaks git --no-banner --redact .
     actionlint
@@ -388,6 +388,7 @@ ci-supply-chain:
     uvx pip-audit==2.10.1 --disable-pip --requirement .tools/requirements.txt --progress-spinner off
     uv run python scripts/licences.py
     trivy config --exit-code 1 --severity HIGH,CRITICAL services/rag-api/Dockerfile
+    just k8s-scan                                                   # Step 29: the Kubernetes manifests
 
 # Licence of every installed dependency against ci/licence-policy.yaml (-v lists them all)
 [positional-arguments]
@@ -499,3 +500,108 @@ vault-cutover:
 
 vault-cutover-undo:
     sed 's/NOLOGIN/LOGIN/' infra/config/rag-db/vault-cutover.sql | {{compose}} exec -T rag-db psql -v ON_ERROR_STOP=1 -U postgres -d postgres
+
+# ---- Kubernetes and GitOps (Step 29) ----
+kube := "kubectl --context orbstack"
+repo_ssh := "git@github.com:owner/rag-platform.git"
+
+# Start OrbStack's single-node cluster and show it's there
+k8s-up:
+    orb start k8s
+    {{kube}} get nodes -o wide
+
+# What a kustomization renders (exactly what Argo CD would apply)
+k8s-render path="envs/local":
+    kubectl kustomize deploy/{{path}}
+
+# Render everything and test it against a real API server (part of CI)
+k8s-check:
+    for p in cluster base/rag-api envs/local argocd/install argocd/apps; do kubectl kustomize deploy/$p > /dev/null && echo "renders: $p"; done
+    uv run pytest -q tests/test_k8s.py tests/test_promote.py tests/test_k8s_secrets.py
+
+# What would change in the cluster if this were applied now (read-only)
+k8s-diff path="envs/local":
+    kubectl kustomize deploy/{{path}} | {{kube}} diff --server-side -f - || true
+
+# Once per cluster: Argo CD, its repository key, then the root app. From here on, git drives.
+k8s-bootstrap:
+    kubectl kustomize deploy/argocd/install | {{kube}} apply --server-side --field-manager=argocd-controller -f -
+    {{kube}} -n argocd rollout status deploy/argocd-server --timeout=5m
+    just k8s-repo-secret
+    {{kube}} apply --server-side --field-manager=argocd-controller -f deploy/argocd/apps/projects.yaml
+    {{kube}} apply --server-side --field-manager=argocd-controller -f deploy/argocd/root.yaml
+    @echo "Argo CD is syncing. Watch: just k8s-status        UI: just argocd-ui"
+
+k8s-repo-secret:
+    sops exec-env secrets/dev.enc.env 'uv run python scripts/k8s_secrets.py repo-secret {{repo_ssh}}' | {{kube}} apply -f -
+
+k8s-pull-secret:
+    sops exec-env secrets/dev.enc.env 'uv run python scripts/k8s_secrets.py pull-secret' | {{kube}} apply -f -
+
+k8s-status:
+    {{kube}} -n argocd get applications -o custom-columns=APP:.metadata.name,SYNC:.status.sync.status,HEALTH:.status.health.status,REVISION:.status.sync.revision
+    {{kube}} -n rag get deploy,pods -o wide
+
+# The Argo CD web UI on https://localhost:8443 (user admin; the first password is copied to your clipboard)
+argocd-ui:
+    {{kube}} -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d | pbcopy
+    @echo "password copied; change it in the UI, then: {{kube}} -n argocd delete secret argocd-initial-admin-secret"
+    {{kube}} -n argocd port-forward svc/argocd-server 8443:443
+
+# Let rag-api pods log in to OpenBao with their service account (after every cluster reset)
+vault-k8s-trust:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mkdir -p -m 700 .bao
+    {{kube}} get --raw /openid/v1/jwks > .bao/k8s-jwks.json
+    issuer="$({{kube}} get --raw /.well-known/openid-configuration | jq -r .issuer)"
+    uv run python scripts/vault_setup.py k8s-trust --jwks .bao/k8s-jwks.json --issuer "$issuer"
+
+# Can pods reach the services in Compose? (DNS alias -> your Mac -> published port)
+k8s-deps-check:
+    {{kube}} -n default run deps-check --rm -i --restart=Never --image=busybox:1.37 -- sh -c \
+      'for hp in rag-db:5432 litellm:4000 opa:8181 openbao:8200 keycloak:8180 otel-collector:4317; do \
+         h=${hp%:*}; p=${hp#*:}; if nc -z -w 3 $h.rag.svc.cluster.local $p; then echo "ok   $hp"; else echo "FAIL $hp"; fi; done'
+
+# Does the cluster ENFORCE NetworkPolicy? A pod that is denied all egress tries to resolve a name.
+k8s-netpol-check:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    {{kube}} create namespace netpol-check >/dev/null
+    trap '{{kube}} delete namespace netpol-check --wait=false >/dev/null' EXIT
+    printf 'apiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata: {name: deny-all, namespace: netpol-check}\nspec: {podSelector: {}, policyTypes: [Egress]}\n' | {{kube}} apply -f - >/dev/null
+    if {{kube}} -n netpol-check run probe --rm -i --restart=Never --image=busybox:1.37 -- nslookup -timeout=3 kubernetes.default >/dev/null 2>&1; then
+      echo "NOT ENFORCED: NetworkPolicies are stored but ignored by this cluster's network plugin"
+    else
+      echo "enforced: the denied pod could not even resolve a name"
+    fi
+
+# Promote a released image: verify it, change one line, open a pull request. Merging deploys it.
+promote env digest:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just image-verify {{digest}}
+    git switch -c "promote/{{env}}-$(echo {{digest}} | cut -c8-19)"
+    out="$(uv run python scripts/promote.py {{env}} {{digest}})"
+    echo "$out"
+    git commit -am "deploy({{env}}): rag-api {{digest}}" -m "$out" -m "Signature and provenance verified (just image-verify). Roll back: git revert this commit."
+    git push -u origin HEAD
+    gh pr create --fill
+
+# Upgrade Argo CD: fetch the release manifest, record its hash, review the diff in the pull request
+argocd-vendor version:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    curl -sSLf -o deploy/argocd/install/upstream/install.yaml \
+      "https://raw.githubusercontent.com/argoproj/argo-cd/{{version}}/manifests/install.yaml"
+    sha="$(shasum -a 256 deploy/argocd/install/upstream/install.yaml | cut -d' ' -f1)"
+    sed -i.bak -E "s|# v[0-9.]+, sha256 [0-9a-f]{64}|# {{version}}, sha256 $sha|" deploy/argocd/install/kustomization.yaml && rm deploy/argocd/install/kustomization.yaml.bak
+    echo "{{version}}: sha256 $sha. Update the image digests in deploy/argocd/install/kustomization.yaml too."
+
+# Kubernetes misconfiguration scan of what Argo CD would apply (part of ci-supply-chain)
+k8s-scan:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    out="$(mktemp -d)"; trap 'rm -rf "$out"' EXIT
+    for p in cluster envs/local; do kubectl kustomize "deploy/$p" > "$out/$(echo $p | tr / -).yaml"; done
+    trivy config --exit-code 1 --severity HIGH,CRITICAL,MEDIUM --ignorefile .trivyignore.yaml "$out"

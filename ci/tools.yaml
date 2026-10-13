@@ -80,3 +80,30 @@ tools:
     darwin-arm64:
       url: https://github.com/openbao/openbao/releases/download/v2.7.1/openbao_2.7.1_darwin_arm64.tar.gz
       sha256: 15625b5f69aee5bb4578b4e76e856a2141647342b0f8e5969a8875b44e0fbf91
+  kubectl:  # Step 29: from the kubernetes-sigs "envtest" bundle (Kubernetes 1.36.2, etcd 3.6.8)
+    version: 1.36.2
+    member: controller-tools/envtest/kubectl
+    linux-amd64:
+      url: https://github.com/kubernetes-sigs/controller-tools/releases/download/envtest-v1.36.2/envtest-v1.36.2-linux-amd64.tar.gz
+      sha256: 5e99f4eef3d6f9d4dd063730299f708c98da8801f2f14d8fc762cb354f30c332
+    darwin-arm64:
+      url: https://github.com/kubernetes-sigs/controller-tools/releases/download/envtest-v1.36.2/envtest-v1.36.2-darwin-arm64.tar.gz
+      sha256: f344e7c70961b100471eeea4d2555006f282a6a27bece7f42fbede77b29b886e
+  kube-apiserver:  # Step 29: same envtest bundle as kubectl (the archive holds all three)
+    version: 1.36.2
+    member: controller-tools/envtest/kube-apiserver
+    linux-amd64:
+      url: https://github.com/kubernetes-sigs/controller-tools/releases/download/envtest-v1.36.2/envtest-v1.36.2-linux-amd64.tar.gz
+      sha256: 5e99f4eef3d6f9d4dd063730299f708c98da8801f2f14d8fc762cb354f30c332
+    darwin-arm64:
+      url: https://github.com/kubernetes-sigs/controller-tools/releases/download/envtest-v1.36.2/envtest-v1.36.2-darwin-arm64.tar.gz
+      sha256: f344e7c70961b100471eeea4d2555006f282a6a27bece7f42fbede77b29b886e
+  etcd:  # Step 29: same envtest bundle as kubectl (the archive holds all three)
+    version: 1.36.2
+    member: controller-tools/envtest/etcd
+    linux-amd64:
+      url: https://github.com/kubernetes-sigs/controller-tools/releases/download/envtest-v1.36.2/envtest-v1.36.2-linux-amd64.tar.gz
+      sha256: 5e99f4eef3d6f9d4dd063730299f708c98da8801f2f14d8fc762cb354f30c332
+    darwin-arm64:
+      url: https://github.com/kubernetes-sigs/controller-tools/releases/download/envtest-v1.36.2/envtest-v1.36.2-darwin-arm64.tar.gz
+      sha256: f344e7c70961b100471eeea4d2555006f282a6a27bece7f42fbede77b29b886e

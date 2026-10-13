@@ -45,7 +45,7 @@ jobs:
       - name: Install just and the pinned tools (checksums verified)
         run: |
           uv tool install rust-just==1.58.0
-          uv run --frozen python scripts/ci_tools.py opa regal dbmate bao
+          uv run --frozen python scripts/ci_tools.py opa regal dbmate bao kubectl kube-apiserver etcd
           echo "$PWD/.tools/bin" >> "$GITHUB_PATH"
       - run: sudo apt-get install -y --no-install-recommends postgresql-client  # psql for the audit bootstrap test
       - run: just ci-static
@@ -69,7 +69,7 @@ jobs:
       - name: Install just and the pinned tools (checksums verified)
         run: |
           uv tool install rust-just==1.58.0
-          uv run --frozen python scripts/ci_tools.py gitleaks actionlint trivy
+          uv run --frozen python scripts/ci_tools.py gitleaks actionlint trivy kubectl
           echo "$PWD/.tools/bin" >> "$GITHUB_PATH"
       - run: uv sync --locked --all-packages
       - run: just ci-supply-chain
