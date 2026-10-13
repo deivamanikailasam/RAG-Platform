@@ -499,6 +499,7 @@ services:
       opa:      { condition: service_started }        # Step 18: no healthcheck in the static image
       otel-collector: { condition: service_started }  # Step 19: no shell, so no healthcheck
       rag-api-agent:  { condition: service_healthy }  # Step 28: its credentials files exist
+      valkey:   { condition: service_healthy }        # Step 33: conversation memory and the answer cache
     logging: *to-collector                                    # Step 21: output to the Collector -> Loki
     restart: unless-stopped
     deploy:
