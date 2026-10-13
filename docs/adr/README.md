@@ -30,5 +30,6 @@
 | [0026](0026-evaluate-retrieval-and-prompts-offline-with-versioned-datasets-and-gates.md) | Evaluate retrieval and prompts offline with versioned datasets and gates | Accepted |
 | [0027](0027-run-ci-with-pinned-tools-and-publish-signed-attested-images.md) | Run CI with pinned tools and publish signed, attested images | Accepted |
 | [0028](0028-issue-database-credentials-dynamically-from-openbao.md) | Issue database credentials dynamically from OpenBao | Accepted |
+| [0029](0029-run-rag-api-on-kubernetes-deployed-by-argo-cd-from-git.md) | Run rag-api on Kubernetes, deployed by Argo CD from git | Accepted |
 
 New ADR: `just adr "Short title"`, then fill it in and add a row here.
