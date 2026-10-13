@@ -389,6 +389,8 @@ ci-config:
 rag-config-check:
     for p in offline local local-engines production; do uv run rag config validate --profile $p; done
     uv run rag config readiness --profile production
+    # the decision guide's starter configs (examples/profiles/recipes.yaml) must validate too
+    for p in $(uv run python -c "import yaml; print(' '.join(yaml.safe_load(open('examples/profiles/recipes.yaml'))['profiles']))"); do uv run rag config validate --file examples/profiles/recipes.yaml --profile $p; done
 
 # Search quality gate (Step 32): the shipped search settings must keep finding the handbook answers,
 # and must never return a forbidden document. Offline: no models or stores needed.

@@ -1,0 +1,231 @@
+# Starter configs: one profile per common situation, from the decision guide
+# (docs/concepts/decision-guide.md#starter-configs). Each extends the platform's tested profiles and
+# changes only what the situation needs, so copy the one closest to yours into your project's rag.yaml.
+#
+#   uv run rag config validate --file examples/profiles/recipes.yaml --profile faq-bot
+#   uv run rag config show     --file examples/profiles/recipes.yaml --profile legal-contracts
+#
+# CI validates every profile here (`just rag-config-check`, tests/test_example_profiles.py). Validation
+# checks names and settings only; measure each one on your own questions before you trust it:
+#   uv run rag eval-search  <your questions.yaml> --file … --profile <name>
+#   uv run rag eval-answers <your questions.yaml> --file … --profile <name>
+version: 1
+include: {platform: "rag-core:platform.yaml"}
+profiles:
+
+  # ---- 1 · A small FAQ bot: short questions, short answers, the same questions again and again ----
+  faq-bot:
+    extends: platform/local
+    chunker: {use: sentence-window, window: 2}            # one sentence matched, its neighbours shown
+    enrichers: [context-header]
+    query_transformer: {use: chain, steps: [normalize, with-history]}   # typos fixed, follow-ups free
+    retriever: {use: hybrid, candidates: 20}
+    reranker: {use: gateway, model: reranker, base_url: "http://litellm:4000", top_n: 20,
+               api_key_file: /run/bao/rag_api_gateway_key}
+    postprocessors:
+      - window-expand
+      - {use: dedupe, threshold: 0.85}
+      - {use: min-score, stage: rerank, threshold: 0.05, min_keep: 1}
+    context_builder: {use: numbered, max_tokens: 1500, order: relevance}
+    cache: {use: valkey, url_file: /run/bao/valkey_url, ttl_seconds: 86400}   # exact repeats: free answers
+    answer_formatters: [follow-ups]
+
+  # ---- 2 · Enterprise policy search with permissions ----
+  # Permissions are always on: every store filters by tenant, classification and groups inside the
+  # query. What this adds: access rules per folder, filters people can type, freshness, footnotes.
+  policy-search:
+    extends: platform/production
+    chunker: {use: structure, max_tokens: 400, overlap_tokens: 40, min_tokens: 60}
+    enrichers: [context-header, {use: metadata, keywords: 5}]
+    query_transformer:
+      use: self-query
+      mode: rules
+      date_field: updated
+      fields:
+        department: {values: {hr: [human resources, people team], it: [tech support], finance: []}}
+        doc_type: {values: {policy: [policies], guide: [guides, how to], form: [forms]}}
+        updated: {type: date, aliases: [updated, changed, modified]}
+    postprocessors:
+      - {use: dedupe, threshold: 0.85}
+      - {use: min-score, stage: rerank, threshold: 0.05, min_keep: 1}
+      - {use: recency, weight: 0.3, half_life_days: 365, when: asked}   # only for "latest / current"
+      - {use: max-per-document, n: 3}
+    search_cache: {use: valkey, url_file: /run/bao/valkey_url, ttl_seconds: 600}
+    answer_formatters: [confidence, {use: citations, style: footnotes}]
+    connector:
+      use: s3
+      bucket: rag-raw-docs
+      prefix: policies/
+      access: {classification: internal, groups: [all-staff]}
+      rules:
+        - {prefix: policies/hr/, classification: confidential, groups: [hr]}
+
+  # ---- 3 · Legal and contracts: exact clauses, whole sections, nothing unsupported ----
+  legal-contracts:
+    extends: platform/production
+    chunker: {use: hierarchical, leaf_tokens: 200, max_node_tokens: 2000}
+    enrichers:
+      - context-header
+      - use: llm-metadata
+        fields:
+          doc_type: {type: keyword, values: [contract, amendment, policy, letter], required: true}
+          counterparty: {type: keyword, description: "the other party to the agreement"}
+          effective: {type: date, description: "the date the agreement takes effect"}
+    retriever: {use: section, inner: {use: hybrid, candidates: 40}}   # "clause 7.3" goes straight there
+    postprocessors:
+      - {use: auto-merge, threshold: 0.5}
+      - {use: section-expand, max_tokens: 1500}
+      - {use: min-score, stage: rerank, threshold: 0.05, min_keep: 1}
+    context_builder: {use: numbered, max_tokens: 6000, order: document}   # clauses in their own order
+    pipeline: {use: corrective, search_k: 8, uncited: abstain, stream: checked}
+    guards:
+      - {use: size, max_chars: 4000}
+      - {use: injection, threshold: 0.6}
+      - {use: pii, stage: input}
+      - {use: context-injection}
+      - {use: groundedness, on_hit: block}      # an unsupported sentence stops the answer
+      - {use: pii, stage: output}
+      - {use: secrets}
+    answer_formatters: [{use: citations, style: footnotes, quotes: true}]
+    cache: none                                   # every answer read fresh from the documents
+
+  # ---- 4a · Technical documentation: product names, error codes, acronyms ----
+  tech-docs:
+    extends: platform/local-engines             # OpenSearch analysers for codes; Qdrant for vectors
+    chunker: {use: structure, max_tokens: 500, overlap_tokens: 50, min_tokens: 40}
+    query_transformer:
+      use: chain
+      steps: [normalize, {use: expand-terms, terms: {MFA: multi-factor authentication, SSO: single sign-on}}, with-history]
+    fusion: {use: weighted, weights: {dense: 1, sparse: 2}}   # exact terms count double
+    postprocessors:
+      - {use: dedupe, threshold: 0.85}
+      - {use: max-per-document, n: 3}
+
+  # ---- 4b · Source code: functions and classes, with line numbers ----
+  code-search:
+    extends: tech-docs
+    chunker: {use: code, max_tokens: 400, overlap_tokens: 40}
+    enrichers: [context-header]
+    fusion: {use: weighted, weights: {dense: 1, sparse: 2}}
+    answer_formatters: [{use: citations, style: numeric, quotes: true}]
+
+  # ---- 5 · A multilingual corpus, questions in any language ----
+  multilingual:
+    extends: platform/local
+    # a multilingual model (multilingual-e5, bge-m3, Qwen3-Embedding) behind a new gateway alias, in a
+    # NEW collection (a new embedding contract: `rag reindex --to multilingual`)
+    embedder:
+      use: cached
+      inner:
+        use: instructed
+        preset: e5
+        inner: {use: gateway, model: embedder-multilingual, dimensions: 1024, base_url: "http://litellm:4000/v1",
+                api_key_file: /run/bao/rag_api_gateway_key, query_instruction: "{query}"}
+    vector_store: {use: pgvector, dsn_env: null, credentials_file: /run/bao/rag_db.json, collection: multilingual}
+    keyword_index: {use: postgres-fts, dsn_env: null, credentials_file: /run/bao/rag_db.json, collection: multilingual,
+                    text_search_config: simple}   # no English stemming for other languages
+    manifest: {use: postgres, dsn_env: null, credentials_file: /run/bao/rag_db.json, collection: multilingual}
+    enrichers: [context-header, {use: metadata, extract: [language, dates, doc_type]}]
+    query_transformer: {use: chain, steps: [{use: translate, target: en, mode: llm}, {use: rewrite, llm_slot: llm}]}
+
+  # ---- 6 · Tables and numbers: limits, rates, totals ----
+  tables-and-numbers:
+    extends: platform/local
+    parsers: [markdown, html, pdf, docx, csv, text]
+    pipeline:
+      use: sql                     # totals and comparisons; `table` for plain row lookups (no model)
+      search_k: 8
+      uncited: abstain
+      tables:
+        expense_limits: {path: examples/tables/expense_limits.csv, groups: [all-staff]}
+        salary_bands: {path: examples/tables/salary_bands.csv, groups: [hr]}
+    guards:
+      - {use: size, max_chars: 2000}
+      - {use: injection, threshold: 0.6}
+      - {use: context-injection}
+      - {use: groundedness, on_hit: flag}       # checks exact numbers against the sources
+      - {use: secrets}
+
+  # ---- 7 · A very large corpus (millions of chunks) ----
+  large-corpus:
+    extends: platform/local-engines
+    embedder:
+      use: cached
+      store: valkey
+      url_file: /run/bao/valkey_url
+      inner:
+        use: batched
+        batch_size: 64
+        requests_per_second: 5
+        inner: {use: gateway, model: embedder, dimensions: 1024, base_url: "http://litellm:4000/v1",
+                api_key_file: /run/bao/rag_api_gateway_key, query_prompt: query-instruction, prompts_dir: /app/prompts}
+    vector_store: {use: qdrant, url: "http://qdrant:6333", collection: rag_chunks, dimensions: 1024,
+                   hnsw_m: 32, ef_construction: 200, ef_search: 128,
+                   quantization: scalar, oversampling: 2.0,                  # ~4x less memory, rescored
+                   metadata_indexes: {department: keyword, updated: datetime}}
+    queue: {use: valkey-streams, url_file: /run/bao/valkey_url}           # run many `rag worker`s
+    search_cache: {use: valkey, url_file: /run/bao/valkey_url, ttl_seconds: 600}
+    postprocessors:
+      - {use: dedupe, threshold: 0.85}
+      - {use: max-per-document, n: 2}
+
+  # ---- 8 · Low-latency chat: answers start fast ----
+  low-latency-chat:
+    extends: platform/local
+    query_transformer: {use: with-history, turns: 2}   # no model call before searching
+    retriever: {use: hybrid, candidates: 20}
+    reranker: {use: gateway, model: reranker, base_url: "http://litellm:4000", top_n: 10,
+               api_key_file: /run/bao/rag_api_gateway_key}
+    postprocessors:
+      - {use: dedupe, threshold: 0.85}
+      - {use: max-per-document, n: 2}
+    search_cache: {use: valkey, url_file: /run/bao/valkey_url, ttl_seconds: 600}
+    context_builder: {use: numbered, max_tokens: 1500, order: relevance}
+    generator: {use: llm, llm_slot: llm, prompt: rag-answer, prompts_dir: /app/prompts, prompt_label: production}  # the fast model
+    pipeline: {use: standard, search_k: 5, uncited: flag, stream: live}
+
+  # ---- 9 · Offline / air-gapped: nothing leaves the building ----
+  # The platform is local-first: models run on your own hardware behind the gateway (Steps 7-9), the
+  # stores are self-hosted. This profile makes the remaining choices explicit: a local folder as the
+  # source, a local model as the safety judge, no webhook to an outside service, PII removed.
+  air-gapped:
+    extends: platform/production
+    connector: {use: filesystem, root: /data/documents, patterns: ["**/*"], access: {classification: internal, groups: [all-staff]}}
+    pii: {use: regex, strategy: remove}
+    guards:
+      - {use: size, max_chars: 2000}
+      - {use: injection, threshold: 0.6}
+      - {use: llm-judge, stage: input}          # judge_llm: a local model through the local gateway
+      - {use: pii, stage: input}
+      - {use: topics}
+      - {use: context-injection}
+      - {use: groundedness, on_hit: flag}
+      - {use: pii, stage: output}
+      - {use: secrets}
+      - {use: toxicity}
+
+  # ---- 10 · Highest-accuracy research assistant: cost and latency matter less than being right ----
+  research-assistant:
+    extends: platform/production
+    chunker: {use: hierarchical, leaf_tokens: 200, max_node_tokens: 2000}
+    enrichers:
+      - context-header
+      - llm-context                                # contextual retrieval: one call per chunk
+      - {use: summary-tree, cluster_size: 5, max_levels: 3}   # RAPTOR for "overall" questions
+    query_transformer: {use: chain, steps: [normalize, {use: rewrite, llm_slot: llm}, {use: multi-query, n: 3}]}
+    retriever: {use: hybrid, candidates: 50}
+    reranker: {use: gateway, model: reranker, base_url: "http://litellm:4000", top_n: 50,
+               api_key_file: /run/bao/rag_api_gateway_key}
+    postprocessors:
+      - {use: dedupe, threshold: 0.85}
+      - {use: min-score, stage: rerank, threshold: 0.05, min_keep: 1}
+      - {use: auto-merge, threshold: 0.5}
+      - summary-expand
+      - {use: mmr, lambda_: 0.7}
+      - {use: max-per-document, n: 3}
+    compressors: [{use: extractive, threshold: 0.2, neighbours: 1}]
+    context_builder: {use: numbered, max_tokens: 8000, order: lost-in-middle}
+    pipeline: {use: self-reflective, search_k: 10, max_rounds: 2, uncited: abstain, stream: checked}
+    answer_formatters: [confidence, {use: citations, style: footnotes, quotes: true}, follow-ups]
+    judge: {use: llm, llm_slot: judge_llm}
+    cache: none
