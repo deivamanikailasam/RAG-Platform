@@ -30,6 +30,10 @@ profiles:
       - {use: recency, weight: 0.15, half_life_days: 730}   # needs an "updated" date in metadata
       - {use: max-per-document, n: 3}
     # answers (Step 33)
+    # the architecture (Step 35): naive | standard | corrective | self-reflective | adaptive | agentic | graph | sql
+    #   graph also needs  graph_store: memory  and  enrichers: [context-header, graph-entities]
+    #   sql needs tables: {expense_limits: {path: examples/tables/expense_limits.csv, groups: [all-staff]}}
+    #   compare them on your own questions: uv run rag eval-answers examples/eval/handbook.yaml
     pipeline: {use: standard, search_k: 8, uncited: flag}
     context_builder: {use: numbered, max_tokens: 3000, order: relevance}   # relevance | lost-in-middle | document
     generator: {use: extractive, max_sentences: 3}   # no model offline; "llm" uses the registered prompt

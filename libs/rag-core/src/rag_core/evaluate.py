@@ -1,4 +1,4 @@
-"""Compare search configurations on the same questions (Step 32).
+"""Compare search configurations (Step 32) and RAG architectures (Step 35) on the same questions.
 
     rag eval-search examples/eval/handbook.yaml --profile offline
     rag eval-search examples/eval/handbook.yaml --profile local --no-ingest --variant hybrid --variant hybrid+rerank
@@ -7,6 +7,11 @@ A dataset names its corpus, the person asking, the questions with the documents 
 them (and documents that must NEVER appear), and variants: small changes to the profile.
 Each variant is built fresh, ingests the corpus (unless --no-ingest), answers every question and
 gets document-level scores: recall@k, MRR, nDCG@k, leaks and latency.
+
+    rag eval-answers examples/eval/handbook.yaml --profile offline [--variant standard …]
+
+builds each of the dataset's `architectures` the same way and runs every question through the
+whole answer pipeline: context recall, answered, cited, abstained, grounded, leaks and latency.
 """
 
 from __future__ import annotations
@@ -145,14 +150,15 @@ def run_variant(name: str, config: dict[str, Any], doc: dict[str, Any], base: Pa
                   round(statistics.median(times), 1) if times else 0.0, per_case)  # fmt: skip
 
 
-def variant_configs(rag_yaml: Path, profile: str, doc: dict[str, Any],
-                    only: list[str] | None = None) -> dict[str, dict[str, Any]]:  # fmt: skip
-    """The profile, with each variant's changes merged on top (same rules as `extends`)."""
+def variant_configs(rag_yaml: Path, profile: str, doc: dict[str, Any], only: list[str] | None = None,
+                    key: str = "variants") -> dict[str, dict[str, Any]]:  # fmt: skip
+    """The profile, with each variant's changes merged on top (same rules as `extends`).
+    `key` picks the dataset's section: "variants" (search) or "architectures" (Step 35)."""
     try:
         base_doc = yaml.safe_load(rag_yaml.read_text())
     except (OSError, yaml.YAMLError) as e:
         raise ComponentError(f"{rag_yaml}: {e}") from None
-    variants = doc.get("variants") or {"as-configured": {}}
+    variants = doc.get(key) or {"as-configured": {}}
     unknown = set(only or []) - set(variants)
     if unknown:
         raise ComponentError(f"unknown variant(s) {sorted(unknown)} (have: {', '.join(variants)})")
@@ -172,6 +178,94 @@ def format_table(rows: list[Scores], k: int) -> str:
     for s in rows:
         lines.append(
             f"{s.variant:34} {s.recall:9.3f} {s.mrr:6.3f} {s.ndcg:8.3f} {s.leaks:6d} {s.p50_ms:7.1f}"
+        )
+    return "\n".join(lines)
+
+
+# ================================================================ answers and architectures (Step 35)
+
+
+@dataclass
+class AnswerScores:
+    variant: str
+    context_recall: (
+        float  # share of the right documents that reached the model (what architectures change)
+    )
+    answered: float  # answerable questions that got an answer (not "I don't know", not blocked)
+    cite_hit: float  # answerable questions whose answer cites a right document
+    abstain_ok: float  # unanswerable questions (no relevant document) answered "I don't know"
+    grounded: float  # answers the groundedness guard didn't flag
+    leaks: int  # forbidden documents cited
+    p50_ms: float
+    per_case: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+    def row(self) -> dict[str, Any]:
+        return {"variant": self.variant, "context_recall": self.context_recall, "answered": self.answered, "cite_hit": self.cite_hit,
+                "abstain_ok": self.abstain_ok, "grounded": self.grounded, "leaks": self.leaks, "p50_ms": self.p50_ms}  # fmt: skip
+
+
+def run_answers(
+    name: str, config: dict[str, Any], doc: dict[str, Any], base: Path, ingest: bool = True
+) -> AnswerScores:
+    """Every question through the answer pipeline as the dataset's person. Offline these numbers
+    describe the plumbing (extractive answers); with --profile local they describe your models."""
+    from rag_core.answer import AnswerPipeline
+
+    container = Container(config, name)
+    if ingest:
+        ingest_corpus(container, doc, base)
+    pipe = AnswerPipeline(container)
+    p = doc.get("principal", {})
+    who = Principal(p.get("subject", "eval"), tuple(p.get("groups", ())),
+                    tuple(p.get("classifications", ("public", "internal"))), p.get("tenant", "default"))  # fmt: skip
+    answerable = answered = cite_hit = unanswerable = abstain_ok = grounded = leaks = 0
+    recalls: list[float] = []
+    times: list[float] = []
+    per_case: dict[str, dict[str, Any]] = {}
+    for case in _cases(doc):
+        session = None
+        if case.history and pipe.memory is not None:
+            session = f"eval-{name}-{case.id}"
+            pipe.memory.append(who, session, *case.history)
+        t0 = time.perf_counter()
+        a = pipe.answer(case.question, who, session_id=session)
+        times.append((time.perf_counter() - t0) * 1000)
+        cited = {doc_name(c.document_uri) for c in a.citations}
+        bad = sorted(cited & set(case.forbidden))
+        leaks += len(bad)
+        flagged = any(g["guard"] == "groundedness" for g in a.trace.get("guards", []))
+        refused = a.abstained or bool(a.blocked)
+        in_context = {doc_name(u) for u in a.trace.get("context", {}).get("documents", [])}
+        if case.relevant:
+            answerable += 1
+            recalls.append(len(in_context & set(case.relevant)) / len(set(case.relevant)))
+            answered += 0 if refused else 1
+            cite_hit += 1 if cited & set(case.relevant) else 0
+            grounded += 1 if not refused and not flagged else 0
+        else:
+            unanswerable += 1
+            abstain_ok += 1 if refused else 0
+        search = a.trace.get("search")
+        per_case[case.id] = {"cited": sorted(cited), "abstained": a.abstained, "blocked": bool(a.blocked),
+                             "flagged": flagged, "leaks": bad,
+                             "route": search.get("route") if isinstance(search, dict) else None}  # fmt: skip
+
+    def rate(n: int, d: int) -> float:
+        return round(n / d, 3) if d else 1.0
+
+    return AnswerScores(name, round(statistics.fmean(recalls), 3) if recalls else 1.0, rate(answered, answerable),
+                        rate(cite_hit, answerable), rate(abstain_ok, unanswerable), rate(grounded, answered or 1),
+                        leaks, round(statistics.median(times), 1) if times else 0.0, per_case)  # fmt: skip
+
+
+def format_answer_table(rows: list[AnswerScores]) -> str:
+    head = (f"{'architecture':22} {'ctx recall':>10} {'answered':>9} {'cite hit':>9} {'abstain ok':>11} "
+            f"{'grounded':>9} {'leaks':>6} {'p50 ms':>7}")  # fmt: skip
+    lines = [head, "-" * len(head)]
+    for s in rows:
+        lines.append(
+            f"{s.variant:22} {s.context_recall:10.3f} {s.answered:9.3f} {s.cite_hit:9.3f} "
+            f"{s.abstain_ok:11.3f} {s.grounded:9.3f} {s.leaks:6d} {s.p50_ms:7.1f}"
         )
     return "\n".join(lines)
 

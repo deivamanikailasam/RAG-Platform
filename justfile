@@ -383,6 +383,7 @@ ci-config:
     just rag-config-check
     just search-eval
     just guard-eval
+    just answer-eval
 
 # rag.yaml: every profile names real components with valid settings (Step 30), no services needed
 rag-config-check:
@@ -396,6 +397,11 @@ search-eval *args:
 # Guardrail gate (Step 34): every listed attack caught, no ordinary question stopped
 guard-eval:
     uv run rag eval-guards examples/eval/guards.yaml --profile offline --min-catch-rate 0.95 --max-false-positive-rate 0.05
+
+# Architecture gate (Step 35): the default architecture puts the right documents in front of the
+# model and says "I don't know" when it should, with no forbidden document cited
+answer-eval *args:
+    uv run rag eval-answers examples/eval/handbook.yaml --profile offline --variant standard --fail-under context_recall=0.95 --fail-under abstain_ok=1 {{args}}
 
 # Secrets, workflows, dependencies, licences, Dockerfile, Kubernetes manifests
 ci-supply-chain:

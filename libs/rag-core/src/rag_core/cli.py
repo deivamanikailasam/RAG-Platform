@@ -25,6 +25,12 @@ Guardrails (Step 34):
 rag eval-guards guards.yaml [--profile p] [--min-catch-rate 0.95] [--max-false-positive-rate 0.05] [--json]
                                                           attacks caught, ordinary questions spared, known gaps
 
+Architectures (Step 35):
+rag eval-answers dataset.yaml [--variant naive --variant standard …] [--no-ingest]
+                 [--fail-under context_recall=0.95] [--json]
+                                                          compare RAG architectures end to end
+Switch the architecture with `pipeline: {use: corrective}` in rag.yaml or RAG__PIPELINE__USE=adaptive.
+
 A URI is file:///abs/path, s3://bucket/key, or a local path (turned into a file:// URI).
 """
 
@@ -109,6 +115,22 @@ def main(argv: list[str] | None = None) -> int:
         help="exit 1 if a variant scores below, e.g. recall=0.8 (CI gate)",
     )
     p = sub.add_parser(
+        "eval-answers", help="compare RAG architectures on a labelled dataset (Step 35)"
+    )
+    p.add_argument("dataset")
+    p.add_argument("--file", default=os.environ.get("RAG_CONFIG", "rag.yaml"))
+    p.add_argument("--profile")
+    p.add_argument("--variant", action="append", default=[], help="an entry of `architectures:`")
+    p.add_argument("--no-ingest", action="store_true", help="the stores already hold the corpus")
+    p.add_argument("--json", action="store_true")
+    p.add_argument(
+        "--fail-under",
+        action="append",
+        default=[],
+        metavar="METRIC=VALUE",
+        help="exit 1 if an architecture scores below, e.g. context_recall=0.95 (CI gate)",
+    )
+    p = sub.add_parser(
         "eval-guards", help="measure the guards on attacks and ordinary cases (Step 34)"
     )
     p.add_argument("dataset")
@@ -140,6 +162,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if a.cmd == "eval-search":
             return _eval_search(a)
+        if a.cmd == "eval-answers":
+            return _eval_answers(a)
         container = cfg.load(a.file, a.profile)
         if a.cmd == "eval-guards":
             return _eval_guards(a, container)
@@ -323,6 +347,37 @@ def _eval_search(a: argparse.Namespace) -> int:
         failed += [
             f"{r.variant}: {r.leaks} forbidden document(s) returned" for r in rows if r.leaks
         ]
+    for f in failed:
+        print(f"FAIL: {f}", file=sys.stderr)
+    return 1 if failed else 0
+
+
+def _eval_answers(a: argparse.Namespace) -> int:
+    from rag_core import evaluate as ev
+
+    dataset = Path(a.dataset)
+    doc = ev.load_dataset(dataset)
+    profile = a.profile or os.environ.get("RAG_PROFILE", "default")
+    configs = ev.variant_configs(Path(a.file), profile, doc, a.variant, key="architectures")
+    rows = [ev.run_answers(name, conf, doc, dataset.parent, ingest=not a.no_ingest)
+            for name, conf in configs.items()]  # fmt: skip
+    if a.json:
+        print(json.dumps([r.row() | {"per_case": r.per_case} for r in rows], indent=2))
+    else:
+        print(f"{len(doc['questions'])} questions, profile {profile!r}\n")
+        print(ev.format_answer_table(rows))
+    failed = []
+    for rule in a.fail_under:
+        metric, _, value = rule.partition("=")
+        for r in rows:
+            if metric not in r.row() or metric in ("variant", "leaks", "p50_ms"):
+                raise ComponentError(
+                    f"--fail-under: unknown metric {metric!r} "
+                    "(context_recall, answered, cite_hit, abstain_ok, grounded)"
+                )
+            if r.row()[metric] < float(value):
+                failed.append(f"{r.variant}: {metric} {r.row()[metric]} < {value}")
+    failed += [f"{r.variant}: {r.leaks} forbidden document(s) cited" for r in rows if r.leaks]
     for f in failed:
         print(f"FAIL: {f}", file=sys.stderr)
     return 1 if failed else 0

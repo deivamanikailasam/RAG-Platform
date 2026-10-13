@@ -39,6 +39,15 @@ variants:
   hybrid+mmr+per-doc:    {retriever: hybrid, reranker: none, postprocessors: [{use: mmr, lambda: 0.7}, {use: max-per-document, n: 1}]}
   all-together:          {retriever: hybrid, query_transformer: with-history, reranker: {use: term-overlap, top_n: 30}, postprocessors: [dedupe, {use: recency, weight: 0.15, half_life_days: 730}, {use: max-per-document, n: 2}]}
 
+# Architectures (Step 35): `rag eval-answers` builds each one on the same profile and questions.
+architectures:
+  naive:            {pipeline: naive}
+  standard:         {pipeline: standard}
+  corrective:       {pipeline: corrective}
+  self-reflective:  {pipeline: self-reflective}
+  adaptive:         {pipeline: adaptive}
+  graph:            {pipeline: graph, graph_store: memory, enrichers: [context-header, graph-entities]}
+
 questions:
   - {id: leave-days, question: "How many days of annual leave do full-time staff get?", relevant: [annual-leave.md], tags: [paraphrase]}
   - {id: carry-over, question: "Can I carry unused holidays over to next year?", relevant: [annual-leave.md], tags: [synonym]}
