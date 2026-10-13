@@ -234,8 +234,8 @@ def test_projects_add_components_through_an_entry_point(monkeypatch: pytest.Monk
 def test_rag_components_lists_and_filters(capsys: pytest.CaptureFixture[str]) -> None:
     assert rag_cli(["components", "--kind", "embedder", "--json"]) == 0
     rows = json.loads(capsys.readouterr().out)
-    assert [r["name"] for r in rows] == ["hashing"]
-    assert rows[0]["params"]["dimensions"][1] == 256
+    assert [r["name"] for r in rows] == ["cached", "gateway", "hashing"]  # Step 31 added two
+    assert rows[2]["params"]["dimensions"][1] == 256
     assert rag_cli(["components"]) == 0
     out = capsys.readouterr().out
     assert "hf-tokenizer" in out
