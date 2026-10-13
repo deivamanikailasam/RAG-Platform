@@ -69,6 +69,8 @@ def pipeline_hash(config: dict[str, Any]) -> str:
             "sparse_embedder",
         )
     }
+    if config.get("toc_store"):  # extension 03: adding a contents store re-ingests every source
+        relevant["toc_store"] = config["toc_store"]
     return hashlib.sha256(json.dumps(relevant, sort_keys=True, default=str).encode()).hexdigest()[
         :16
     ]

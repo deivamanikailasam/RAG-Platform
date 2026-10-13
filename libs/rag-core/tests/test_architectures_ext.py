@@ -528,3 +528,11 @@ def test_no_new_architecture_leaks_a_restricted_document() -> None:
                 u.endswith("exec-compensation.md")
                 for u in a.trace.get("context", {}).get("documents", [])
             ), arch
+
+
+def test_adding_a_contents_store_re_ingests_but_old_profiles_keep_their_hash() -> None:
+    from rag_core.ingest import pipeline_hash
+
+    base = {"chunker": {"use": "structure"}, "embedder": {"use": "hashing"}}
+    assert pipeline_hash(base) == pipeline_hash({**base, "pipeline": "pageindex"})  # unchanged
+    assert pipeline_hash(base) != pipeline_hash({**base, "toc_store": "memory"})
