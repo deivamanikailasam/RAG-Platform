@@ -160,3 +160,6 @@ class Answer:
     blocked: str | None = None  # a guardrail stopped it (Step 34): the reason, shown to the user
     usage: Mapping[str, int] = field(default_factory=dict)
     trace: Mapping[str, Any] = field(default_factory=dict)  # which components ran, timings, scores
+    # extension 04: what answer formatters add: quotes with offsets, a JSON object, a confidence
+    # score, follow-up questions. Empty unless an `answer_formatters` slot is configured.
+    extras: Mapping[str, Any] = field(default_factory=dict)

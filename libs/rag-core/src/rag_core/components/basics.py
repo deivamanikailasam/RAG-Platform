@@ -406,6 +406,17 @@ class MemoryKeywordIndex:
                 self._docs[i] = (replace(ch, access=access), tf, length)
         return len(ids)
 
+    def vocabulary(self, principal: Principal) -> Counter[str]:
+        """Extension 04: word -> number of chunks containing it, over the chunks THIS person may
+        read only (a spelling corrector must not "correct" towards a word from a document the
+        person can't see: that would reveal it exists)."""
+        out: Counter[str] = Counter()
+        with self._lock:
+            for ch, tf, _ in self._docs.values():
+                if ch.access.allows(principal):
+                    out.update(tf.keys())
+        return out
+
     def search_all(self, text: str, k: int) -> list[ScoredChunk]:
         """Every tenant and group: for the erasure job only (Step 36), never for people."""
         return self._rank(text, k, lambda ch: True)

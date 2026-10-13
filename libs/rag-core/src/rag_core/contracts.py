@@ -10,6 +10,7 @@ Kinds, in pipeline order:
     query       query_transformer · retriever · fusion · reranker · postprocessor
     answer      compressor · context_builder · generator · guard · memory
     (extension 02: sparse_embedder, used by the sparse keyword indexes)
+    (extension 04: answer_formatter, judge, connector)
 """
 
 from __future__ import annotations
@@ -194,6 +195,39 @@ class Guard(Protocol):
     def check(self, query: Query, payload: object) -> Verdict: ...
 
 
+@runtime_checkable
+class AnswerFormatter(Protocol):
+    """Extension 04: shape a checked answer for its reader (citation style, a JSON object, a
+    confidence score, follow-up questions). Runs after the output guards; must not add claims."""
+
+    def format(self, query: Query, answer: Answer, sources: Sequence[ScoredChunk]) -> Answer: ...
+
+
+@runtime_checkable
+class Judge(Protocol):
+    """Extension 04: scores one answer for evaluation (0..1 per metric, None = can't say)."""
+
+    name: str
+
+    def score(self, question: str, answer: str, contexts: Sequence[str],
+              reference: str | None = None) -> dict[str, float | None]: ...  # fmt: skip
+
+
+class SourceRef(Protocol):
+    uri: str
+    version: str  # mtime+size, an ETag, a revision number: changes when the content changes
+
+
+@runtime_checkable
+class Connector(Protocol):
+    """Extension 04: where sources come from (a folder, a bucket, a wiki). Lists what exists now,
+    with a version that changes when the content does, and fetches one item."""
+
+    def list(self) -> Iterator[SourceRef]: ...
+
+    def fetch(self, ref: SourceRef) -> Source: ...
+
+
 class Verdict(Protocol):
     action: str  # "allow" | "redact" | "block" | "flag"
     reasons: tuple[str, ...]
@@ -203,9 +237,11 @@ class Verdict(Protocol):
 __all__ = [
     "LLM",
     "Answer",
+    "AnswerFormatter",
     "Chunk",
     "Chunker",
     "Compressor",
+    "Connector",
     "Context",
     "ContextBuilder",
     "Document",
@@ -216,6 +252,7 @@ __all__ = [
     "Fusion",
     "Generator",
     "Guard",
+    "Judge",
     "KeywordIndex",
     "Normalizer",
     "Parser",
@@ -224,6 +261,7 @@ __all__ = [
     "QueryTransformer",
     "Reranker",
     "Retriever",
+    "SourceRef",
     "SparseEmbedder",
     "TokenCounter",
     "VectorStore",

@@ -18,6 +18,7 @@ from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import UTC, date, datetime
+from pathlib import Path
 from typing import Any, Literal
 
 import httpx
@@ -173,24 +174,65 @@ for _kind, _summary in [
 
 class ExpandParams(_Strict):
     terms: dict[str, str] = {}  # "wfh": "work from home": your organisation's acronyms and jargon
+    # extension 04: synonyms (several per entry, either direction) and phrases as keys:
+    #   synonyms: {holiday: [annual leave, vacation], "sick note": [medical certificate]}
+    synonyms: dict[str, list[str]] = {}
+    file: str | None = None  # the same two maps in a YAML file: {terms: {...}, synonyms: {...}}
+    mode: Literal["append", "variants"] = "append"  # one widened query, or one query per meaning
 
 
 class TermExpander:
     """Adds the meaning of known acronyms and jargon to the question. No LLM, no cost, predictable:
-    "Can I WFH on Fridays?" also searches "work from home"."""
+    "Can I WFH on Fridays?" also searches "work from home". Extension 04: synonym lists and
+    multi-word keys ("sick note" -> "medical certificate"), from rag.yaml or a glossary file, and
+    `mode: variants` (each expansion its own search, fused) for when appending dilutes the query."""
 
-    def __init__(self, terms: dict[str, str]) -> None:
-        self.terms = {k.lower(): v for k, v in terms.items()}
+    def __init__(self, terms: dict[str, str], synonyms: dict[str, list[str]] | None = None,
+                 mode: str = "append") -> None:  # fmt: skip
+        self.terms = {" ".join(words(k)): v for k, v in terms.items()}
+        self.synonyms: dict[str, list[str]] = {}
+        for k, alts in (synonyms or {}).items():  # synonyms work both ways
+            group = [k, *alts]
+            for w in group:
+                key = " ".join(words(w))
+                self.synonyms.setdefault(key, [])
+                self.synonyms[key] += [g for g in group if g != w and g not in self.synonyms[key]]
+        self.mode = mode
+
+    def _found(self, text: str) -> list[str]:
+        padded = f" {' '.join(words(text))} "
+        out: list[str] = []
+        for table in (self.terms, self.synonyms):
+            for key in sorted(table, key=len, reverse=True):  # longest phrase first
+                if key and f" {key} " in padded:
+                    vals = table[key] if isinstance(table[key], list) else [table[key]]
+                    out += [
+                        str(v)
+                        for v in vals
+                        if str(v) not in out and str(v).lower() not in text.lower()
+                    ]
+        return out
 
     def transform(self, query: Query) -> list[str]:
-        found = [self.terms[w] for w in dict.fromkeys(words(query.text)) if w in self.terms]
+        found = self._found(query.text)
+        if self.mode == "variants" and found:
+            return [query.text, *(f"{query.text} {f}" for f in found)]
         return [f"{query.text} ({'; '.join(found)})" if found else query.text]
 
 
 @register("query_transformer", "expand-terms", params=ExpandParams,
-          summary="add the meaning of known acronyms/jargon (no LLM)")  # fmt: skip
+          summary="add the meaning of known acronyms/jargon and synonyms, phrases too (no LLM)")  # fmt: skip
 def _expand(p: ExpandParams, c: Container) -> TermExpander:
-    return TermExpander(p.terms)
+    terms, synonyms = dict(p.terms), dict(p.synonyms)
+    if p.file:
+        import yaml
+
+        data = yaml.safe_load(Path(p.file).read_text()) or {}
+        if not isinstance(data, dict):
+            raise ValueError(f"{p.file}: expected {{terms: …, synonyms: …}}")
+        terms |= {str(k): str(v) for k, v in (data.get("terms") or {}).items()}
+        synonyms |= {str(k): [str(x) for x in v] for k, v in (data.get("synonyms") or {}).items()}
+    return TermExpander(terms, synonyms, p.mode)
 
 
 class HistoryParams(_Strict):
@@ -975,11 +1017,19 @@ def _window(p: BaseModel, c: Container) -> WindowExpand:
     return WindowExpand()
 
 
+RECENCY_CUES = ("latest", "current", "currently", "newest", "recent", "recently", "now", "today",
+                "up to date", "up-to-date", "this year", "new", "updated", "still")  # fmt: skip
+
+
 class RecencyParams(_Strict):
     field: str = "updated"  # a chunk metadata date (ISO 8601), e.g. copied from the source system
     half_life_days: float = Field(365, gt=0)
     weight: float = Field(0.2, ge=0, le=1)  # 0 = ignore age; 1 = age only
     missing: float = Field(0.5, ge=0, le=1)  # freshness assumed for undated chunks
+    # extension 04: "asked" boosts only when the question asks for the newest ("latest", "current",
+    # "recent", "this year", …), so "what was the 2021 policy?" isn't pushed to 2026 documents
+    when: Literal["always", "asked"] = "always"
+    cues: list[str] = Field(default_factory=lambda: list(RECENCY_CUES))
 
 
 class RecencyBoost:
@@ -997,8 +1047,12 @@ class RecencyBoost:
         age = max(0, (today - d).days)
         return float(0.5 ** (age / self.p.half_life_days))
 
+    def asked(self, text: str) -> bool:
+        padded = f" {' '.join(words(text))} "
+        return any(f" {' '.join(words(c))} " in padded for c in self.p.cues)
+
     def process(self, query: Query, candidates: list[ScoredChunk]) -> list[ScoredChunk]:
-        if not candidates:
+        if not candidates or (self.p.when == "asked" and not self.asked(query.text)):
             return candidates
         s = [h.score for h in candidates]
         lo, hi = min(s), max(s)

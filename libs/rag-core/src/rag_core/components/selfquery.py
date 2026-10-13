@@ -93,6 +93,21 @@ BETWEEN = re.compile(
 )
 DURING = re.compile(r"\b(in|during)\s+" + _DATE, re.I)
 RELATIVE = re.compile(r"\b(?P<d>this year|last year)\b", re.I)
+# extension 04: rolling windows. "in the last 6 months", "past 2 weeks", "over the past year".
+# (Plain "last year" stays the calendar year above; "in the last year" is the rolling 12 months.)
+WINDOW = re.compile(
+    r"\b(?:(?:in|within|over|during)\s+the\s+(?:last|past)|past|last)\s+(?:(?P<n>\d+)\s+)?"
+    r"(?P<unit>day|week|month|quarter|year)s?\b", re.I)  # fmt: skip
+_UNIT_DAYS = {"day": 1, "week": 7, "month": 30, "quarter": 91, "year": 365}
+
+
+def _window(m: re.Match[str], today: date) -> date | None:
+    """The start of a rolling window, or None for "last year" without "in the"/"past"/a number."""
+    text = m.group(0).lower()
+    if m["n"] is None and text.startswith("last") and m["unit"].lower() == "year":
+        return None  # "last year" = the calendar year (RELATIVE)
+    n = int(m["n"] or 1)
+    return date.fromordinal(today.toordinal() - n * _UNIT_DAYS[m["unit"].lower()])
 
 
 def _period(text: str, today: date) -> tuple[date, date] | None:
@@ -216,6 +231,8 @@ class SelfQuery:
                             else span[1]
                         )
                         cond["lt"] = end.isoformat()
+                if not cond and (w := WINDOW.search(question)) and (since := _window(w, today)):
+                    cond = {"gte": since.isoformat()}
                 if not cond and (m := DURING.search(question) or RELATIVE.search(question)):
                     span = _period(m["d"], today)
                     if span:

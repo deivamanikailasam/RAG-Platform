@@ -517,6 +517,9 @@ class AnswerOut(BaseModel):
         bool  # a guard stopped it (Step 34); the text is a fixed message, the reason is audited
     )
     citations: list[CitationOut]
+    # extension 04: what the profile's answer formatters added (quotes with offsets, a JSON
+    # object, a confidence score, follow-up questions); empty when none is configured
+    extras: dict[str, Any] = {}
 
 
 def _release() -> str:
@@ -534,6 +537,11 @@ def _citations(a: Answer, context_ids: dict[str, int]) -> list[CitationOut]:
         CitationOut(n=c.marker, document_id=context_ids.get(c.chunk_id, -1), title=c.title)
         for c in a.citations
     ]
+
+
+def _extras(a: Answer) -> dict[str, Any]:
+    """Formatter output for the client. Chunk ids stay (they are opaque); nothing else internal."""
+    return dict(a.extras)
 
 
 def _outcome(a: Answer) -> str:
@@ -616,7 +624,7 @@ def answer(
         ANSWERS.add(1, {"outcome": _outcome(a)})
         ANSWER_TIME.record(time.perf_counter() - started, {"stream": False})
         return AnswerOut(answer_id=answer_id, text=a.text, abstained=a.abstained, blocked=bool(a.blocked),
-                         citations=_citations(a, context_ids))  # fmt: skip
+                         citations=_citations(a, context_ids), extras=_extras(a))  # fmt: skip
 
     events = answerer.stream(req.question, who, session_id=req.session_id, post_check=post_check,
                              filters=req.filter, before_generation=lambda ctx, early: record(ctx, early))  # fmt: skip
@@ -641,7 +649,8 @@ def answer(
                     a: Answer = ev.data
                     ANSWERS.add(1, {"outcome": _outcome(a)})
                     yield frame("done", AnswerOut(answer_id=answer_id, text=a.text, abstained=a.abstained,
-                                                  blocked=bool(a.blocked), citations=_citations(a, context_ids)).model_dump())  # fmt: skip
+                                                  blocked=bool(a.blocked), citations=_citations(a, context_ids),
+                                                  extras=_extras(a)).model_dump())  # fmt: skip
                     if not completed.get("recorded"):
                         # streaming: after "done", the record is completed (best effort: the text is
                         # already sent). Output guard verdicts, the citations and usage land here.

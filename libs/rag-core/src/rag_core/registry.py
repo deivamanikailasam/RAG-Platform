@@ -91,9 +91,11 @@ SLOTS: dict[str, str] = {
     "generator": "generator", "guards": "guard", "cache": "cache", "memory": "memory",
     "queue": "queue", "manifest": "manifest", "pipeline": "pipeline", "graph_store": "graph_store",
     "search_cache": "search_cache", "compressors": "compressor", "sparse_embedder": "sparse_embedder",
-    "toc_store": "toc_store",
+    "toc_store": "toc_store", "answer_formatters": "answer_formatter", "judge": "judge",
+    "connector": "connector",
 }  # fmt: skip
-PLURAL = {"parsers", "normalizers", "enrichers", "postprocessors", "guards", "compressors"}
+PLURAL = {"parsers", "normalizers", "enrichers", "postprocessors", "guards", "compressors",
+          "answer_formatters"}  # fmt: skip
 
 
 def _explain(e: ValidationError) -> str:

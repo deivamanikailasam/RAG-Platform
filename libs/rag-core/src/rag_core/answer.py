@@ -20,6 +20,7 @@ Order of work, and why:
    generate → the registered prompt, the answer model; streamed or whole
    cite     → keep only citations that point at a document that was shown
    guards   → output checks (Step 34): groundedness, personal data, secrets, toxicity
+   format   → extension 04: citation style and quotes, confidence, follow-ups, a JSON object
    review   → a reviewing architecture (self-reflective) may retrieve again and regenerate
    remember, cache, return (with a trace of everything above): once, after any review, so a
               replaced draft is never remembered or cached
@@ -41,6 +42,7 @@ from rag_core.components.architectures import Standard
 from rag_core.components.basics import ApproxTokenCounter
 from rag_core.components.compression import compress_all
 from rag_core.components.conversation import cache_key
+from rag_core.components.formatting import format_all
 from rag_core.components.generation import (
     AnswerParams,
     ContextParams,
@@ -97,6 +99,10 @@ class AnswerPipeline:
         # extension 02: shorten the retrieved chunks for the question before the context is built
         self.compressors = container.get("compressors") if container.has("compressors") else []
         self.counter = counter
+        # extension 04: shape the checked answer (citation style, confidence, follow-ups, JSON)
+        self.formatters = (
+            container.get("answer_formatters") if container.has("answer_formatters") else []
+        )
 
     # ------------------------------------------------------------------ guards (Step 34)
 
@@ -173,7 +179,7 @@ class AnswerPipeline:
         if retrieval.direct is not None:
             # e.g. adaptive's reply to small talk: no retrieval, no model
             direct = replace(retrieval.direct, trace={**retrieval.direct.trace, **trace_data})
-            return query, direct, None
+            return query, format_all(self.formatters, query, direct, (), trace_data), None
         context, stop = self.context_for(query, retrieval.hits, post_check, trace_data)
         return query, stop, context
 
@@ -198,7 +204,8 @@ class AnswerPipeline:
             trace_data["compression"] = info
         if not hits and self.p.abstain_without_hits:
             trace_data["abstained_reason"] = "no relevant documents"
-            return None, Answer(text=self.p.abstain_text, abstained=True, trace=trace_data)
+            empty = Answer(text=self.p.abstain_text, abstained=True, trace=trace_data)
+            return None, format_all(self.formatters, query, empty, (), trace_data)
         with tracer.start_as_current_span("rag.context") as span:
             context = self.builder.build(query, hits)
             span.set_attributes({"rag.context.chunks": len(context.chunks), "rag.context.tokens": context.tokens,
@@ -245,7 +252,8 @@ class AnswerPipeline:
         )
         if blocked is not None:
             return blocked
-        return out.answer if isinstance(out, GeneratedAnswer) else answer
+        final = out.answer if isinstance(out, GeneratedAnswer) else answer
+        return format_all(self.formatters, query, final, context.chunks, trace_data)
 
     def _remember(
         self, query: Query, answer: Answer, session_id: str | None, trace_data: dict[str, Any]
@@ -351,6 +359,9 @@ class AnswerPipeline:
 
 
 def answer_dict(a: Answer) -> dict[str, Any]:
-    return {"text": a.text, "abstained": a.abstained, "blocked": a.blocked, "usage": dict(a.usage),
-            "citations": [{"n": c.marker, "chunk_id": c.chunk_id, "document": c.document_uri, "title": c.title}
-                          for c in a.citations]}  # fmt: skip
+    out = {"text": a.text, "abstained": a.abstained, "blocked": a.blocked, "usage": dict(a.usage),
+           "citations": [{"n": c.marker, "chunk_id": c.chunk_id, "document": c.document_uri, "title": c.title}
+                         for c in a.citations]}  # fmt: skip
+    if a.extras:  # extension 04: what the answer formatters added
+        out["extras"] = dict(a.extras)
+    return out
