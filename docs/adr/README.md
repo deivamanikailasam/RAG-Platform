@@ -43,5 +43,6 @@
 | [0039](0039-switchable-metrics-pushed-down-filters-and-multi-retriever-search.md) | Switchable similarity metrics, pushed-down metadata filters, more fusion, a result cache and multi-retriever search | Accepted |
 | [0040](0040-chunk-trees-metadata-sections-compression-and-embedding-options.md) | Chunk trees, extracted metadata, exact sections, a compression slot and more embedding options | Accepted |
 | [0041](0041-more-rag-architectures-a-contents-store-a-durable-graph-and-mcp-tools.md) | More RAG architectures, a contents store, a durable graph and MCP tools for agents | Accepted |
+| [0042](0042-a-closed-evaluation-loop-answer-formatters-and-connectors.md) | A closed evaluation loop, answer formatters and connectors | Accepted |
 
 New ADR: `just adr "Short title"`, then fill it in and add a row here.

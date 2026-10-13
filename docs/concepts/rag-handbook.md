@@ -9,7 +9,7 @@
 > swappable part. This handbook explains each technique in everyday terms, when to pick it, what it
 > costs, what else exists, and the exact line in [`rag.yaml`](../../rag.yaml) that switches it.
 
-Every component listed here is in the generated [catalogue](../catalogue.md) (144 components in 28
+Every component listed here is in the generated [catalogue](../catalogue.md) (159 components in 31
 kinds, with every setting and default). The steps that built them: [30](../steps/step-30-rag-core-contracts-and-components.md)
 (core), [31](../steps/step-31-ingestion-pipeline.md) (ingestion), [32](../steps/step-32-retrieval-and-ranking.md)
 (retrieval), [33](../steps/step-33-augmentation-and-generation.md) (answers),
@@ -195,13 +195,16 @@ question, retrieve passages…") registered as the prompt `query-instruction`; d
 | Component | What |
 |---|---|
 | `gateway` | Any embedding model behind LiteLLM (here Qwen3-Embedding-0.6B, 1024 dims), batched, dimension-checked |
-| `cached` | Wraps any embedder: the same text is never embedded twice (LRU) |
+| `cached` | Wraps any embedder: the same text is never embedded twice (LRU; `store: valkey` shares it across replicas and restarts, E04) |
+| `batched` (E04) | Wraps any embedder: fixed batches, a requests-per-second ceiling, retries with backoff for big re-indexes |
 | `hashing` | Offline, deterministic word-hash vectors for tests and CI (readiness refuses it in production) |
 | `instructed` | Query/passage prefixes for asymmetric models: presets `e5`, `bge`, `nomic`, `qwen3`, … |
 | `matryoshka` | Keeps the first N dimensions of a Matryoshka-trained model (or `request_dimensions: true` on `gateway`) |
 | `late-chunking` | Embeds the whole document, then pools each chunk's token vectors (context for "it", "this") |
 
 **Switch:** `embedder: {use: cached, inner: {use: gateway, model: embedder, dimensions: 1024, …}}`.
+Keeping the index in step with a folder or bucket: `connector: {use: filesystem | s3, …}` and
+`rag sync [--watch]` ingest only what changed ([extension 04](../extensions/04-evaluation-loops-and-remaining-techniques.md#12-connectors-and-rag-sync)).
 
 > **WATCH OUT · THE EMBEDDING CONTRACT**
 > Model, revision, dimensions, normalisation, pooling and query instruction must match between
@@ -297,7 +300,7 @@ used and the failure is counted. **Switch:** `reranker: {use: gateway, top_n: 30
 |---|---|---|
 | `dedupe` | Drops near-duplicate chunks (`threshold` 0.85) | Many versions or copies |
 | `min-score` | Drops candidates below a score (e.g. `stage: rerank`) | Enable honest "I don't know" |
-| `recency` | Blends relevance with freshness (`half_life_days`) | Policies that change; needs an `updated` date |
+| `recency` | Blends relevance with freshness (`half_life_days`); `when: asked` only for "latest / current…" questions (E04) | Policies that change; needs an `updated` date |
 | `max-per-document` | Caps chunks per document | Long documents dominating |
 | `mmr` | Relevant **and** different | Broad questions |
 | `parent-expand` / `window-expand` | Swap a matched child/sentence for its parent/window | With those chunkers |
@@ -314,7 +317,9 @@ Changing the *question* before searching.
 | `identity` | Nothing | Free | Default in production search |
 | `with-history` | Prepends recent user turns | Free | Cheap follow-up support (offline default) |
 | `rewrite` | LLM turns "and for part-timers?" into a standalone question | 1 call, only with history | Chat assistants (`local` default) |
-| `expand-terms` | Adds meanings of known acronyms/jargon from a list | Free | Known vocabulary ("MFA", "SEV1") |
+| `expand-terms` | Adds meanings of known acronyms/jargon and synonyms (both ways, phrases, a glossary `file`) | Free | Known vocabulary ("MFA", "SEV1", "holiday" = "annual leave") |
+| `normalize` (E04) | Cleans Unicode/spacing; fixes misspellings against the words of documents the person may read | Free | Typos ("anual leeve") |
+| `translate` (E04) | Adds the question in the corpus language (passthrough, glossary or LLM) | Free / 1 call | Questions in other languages (with a multilingual embedder) |
 | `multi-query` | LLM paraphrases, each searched, then fused | n calls | Users word things differently |
 | `hyde` | LLM writes a hypothetical answer; that is searched | n calls | Questions short, documents long |
 | `decompose` | Splits compound questions | n calls | "X and Y?" questions |
@@ -375,6 +380,13 @@ nothing are removed and counted. `pipeline.uncited` says what happens to an answ
 | `flag` | Shown, flagged in the trace and audit | offline/local default |
 | `abstain` | Replaced by "I don't know based on the documents" | `production` |
 | `keep` | Shown as if sourced | Refused by readiness |
+
+**Citation and answer formats** ([extension 04](../extensions/04-evaluation-loops-and-remaining-techniques.md#8-answer-formatters-citations-json-confidence-follow-ups)):
+the `answer_formatters` slot runs after the checks and guards: `citations` (inline `[doc n]` or
+footnotes `[^n]`, with the supporting quote and its character offsets), `json` (a schema-checked
+answer object, optional model-extracted fields), `confidence` (0..1 from support, citations and
+coverage; can abstain below a floor) and `follow-ups` (questions the shown sources can answer).
+They appear in `Answer.extras` and rag-api's `extras`.
 
 **Abstention.** If nothing relevant survives search and the access post-check
 (`abstain_without_hits: true`), the platform says so **without calling a model**: cheaper, and no
@@ -518,7 +530,18 @@ uv run rag eval-guards examples/eval/guards.yaml --profile offline
 ```
 
 Add a variant to the evaluation file (e.g. `{retriever: hybrid, reranker: none}`), run it, and keep the
-change only if the numbers move the right way. On the platform: `--profile local --no-ingest` after
+change only if the numbers move the right way. The full loop ([extension 04](../extensions/04-evaluation-loops-and-remaining-techniques.md)):
+
+```bash
+uv run rag eval-answers … --out runs/          # + faithfulness, relevance, context precision, correctness, citation P/R
+uv run rag eval-compare --runs runs/a.answers.json runs/b.answers.json   # is the difference more than chance?
+uv run rag eval-sweep … --grid examples/eval/sweep.yaml                  # which setting matters (ablation)
+uv run rag eval-generate --from examples/eval/handbook.yaml --out gen.yaml && uv run rag eval-review gen.yaml --check
+uv run rag eval-candidates --events audit.jsonl --out candidates.yaml   # thumbs-down -> questions to review
+uv run rag eval-export runs/a.answers.json --to ragas                   # or deepeval, promptfoo, trulens, phoenix
+```
+
+`judge: {use: llm, llm_slot: judge_llm}` scores with a model, falling back to the lexical score. On the platform: `--profile local --no-ingest` after
 ingesting the handbook. In production: online evaluation per release
 ([quality-and-operations.md](../guides/quality-and-operations.md#1-evaluation-and-testing)).
 
@@ -567,6 +590,17 @@ ingesting the handbook. In production: online evaluation per release
 | Graph must survive restarts | `graph_store: postgres` |
 | Lookups in CSV tables | `pipeline: table` (totals: `sql`) |
 | An AI agent should use the knowledge base | `rag mcp --subject … --group …` |
+| Typos, jargon, synonyms in questions | `chain: [normalize, {use: expand-terms, file: glossary.yaml}]` |
+| Questions in other languages | Multilingual embedder; `translate` for keyword search |
+| "Latest / current" questions | `recency` with `when: asked`; `self-query` for "in the last 6 months" |
+| A UI that highlights sources, or printed answers | `answer_formatters: [{use: citations, style: footnotes}]` |
+| Another program reads the answer | `answer_formatters: [json]` (+ `fields`) |
+| Show how sure the answer is; suggest next questions | `confidence`, `follow-ups` |
+| Several replicas re-embedding the same text | `cached` with `store: valkey` |
+| Re-index hits the provider's rate limit | `batched` embedder inside `cached` |
+| Keep the index in step with a share or bucket | `connector` + `rag sync --watch` |
+| "Is B really better?" / "Which knob matters?" | `rag eval-compare` / `rag eval-sweep` |
+| Too few test questions | `rag eval-generate` + review; `rag eval-candidates` from feedback |
 
 See also: [glossary](../glossary.md) for every term, [catalogue](../catalogue.md) for every setting,
 [architecture overview](../architecture/overview.md) for where each stage runs.

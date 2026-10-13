@@ -38,8 +38,8 @@
 | [Extensions](extensions/README.md) | Techniques added after the 38 guide steps, one feature group per page: what, why, when to use which, how to switch it on |
 | [Cloud mapping](architecture/cloud-mapping.md) | Managed equivalents of every self-run piece on AWS, Google Cloud and Azure |
 | [C4 model as code](architecture/workspace.dsl) | Structurizr DSL source of the architecture diagrams |
-| [Decision records (ADRs)](adr/README.md) | ADR-0001 to ADR-0040: each decision, its alternatives and when to revisit |
-| [Catalogue](catalogue.md) | All 144 switchable components in 28 kinds, with settings and test status (generated) |
+| [Decision records (ADRs)](adr/README.md) | ADR-0001 to ADR-0042: each decision, its alternatives and when to revisit |
+| [Catalogue](catalogue.md) | All 159 switchable components in 31 kinds, with settings and test status (generated) |
 | [Standards](standards/rag-standards.md) | The rules every RAG project meets (MUST / SHOULD / reviewed), checked by `rag doctor` |
 
 ## Security, compliance and governance

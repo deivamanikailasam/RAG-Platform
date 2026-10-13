@@ -9,6 +9,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | 12-factor app | A widely used set of guidelines for building cloud-ready services, e.g. keep configuration out of code and read it from the environment. | 6 |
 | 401 vs 403 | 401 Unauthorized means "I don't know who you are" (no token, or a bad one); 403 Forbidden means "I know who you are, and the answer is no" (a valid token without the needed role). | 17 |
 | ABAC (attribute-based access control) | Access rules based on facts (attributes) about the person and the thing, such as classification, clearance or department, rather than just roles; what OPA evaluates here. | 18 |
+| Ablation (sweep) | Switching settings on and off one at a time (or over a grid) to see which actually changes the result; `rag eval-sweep` runs every combination and ranks them. | E04 |
 | Abstention | Saying "I don't know" when the sources don't contain the answer; a correct answer, not a failure. Here it happens without a model call when search finds nothing, and when the model says so or (with `uncited: abstain`) cites nothing. | 33 |
 | Access token | The short-lived (5-minute) token an app shows to an API on every call; it carries who you are, your groups and roles, and when it expires. | 16 |
 | Acknowledgement (XACK) | A worker's "done" signal for a stream message. Until it arrives, the message stays pending for that worker. | 15 |
@@ -37,7 +38,10 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Anchoring (audit log) | Copying the newest hash of a chain (and the events) somewhere the database's administrators can't change, such as an object-locked bucket, so a later rewrite of the chain becomes visible. | 23 |
 | ANN (approximate nearest neighbour) | Finding nearly the closest vectors very fast, instead of exactly the closest by checking every one. | 11 |
 | Annotation (Grafana) | A marker drawn on Grafana graphs at the moment something happened, such as a new prompt version going live, so you can see whether quality or latency changed then. | 24 |
+| Answer correctness | How well an answer agrees with a reference answer a person accepted; here token F1 on content words, 0 if a number differs (`reference:` on a question). | E04 |
+| Answer formatter | A component that shapes a checked answer for its reader after the guards (citation style, JSON, confidence, follow-ups) without adding claims; the `answer_formatters` slot. | E04 |
 | Answer id | The id returned with every answer (the trace id), used to send feedback and to find its audit event and traces. | 33 |
+| Answer relevance | Whether the answer addresses the question that was asked; here the share of the question's content words the answer uses. | E04 |
 | API server (Kubernetes) | The cluster's front desk: every change, from `kubectl` or Argo CD, goes through it and is checked there. | 29 |
 | App of apps | One Argo CD Application (`deploy/argocd/root.yaml`) whose folder holds the other Applications; adding an app is a pull request. | 29 |
 | Append-only | Rows may be added, never changed or removed; enforced here by a trigger that refuses `UPDATE`, `DELETE` and `TRUNCATE`, even for the table's owner. | 23 |
@@ -77,6 +81,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | BM25 | The standard keyword relevance formula: scores rise with how often query words appear in a document (term frequency), how rare they are overall (inverse document frequency) and how short the document is, with diminishing returns for repeats. | 13 |
 | Boilerplate | Text that repeats everywhere and means nothing (running headers, footers, "Page 3 of 9", cookie banners); removed before chunking so it doesn't match every search. | 31 |
 | Bootstrap (temporary) admin | The first Keycloak administrator created at start-up from environment variables (`temp-admin`), only to create a real, MFA-protected admin and then be deleted. | 16 |
+| Bootstrap interval | A range for a mean computed by resampling the questions with replacement many times; if the 95% interval of B − A excludes 0, the difference is unlikely to be luck. | E04 |
 | Borda count | A fusion method that treats each ranked list as a vote: first place gets N points, second N−1, and so on; the points are added up. `fusion: borda`. | E01 |
 | Branch | A separate line of work (a draft) where you change things without touching `main`. | 4 |
 | Branch protection / ruleset | GitHub settings that block direct pushes to `main` and require PRs, checks and signed commits. | 4 |
@@ -111,6 +116,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Chunking strategy | The rule that decides where a document is cut into chunks: every N tokens, by paragraphs then sentences, along headings, by sentence, where the topic changes, or small children inside big parents. | 31 |
 | CI (continuous integration) | Automatically checking every change (lint, types, tests, scans) on a fresh machine, so problems are found before they're merged. | 27 |
 | Ciphertext | The scrambled, encrypted version of a value; unreadable without the right key. | 6 |
+| Citation precision / recall | Of the documents an answer cites, the share that are relevant (precision); of the relevant documents, the share it cites (recall). | E04 |
 | Citation, attribution | Saying which source each claim came from (`[doc n]`), so a person can check it; checked here against the documents the model was actually shown. | 33 |
 | Claim | One field in a token's payload, such as `iss`, `sub`, `groups` or `exp`. | 16 |
 | Clearance | The highest classification (public < internal < confidential < restricted) a person may read, taken from their groups; no known group means no clearance at all. | 18 |
@@ -136,10 +142,12 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Compiler | A program that turns human-written source code into a program the computer can run. | 1 |
 | Component (rag-core) | One implementation of a contract, registered under a kind and a name, e.g. the `memory` vector store or the `gateway` LLM. | 30 |
 | Compose project | The group of containers, networks and volumes one Compose file starts, sharing a name (`name: rag-platform`) that prefixes every container (`rag-platform-litellm-1`). | 9 |
+| Confidence score (answer) | A 0..1 heuristic of how much to trust an answer, from support, citations and coverage; a ranking signal, not a probability (`answer_formatters: [confidence]`). | E04 |
 | ConfigMap | A Kubernetes object holding non-secret configuration, e.g. the OpenBao Agent's config file. | 29 |
 | Configuration as code | Keeping settings (which component fills each slot) in a reviewed, versioned file such as `rag.yaml`, checked by CI like code. | 30 |
 | Conformance test | The same test suite run against every implementation of a contract (rag-core's conformance kit), so any one can replace another; its access checks fail with "LEAK". | 30 |
 | Connected components | The groups of nodes linked by any path; the simplest community detection (one weak link joins two topics into one). | E03 |
+| Connector | Where sources come from (a folder, a bucket, a wiki): lists items with a version and fetches them; the `connector` slot used by `rag sync`. | E04 |
 | Consumer group | A set of workers sharing one stream; each message goes to exactly one worker in the group, and the group remembers what was delivered and acknowledged. | 15 |
 | Container | A running copy of an image: a self-contained "apartment" with a program and everything it needs. | 3 |
 | Container orchestration | Running containers across machines automatically: placing, restarting, scaling and updating them; what Kubernetes does. | 29 |
@@ -150,6 +158,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Context compression | Keeping only the sentences of a chunk that matter for the question, so more sources fit in the budget. | 33 |
 | Context compression | Shortening the retrieved passages for one question before the model reads them: keeping relevant sentences, dropping weak chunks, or having an LLM extract or summarise. The `compressors` slot; savings are in the answer trace. | E02 |
 | Context packing | Choosing which retrieved chunks fit the token budget and in what order, and numbering them as `<doc id="n">` blocks. | 33 |
+| Context precision | Whether the relevant passages are ranked high in what the model was shown: the mean of precision at each position holding a relevant document. | E04 |
 | Context propagation | Passing the trace id from one service to the next (in the `traceparent` HTTP header) so their spans join one trace. | 19 |
 | Context recall | The share of the right documents that actually reached the model; what architectures change, and the first column of `rag eval-answers`. | 35 |
 | Context window | The maximum number of tokens (prompt + answer) a model can handle at once. | 7 |
@@ -168,6 +177,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Cosine similarity | A score for how closely two vectors point the same way: near 1 = very similar meaning, near 0 = unrelated. For unit-length vectors it equals the dot product. | 8 |
 | Counter (metric) | A number that only goes up, such as requests served; dashboards turn it into a rate. | 19 |
 | Cross-encoder | A model (the reranker) that reads the query and one document together and scores their relevance; precise but slow, so only used on a shortlist. | 8 |
+| Cross-lingual retrieval | Finding documents in one language with a question in another, by a multilingual embedder and/or translating the question (`query_transformer: translate`). | E04 |
 | Crypto-shredding | Making data unreadable by destroying a key or a lookup instead of deleting it; reconciles "never delete" with the right to erasure (e.g. deleting the Keycloak account behind an audit `sub`). | 23 |
 | CVE | Common Vulnerabilities and Exposures: a public ID for a known vulnerability (e.g. CVE-2021-44228, Log4Shell), which scanners like pip-audit and Trivy look up. | 27 |
 | CycloneDX / SPDX | The two standard SBOM formats; Syft writes CycloneDX JSON here. SPDX also names the standard licence ids. | 27 |
@@ -267,6 +277,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | FinOps | The practice of making technology spend visible, attributed to teams, and managed against budgets; AI FinOps applies it to model usage. | 10 |
 | Flat (exact) index | No index at all: every vector is compared with the query. Perfect recall, slow on large collections. `index_type: flat`. | E01 |
 | `for` (alert duration) | How long an alert's condition must stay true before it fires (`for: 2m`). Stops a single wobbly reading from paging anyone. | 20 |
+| Footnote citation | Citing sources as `[^1]` markers with a list of sources (and quotes) at the end, instead of inline `[doc 1]`. `{use: citations, style: footnotes}`. | E04 |
 | Formatter | A tool (e.g. `ruff format`) that rewrites code layout into one consistent style without changing what it does. | 5 |
 | Formula | A Homebrew package that is a command-line tool. | 1 |
 | Full-text search / tsvector | Postgres's built-in keyword search: words normalised to stems (a `tsvector`) and indexed with GIN. | 11 |
@@ -309,6 +320,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Histogram buckets | Counts of values below fixed edges; percentiles are estimated from them, so the edges must suit the unit being measured. | 20 |
 | Histogram (metric) | A metric that records a distribution of values (e.g. latencies), from which p50/p95/p99 are computed. | 19 |
 | `histogram_quantile` | The PromQL function that estimates a percentile (e.g. p95) from histogram buckets; it can only be as precise as the bucket edges allow. | 20 |
+| Hit rate@k | 1 if any relevant document is in the top k results, else 0, averaged over questions: "did we find anything useful?". | E04 |
 | HMAC (keyed hash) | A one-way fingerprint of a value made with a secret key. OpenBao's audit log stores HMACs instead of secret values; `sys/audit-hash` computes one so you can search the log for a value you hold. | 28 |
 | HNSW | Hierarchical Navigable Small World: a layered graph index for fast approximate vector search, tuned by `m`, `ef_construction` and `hnsw.ef_search`. | 11 |
 | Homebrew | The standard package manager ("app store for developer tools") on macOS. | 1 |
@@ -327,6 +339,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Immutability (prompt versions) | A released prompt version can never change; a change means a new version, so `name@version` always means the same text. | 24 |
 | Impact analysis | Following lineage downstream to find everything affected by a change, and who owns it (`just cards impact`). | 25 |
 | In-memory key-value store | A database that keeps data in RAM and retrieves it by a key (a name). Extremely fast, but limited by memory; Valkey and Redis are examples. | 15 |
+| Incremental sync | Ingesting only what changed since the last run (by version: modification time and size, or an ETag), updating permissions in place, and deleting what disappeared; `rag sync`. | E04 |
 | Indirect prompt injection | Instructions planted in content the system retrieves (a wiki page, an email), aimed at the model rather than the reader; caught by the context-injection guard. | 34 |
 | Info metric | A metric whose value is always 1 and whose labels carry facts, e.g. `rag_prompt_info{prompt, version, sha, label}`; a Prometheus convention for "what is running". | 24 |
 | Infrastructure as code | Defining your environment in version-controlled files instead of setting it up by hand. | 1 |
@@ -363,6 +376,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Kustomize (base, overlay, component) | Plain Kubernetes YAML plus declared changes: a base, per-environment overlays, and reusable components; built into `kubectl`. | 29 |
 | Kustomize component | A reusable bundle of changes that several overlays include, e.g. `deploy/components/production` ("production-shaped"). | 37 |
 | KV cache | The model's working memory of everything read so far; grows with prompt and answer length and is a big part of memory use. | 7 |
+| KV cache / prompt caching | A model server keeping the internal state of a prompt's beginning so a later request with the same prefix skips recomputing it; hosted APIs bill those tokens at a discount. Saves compute, never changes an answer. | E04 |
 | KV v2 | OpenBao's key/value secrets engine, version 2: stores fixed secrets (here the gateway key and OPA token) with a version history. Data lives under `secret/data/…`, versions under `secret/metadata/…`. | 28 |
 | Label (metric) | A key=value pair that identifies one slice of a metric, e.g. `outcome="error"`, `job="opa"`, `service_version="0.1.0"`. Every distinct label combination is its own time series. | 20 |
 | Label (prompt) | A movable pointer from an environment to a prompt version ("production uses version 1, staging uses version 2"), kept in `prompts/labels.yaml`. | 24 |
@@ -408,6 +422,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Manhattan (L1) distance | The sum of the absolute differences between two vectors, like walking city blocks; reported as 1 / (1 + distance). `metric: l1` (pgvector ≥ 0.7, Qdrant; OpenSearch only exact). | E01 |
 | Manifest (audit archive) | A small file describing one archived batch of audit events: first and last row, head hash, previous head and the segment's checksum. | 23 |
 | Manifest (ingestion) | The record of each ingested source: its content hash, the pipeline hash, how many chunks, the status and when; unchanged sources are skipped. | 31 |
+| MAP (mean average precision) | For each question, the mean of precision at every rank where a relevant document appears (÷ the number that could appear in k), averaged: rewards finding all of them, early. | E04 |
 | Mapping | An OpenSearch index's schema: each field's type (`text`, `keyword`, `knn_vector` …) and analyzer. | 13 |
 | Masking hook | A function in our own process that rewrites every value (tokens, keys, emails → `****`) before it is sent to Langfuse. | 22 |
 | Master key | The gateway's root credential (`LITELLM_MASTER_KEY`); it can do everything, so it is for admins only. | 9 |
@@ -486,6 +501,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Package manager | A program that installs, updates and removes other software and tracks what's installed. | 1 |
 | Packaged profiles / include | The platform's tested `rag.yaml` profiles shipped inside rag-core (`rag_core/profiles/platform.yaml`); a project includes and extends them and writes only what differs. | 38 |
 | PageIndex (reasoning-based retrieval) | Vectorless retrieval in which a model reads a document's table of contents and chooses the sections to read, as a person would, instead of searching by similarity; `pipeline: pageindex` with `toc_store: memory`. | E03 |
+| Paired test | Comparing two systems question by question on the same questions, which removes the differences between questions and finds smaller real effects than comparing averages. | E04 |
 | PAP (Policy Administration Point) | Where the rules are written and changed; here Git and pull requests on `policies/`. | 18 |
 | Parent-child chunking (small-to-big) | Searching small child chunks for precision, then giving the model the larger parent section they belong to. | 31 |
 | Parent / child span | Spans nest: a request's server span is the parent of the steps inside it, which can have children of their own; this nesting draws the waterfall. | 19 |
@@ -500,6 +516,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Pending entry | A stream message delivered to a consumer but not yet acknowledged; if the consumer crashed, another worker can reclaim it (`XAUTOCLAIM`). | 15 |
 | PEP | Python Enhancement Proposal: an official Python standard (e.g. PEP 621 `pyproject.toml`, PEP 735 dependency groups, PEP 668 protected system Pythons). | 2 |
 | PEP (Policy Enforcement Point) | The component that asks for a decision and obeys it, never deciding itself; here rag-api. (Not to be confused with a Python Enhancement Proposal.) | 18 |
+| Permutation test (sign-flip) | A significance test: if A and B were interchangeable, flipping the sign of each per-question difference at random would often give a mean as large as the observed one; the share that do is the p-value. | E04 |
 | Persistence: RDB / AOF | How an in-memory store survives restarts. RDB: periodic snapshots to disk. AOF (append-only file): a log of every write, replayed at start-up; `appendfsync everysec` loses at most about 1 s. | 15 |
 | Persona (evaluation) | A synthetic person (name, groups) an evaluation runs as, so the real access rules apply; never a real person's account. | 26 |
 | pg_dump | Postgres's logical backup tool: writes a database's structure and data to a file that `pg_restore` can load again. | 11 |
@@ -573,6 +590,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Quantization | Storing each of a model's numbers in fewer bits (8-bit, 4-bit): smaller and faster, at the cost of a little accuracy. | 7 |
 | Query decomposition | An LLM splits a compound question ("X and Y?") into simpler sub-questions that are each searched, so each part finds its own document. | 32 |
 | Query instruction | A one-sentence task description prefixed to queries (not documents) for instruction-aware embedders: `Instruct: {task}\nQuery:{query}`. | 8 |
+| Query normalisation | Cleaning a question before search: Unicode, quotes, spacing, punctuation, and misspellings fixed against the corpus vocabulary (`query_transformer: normalize`). | E04 |
 | Query rewriting | Turning the question into a better search query; for a follow-up ("how do I fix it?"), rewriting it as a standalone question using the conversation. | 32 |
 | Query router | A component that sends each question to the right index, profile or retriever (by keywords, or by asking an LLM to pick from descriptions). `retriever: {use: router}`. | E01 |
 | Query transformation | Changing what is searched for before retrieval: expanding acronyms, rewriting, paraphrasing, imagining an answer, splitting or generalising the question. | 32 |
@@ -630,6 +648,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Retrieve-then-rerank | The two-stage search pattern: a fast embedder finds ~50 candidates, then a slow, precise reranker picks the best few for the LLM. | 8 |
 | Retry | Trying the same model again after a temporary error, before any fallback. | 10 |
 | Reverse proxy | A server that sits in front of other servers, receives every request, applies rules and forwards it. | 9 |
+| Review gate | Generated or proposed test questions carry `review: pending` and are left out of every evaluation until a person approves them; `rag eval-review --check` fails while any are pending. | E04 |
 | Review interval | How often a card must be re-read and re-confirmed (e.g. every 90 or 180 days); overdue reviews warn and fail the weekly strict run. | 25 |
 | Review queue | The answer ids online evaluation flags for a person to read (thumbs down, groundedness flags); real problems become new labelled questions. | 37 |
 | Revocation | Making an old secret stop working, e.g. deleting an API token. | 6 |
@@ -654,6 +673,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | RRF (Reciprocal Rank Fusion) | The default way to merge ranked lists: each chunk scores 1/(60 + its rank) in every list it appears in, summed. Uses only positions, so it needs no tuning. | 32 |
 | ruff | Astral's fast all-in-one Python linter and formatter, replacing Black, isort, Flake8 and more. | 5 |
 | Rule (Rego) | A named statement such as `allow if { ... }`, true when every line in its body is true; several rules with the same name mean OR. | 18 |
+| Run file | The JSON record of one evaluated variant (`rag-core-run/1`): every question, answer, context and per-case score; what A/B tests and exporters read. | E04 |
 | Runbook | Step-by-step instructions linked from an alert: what it means, what to check first, likely causes, how to fix, how to close. Every alert here links one under `docs/runbooks/`. | 20 |
 | Runner (hosted, self-hosted) | The machine that runs a CI job: GitHub-hosted (a fresh VM each time) or self-hosted (your own, e.g. the Mac with the models; never for fork code). | 27 |
 | S3 endpoint | The server URL to send S3 requests to (here `http://127.0.0.1:8333`), passed to tools as `--endpoint-url` / `endpoint_url`. | 14 |
@@ -748,6 +768,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Streaming (SSE) | Sending an answer token by token as it is generated, over Server-Sent Events, instead of all at the end. | 9 |
 | STRIDE | A checklist of threat categories: Spoofing, Tampering, Repudiation, Information disclosure, Denial of service, Elevation of privilege. The register adds Safety. | 36 |
 | Structure-aware chunking | Cutting along a document's own structure: never across a heading, tables and code kept whole, each chunk labelled with its heading path. | 31 |
+| Structured answer | An answer returned as a JSON object checked against a schema (answer, citations, confidence, extracted fields) for programs to read. `answer_formatters: [json]`. | E04 |
 | Structured logging | Writing logs as JSON objects instead of free text, so they can be filtered and joined by field. | 19 |
 | Structured metadata (Loki) | Extra per-line key/value facts (such as OTLP attributes) that Loki stores and can search without turning them into labels, so they don't create new streams. | 21 |
 | Supersede | Replace an accepted ADR with a newer ADR that points back to it; the old one is never edited. | 4 |
@@ -756,6 +777,7 @@ The Step column gives the step where the term is first explained (Appendix B of 
 | Sync / prune / self-heal / sync wave | Argo CD's verbs: apply git; delete what git no longer has; undo hand-made changes; order syncs (lower waves first). | 29 |
 | Synchronous replication | A write counts as committed only when a replica also has it, so losing the primary loses no committed write. | 37 |
 | Synonyms (search) | Rules treating different terms as equivalent ("wfh" = "work from home" = "remote work"), best applied at query time with `synonym_graph`. | 13 |
+| Synthetic test set | Questions with reference answers and evidence generated from the corpus (by template or a model) to grow a test set; reviewed before use. `rag eval-generate`. | E04 |
 | System card | A short document about an application built from models and data: purpose, users, human oversight, risk assessment. | 25 |
 | Table lock | A lock on a whole table; `LOCK TABLE … IN EXCLUSIVE MODE` lets only one writer append at a time (so the chain can't fork) while readers carry on. | 23 |
 | Table of contents tree | A document's headings as a tree (document → chapter → section), each node pointing at its text; what `pageindex` navigates. | E03 |
