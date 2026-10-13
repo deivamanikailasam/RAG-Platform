@@ -127,14 +127,15 @@ def _access_params(principal: Principal, collection: int) -> dict[str, Any]:
 
 
 def _row_to_chunk(row: Any) -> Chunk:
-    key, uri, idx, text, embed_text, tokens, parent, meta, cls, groups, tenant = row
+    key, uri, idx, text, embed_text, tokens, parent, meta, cls, groups, tenant, doc_id = row
+    # document_id: Step 11's numeric id, which rag-api's policy check and audit events use
     return Chunk(id=key, document_uri=uri, index=idx, text=text, token_count=tokens,
                 access=Access(cls, tuple(groups), tenant), embed_text=embed_text or "",
-                parent_id=parent, metadata=meta or {})  # fmt: skip
+                parent_id=parent, metadata={**(meta or {}), "document_id": doc_id})  # fmt: skip
 
 
 SELECT_CHUNK = """c.chunk_key, d.source_uri, c.chunk_index, c.content, c.embed_text, c.token_count,
-c.parent_key, c.metadata, d.classification, d.acl_groups, d.tenant"""
+c.parent_key, c.metadata, d.classification, d.acl_groups, d.tenant, d.id"""
 
 
 def _write_rows(conn: Any, collection: int, chunks: Sequence[Chunk],

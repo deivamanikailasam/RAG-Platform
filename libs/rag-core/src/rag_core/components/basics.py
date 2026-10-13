@@ -15,6 +15,7 @@ import re
 import threading
 from collections import Counter, defaultdict
 from collections.abc import Callable, Sequence
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -100,6 +101,7 @@ class GatewayParams(_Strict):
     model: str = "qwen-fast"  # a LiteLLM model alias (Step 9)
     base_url: str = "http://litellm:4000/v1"
     api_key_env: str = "LLM_GATEWAY_KEY"  # the NAME of the variable, never the key
+    api_key_file: str | None = None  # or a file OpenBao Agent writes: /run/bao/rag_api_gateway_key
     timeout: float = 120.0
     max_retries: int = Field(1, ge=0)
 
@@ -142,15 +144,30 @@ class GatewayLLM:
         return str(data["choices"][0]["message"]["content"] or "")
 
 
-def _key_from_env(name: str) -> SecretStr:
-    value = os.environ.get(name, "")
-    return SecretStr(value)
+class FileSecret(SecretStr):
+    """A secret read from a file on EVERY use, so a key rotated by OpenBao Agent (Step 28) is
+    picked up without a restart. Never stored in config, never in an environment variable."""
+
+    def __init__(self, path: str) -> None:
+        super().__init__("")
+        self._path = path
+        self.get_secret_value()  # fail at start-up (missing file), not on the first request
+
+    def get_secret_value(self) -> str:
+        return Path(self._path).read_text().strip()
+
+
+def gateway_key(env: str, file: str | None) -> SecretStr:
+    """The gateway key: from a file when one is configured (containers), else an env var (dev)."""
+    return FileSecret(file) if file else SecretStr(os.environ.get(env, ""))
 
 
 @register("llm", "gateway", params=GatewayParams, status="mocked",
           summary="any model behind the LiteLLM gateway (OpenAI-compatible chat completions)")  # fmt: skip
 def _gateway(p: GatewayParams, c: Container) -> GatewayLLM:
-    return GatewayLLM(p.model, p.base_url, _key_from_env(p.api_key_env), p.timeout, p.max_retries)
+    return GatewayLLM(
+        p.model, p.base_url, gateway_key(p.api_key_env, p.api_key_file), p.timeout, p.max_retries
+    )
 
 
 class ScriptedParams(_Strict):

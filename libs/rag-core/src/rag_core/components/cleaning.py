@@ -13,6 +13,7 @@ import re
 import unicodedata
 from collections import Counter
 from dataclasses import replace
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -162,6 +163,8 @@ class RegexPiiParams(_Strict):
     # pseudonymise: a keyed hash, so the same email always becomes the same token (joins still work)
     # but nobody without the key can reverse it. The key comes from an env var (OpenBao, Step 28).
     key_env: str = "RAG_PII_HMAC_KEY"
+    # Step 32: or a file OpenBao Agent writes (/run/bao/pii_hmac_key); the file wins when both are set
+    key_file: str | None = None
 
 
 class RegexPiiRedactor:
@@ -179,7 +182,7 @@ class RegexPiiRedactor:
         self.strategy = strategy
         self._key = key
         if strategy == "pseudonymise" and not key:
-            raise ValueError("pseudonymise needs a key (set the key_env variable)")
+            raise ValueError("pseudonymise needs a key (set key_file or the key_env variable)")
 
     def _replace(self, kind: str, value: str) -> str:
         if self.strategy == "remove":
@@ -207,7 +210,11 @@ class RegexPiiRedactor:
 @register("pii", "regex", params=RegexPiiParams,
             summary="emails, cards, AU TFN/ABN, IBAN, phones, IPs with checksums; mask, pseudonymise or remove")  # fmt: skip
 def _regex_pii(p: RegexPiiParams, c: Container) -> RegexPiiRedactor:
-    key = os.environ.get(p.key_env, "").encode()
+    key = (
+        Path(p.key_file).read_text().strip().encode()
+        if p.key_file
+        else os.environ.get(p.key_env, "").encode()
+    )
     return RegexPiiRedactor(p.kinds, p.strategy, key)
 
 

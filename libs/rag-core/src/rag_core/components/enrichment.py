@@ -8,16 +8,17 @@ is shown and cited, never changes. A chunk saying "It is 18 weeks." embeds far b
 from __future__ import annotations
 
 import hashlib
-import os
 import threading
 from collections import OrderedDict
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import replace
+from pathlib import Path
 from typing import Any
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
+from rag_core.components.basics import gateway_key
 from rag_core.registry import Container, register, spec
 from rag_core.types import Chunk, Document
 
@@ -148,12 +149,18 @@ class GatewayEmbedderParams(_Strict):
     dimensions: int = Field(1024, ge=16)
     base_url: str = "http://litellm:4000/v1"
     api_key_env: str = "LLM_GATEWAY_KEY"
+    api_key_file: str | None = None  # /run/bao/rag_api_gateway_key in containers (Step 32)
     batch_size: int = Field(32, ge=1, le=2048)
     # Asymmetric models embed questions differently from documents (Step 8). Step 24's registered
     # prompt "query-instruction" holds the production value; this is the fallback.
     query_instruction: str = (
         "Instruct: Given a question, retrieve passages that answer it\nQuery: {query}"
     )
+    # Or take it from the prompt registry (Step 24), so search and ingestion use the reviewed,
+    # versioned instruction that rag-api records in its audit events.
+    query_prompt: str | None = None  # e.g. "query-instruction"
+    prompts_dir: str = "prompts"
+    prompt_label: str = "production"  # staging sets RAG__EMBEDDER__INNER__PROMPT_LABEL=staging
     timeout: float = 120.0
 
 
@@ -169,6 +176,19 @@ class GatewayEmbedder:
         self._http = client or httpx.Client(
             base_url=p.base_url.rstrip("/") + "/", timeout=p.timeout
         )
+        self.prompt_refs: list[str] = []  # which registered prompt versions shape the vectors
+        self._render: Callable[[str], str] | None = None
+        if p.query_prompt:
+            from rag_common.prompts import PromptError, Registry, render
+
+            try:
+                version, sha = Registry.load(Path(p.prompts_dir)).get(
+                    p.query_prompt, label=p.prompt_label
+                )
+            except PromptError as e:
+                raise ValueError(str(e)) from e  # reported as "could not start" with the slot name
+            self._render = lambda q: render(version, sha, {"query": q}).text or ""
+            self.prompt_refs = [version.ref]
 
     def _embed(self, texts: Sequence[str]) -> list[list[float]]:
         out: list[list[float]] = []
@@ -192,13 +212,16 @@ class GatewayEmbedder:
         return self._embed(texts)
 
     def embed_query(self, text: str) -> list[float]:
-        return self._embed([self.p.query_instruction.format(query=text)])[0]
+        if self._render is not None:
+            return self._embed([self._render(text)])[0]
+        # plain substitution, not str.format: a question containing { or } must not break it
+        return self._embed([self.p.query_instruction.replace("{query}", text)])[0]
 
 
 @register("embedder", "gateway", params=GatewayEmbedderParams, status="mocked",
             summary="any embedding model behind the LiteLLM gateway, batched, dimension-checked")  # fmt: skip
 def _gw_embedder(p: GatewayEmbedderParams, c: Container) -> GatewayEmbedder:
-    return GatewayEmbedder(p, SecretStr(os.environ.get(p.api_key_env, "")))
+    return GatewayEmbedder(p, gateway_key(p.api_key_env, p.api_key_file))
 
 
 class CachedParams(_Strict):
