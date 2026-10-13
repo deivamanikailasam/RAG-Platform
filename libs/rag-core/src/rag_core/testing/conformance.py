@@ -14,7 +14,7 @@ import math
 from collections.abc import Callable
 from typing import Any
 
-from rag_core.types import Access, Chunk, Principal
+from rag_core.types import Access, Chunk, Principal, ScoredChunk
 
 ALICE = Principal("alice", groups=("hr",), classifications=("public", "internal", "confidential"))
 BOB = Principal("bob", groups=("eng",), classifications=("public", "internal"))
@@ -105,6 +105,32 @@ def check_keyword_index(make: Callable[[], Any]) -> None:
     _check_access(lambda p, k, f=None: index.search("leave salary office deployments", p, k, f))
     assert index.delete_document("doc://leave") == 2
     assert not index.search("parental", ALICE, 3)
+
+
+def check_reranker(reranker: Any) -> None:
+    """A reranker (Step 32) re-orders the candidates it is given: it never invents, duplicates or
+    drops-and-replaces chunks, returns at most k, best first, and records its score per hit."""
+    chunks = sample_chunks()
+    # retrieval order on purpose NOT the right one: the parental leave chunk is second
+    candidates = [
+        ScoredChunk(c, 1.0 - i / 10, {"fusion": 1.0 - i / 10}) for i, c in enumerate(chunks)
+    ]
+    out = reranker.rerank("parental leave weeks", candidates, 3)
+    assert 0 < len(out) <= 3, f"expected 1-3 results for k=3, got {len(out)}"
+    ids = [h.chunk.id for h in out]
+    assert len(ids) == len(set(ids)), "a reranker must not return the same chunk twice"
+    assert set(ids) <= {c.id for c in chunks}, "a reranker must only return chunks it was given"
+    assert [h.score for h in out] == sorted((h.score for h in out), reverse=True), (
+        "results must be best first"
+    )
+    assert all("rerank" in h.scores or "rerank_skipped" in h.scores for h in out), (
+        "every hit must record the reranker's score (or that it was skipped)"
+    )
+    assert all("fusion" in h.scores for h in out), "earlier scores must be kept for explanations"
+    assert out[0].chunk.text.startswith("Parental leave"), (
+        f"the best passage should be the parental leave one, got {out[0].chunk.text!r}"
+    )
+    assert reranker.rerank("parental leave weeks", [], 3) == [], "no candidates: no results"
 
 
 def _check_access(search: Callable[..., list[Any]]) -> None:

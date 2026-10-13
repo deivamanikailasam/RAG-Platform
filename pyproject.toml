@@ -99,6 +99,12 @@ module = ["tokenizers", "tokenizers.*"]   # rag-core's optional extra (Step 30):
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+# Step 32: the in-process cross-encoder reranker (status "reference"; `uv add sentence-transformers`
+# in a project that wants it: not locked here, it would pull PyTorch into every install)
+module = ["sentence_transformers", "sentence_transformers.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 # Step 31: the heavy, optional parsers and PII engine (status "reference": not installed by default),
 # and reportlab, which writes the test PDFs and ships no type hints
 module = ["docling", "docling.*", "presidio_analyzer", "presidio_anonymizer", "reportlab", "reportlab.*"]
