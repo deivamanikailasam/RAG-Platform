@@ -100,6 +100,15 @@ class QdrantStore:
         self._call("POST", "/points/delete?wait=true", {"filter": flt})
         return n
 
+    def update_access(self, document_uri: str, access: Access) -> int:
+        """Overwrite the access fields in every point of this document's payload (no re-embedding)."""
+        self._ensure()
+        flt = {"must": [{"key": "source_uri", "match": {"value": document_uri}}]}
+        n = int(self._call("POST", "/points/count", {"filter": flt, "exact": True})["count"])
+        self._call("POST", "/points/payload?wait=true", {"filter": flt, "payload": {
+            "tenant_id": access.tenant, "classification": access.classification, "acl_groups": list(access.groups)}})  # fmt: skip
+        return n
+
     @staticmethod
     def access_filter(
         principal: Principal, filters: dict[str, object] | None = None

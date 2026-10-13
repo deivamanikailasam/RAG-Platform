@@ -26,6 +26,8 @@ dsn = f"postgresql://rag_readonly:{os.environ['RAG_DB_READONLY_PASSWORD']}@127.0
 
 points = []
 with psycopg.connect(dsn) as conn:
+    # Step 36: row-level security. A maintenance script works across tenants ('*', whole session)
+    conn.execute("SELECT set_config('rag.tenant', '*', false)")
     register_vector(conn)
     rows = conn.execute("""
         SELECT c.id, c.embedding, c.content, d.id, d.title, d.source_uri, d.acl_groups, d.classification

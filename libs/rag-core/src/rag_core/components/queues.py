@@ -188,6 +188,10 @@ class ManifestEntry:
     status: str
     detail: str = ""
     updated_at: float = field(default_factory=time.time)
+    # Step 36: what the source was ingested WITH, so retention, erasure and a re-index can rebuild
+    # it from the original without asking the source system again
+    access: dict[str, Any] = field(default_factory=dict)  # classification, groups, tenant
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class MemoryManifest:

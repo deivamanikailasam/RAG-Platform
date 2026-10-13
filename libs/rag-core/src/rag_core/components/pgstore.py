@@ -94,6 +94,12 @@ class PgConnection:
 _conns: dict[str, PgConnection] = {}
 
 
+def _tenant(conn: Any, tenant: str) -> None:
+    """Row-level security (Step 36 migration): the database only shows rows of this tenant ('*' for
+    ingestion and maintenance, which work across tenants). Local to the current transaction."""
+    conn.execute("SELECT set_config('rag.tenant', %s, true)", (tenant,))
+
+
 def _shared(p: PgParams) -> PgConnection:
     """Vector store and keyword index on the same database share one pool."""
     key = p.model_dump_json()
@@ -193,6 +199,18 @@ def _delete(conn: Any, collection: int, uri: str) -> int:
     return int(row[0]) if row else 0
 
 
+def _update_access(db: PgConnection, document_uri: str, access: Access) -> int:
+    """New permissions on the document row: every chunk follows at once (they join to it)."""
+    with db.pool.connection() as conn, conn.transaction():
+        _tenant(conn, "*")
+        row = conn.execute("""WITH d AS (UPDATE rag.documents SET classification = %s, acl_groups = %s, tenant = %s,
+                                updated_at = now() WHERE collection_id = %s AND source_uri = %s RETURNING id)
+                                SELECT count(*) FROM rag.chunks WHERE document_id IN (SELECT id FROM d)""",
+                            (access.classification, list(access.groups), access.tenant, db.collection_id(conn),
+                             document_uri)).fetchone()  # fmt: skip
+    return int(row[0]) if row else 0
+
+
 class PgVectorStore:
     """pgvector HNSW search joined with the documents' access columns, in one SQL statement:
     a chunk the person may not see is never even returned by the database."""
@@ -208,6 +226,7 @@ class PgVectorStore:
                 f"vectors must have {self.p.dimensions} dimensions (the collection's contract)"
             )
         with self.db.pool.connection() as conn, conn.transaction():
+            _tenant(conn, "*")  # ingestion writes for every tenant
             _write_rows(
                 conn,
                 self.db.collection_id(conn),
@@ -219,13 +238,18 @@ class PgVectorStore:
 
     def delete_document(self, document_uri: str) -> int:
         with self.db.pool.connection() as conn, conn.transaction():
+            _tenant(conn, "*")
             return _delete(conn, self.db.collection_id(conn), document_uri)
+
+    def update_access(self, document_uri: str, access: Access) -> int:
+        return _update_access(self.db, document_uri, access)
 
     def search(self, vector: Sequence[float], principal: Principal, k: int,
                 filters: dict[str, object] | None = None) -> list[ScoredChunk]:  # fmt: skip
         vt, ops = self.p.vector_type, "<=>"
         with self.db.pool.connection() as conn, conn.transaction():
             conn.execute(f"SET LOCAL hnsw.ef_search = {int(self.p.ef_search)}")
+            _tenant(conn, principal.tenant)  # the database itself shows only this tenant's rows
             params = _access_params(principal, self.db.collection_id(conn))
             params |= {"q": "[" + ",".join(f"{x:.7g}" for x in vector) + "]", "k": k}
             sql = f"""SELECT {SELECT_CHUNK}, 1 - (c.embedding {ops} %(q)s::{vt}) AS score
@@ -238,7 +262,8 @@ class PgVectorStore:
         ]
 
     def count(self) -> int:
-        with self.db.pool.connection() as conn:
+        with self.db.pool.connection() as conn, conn.transaction():
+            _tenant(conn, "*")
             row = conn.execute("""SELECT count(*) FROM rag.chunks c JOIN rag.documents d ON d.id = c.document_id
                             WHERE d.collection_id = %s AND c.embedding IS NOT NULL""",
                             (self.db.collection_id(conn),)).fetchone()  # fmt: skip
@@ -260,6 +285,7 @@ class PgFullTextIndex:
 
     def index(self, chunks: Sequence[Chunk]) -> None:
         with self.db.pool.connection() as conn, conn.transaction():
+            _tenant(conn, "*")  # ingestion writes for every tenant
             _write_rows(
                 conn,
                 self.db.collection_id(conn),
@@ -271,11 +297,16 @@ class PgFullTextIndex:
 
     def delete_document(self, document_uri: str) -> int:
         with self.db.pool.connection() as conn, conn.transaction():
+            _tenant(conn, "*")
             return _delete(conn, self.db.collection_id(conn), document_uri)
+
+    def update_access(self, document_uri: str, access: Access) -> int:
+        return _update_access(self.db, document_uri, access)
 
     def search(self, text: str, principal: Principal, k: int,
                 filters: dict[str, object] | None = None) -> list[ScoredChunk]:  # fmt: skip
-        with self.db.pool.connection() as conn:
+        with self.db.pool.connection() as conn, conn.transaction():
+            _tenant(conn, principal.tenant)  # the database itself shows only this tenant's rows
             params = _access_params(principal, self.db.collection_id(conn)) | {
                 "q": text,
                 "k": k,
@@ -288,6 +319,22 @@ class PgFullTextIndex:
                         SELECT {SELECT_CHUNK}, ts_rank_cd(c.content_tsv, q.tsq) AS score
                         FROM rag.chunks c JOIN rag.documents d ON d.id = c.document_id, q
                         WHERE c.content_tsv @@ q.tsq AND {ACCESS_SQL}{_filters_sql(filters, params)}
+                        ORDER BY score DESC LIMIT %(k)s"""
+            rows = conn.execute(sql, params).fetchall()
+        return [
+            ScoredChunk(_row_to_chunk(r[:-1]), float(r[-1]), {"sparse": float(r[-1])}) for r in rows
+        ]
+
+    def search_all(self, text: str, k: int) -> list[ScoredChunk]:
+        """Every tenant and group: for the erasure job only (Step 36), never for people."""
+        with self.db.pool.connection() as conn, conn.transaction():
+            _tenant(conn, "*")
+            params = {"collection": self.db.collection_id(conn), "q": text, "k": k,
+                      "cfg": self.p.text_search_config}  # fmt: skip
+            sql = f"""SELECT {SELECT_CHUNK}, ts_rank_cd(c.content_tsv, q.tsq) AS score
+                        FROM rag.chunks c JOIN rag.documents d ON d.id = c.document_id,
+                        websearch_to_tsquery(%(cfg)s::regconfig, %(q)s) q(tsq)
+                        WHERE c.content_tsv @@ q.tsq AND d.deleted_at IS NULL AND d.collection_id = %(collection)s
                         ORDER BY score DESC LIMIT %(k)s"""
             rows = conn.execute(sql, params).fetchall()
         return [
@@ -308,7 +355,8 @@ class PgManifest:
     def __init__(self, p: PgParams) -> None:
         self.p, self.db = p, _shared(p)
 
-    _COLS = "source_uri, content_sha256, pipeline_hash, chunk_count, status, detail, extract(epoch FROM updated_at)"
+    _COLS = ("source_uri, content_sha256, pipeline_hash, chunk_count, status, detail, extract(epoch FROM updated_at), "
+             "access, source_metadata")  # fmt: skip
 
     def get(self, uri: str) -> ManifestEntry | None:
         with self.db.pool.connection() as conn:
@@ -318,13 +366,17 @@ class PgManifest:
 
     def put(self, e: ManifestEntry) -> None:
         with self.db.pool.connection() as conn:
+            # updated_at comes from the entry: an access change (Step 36) keeps the ingestion time,
+            # which is what retention measures from
             conn.execute("""INSERT INTO rag.ingest_manifest (collection, source_uri, content_sha256, pipeline_hash,
-                            chunk_count, status, detail) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                            chunk_count, status, detail, updated_at, access, source_metadata)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, to_timestamp(%s), %s::jsonb, %s::jsonb)
                             ON CONFLICT (collection, source_uri) DO UPDATE SET content_sha256 = EXCLUDED.content_sha256,
                             pipeline_hash = EXCLUDED.pipeline_hash, chunk_count = EXCLUDED.chunk_count,
-                            status = EXCLUDED.status, detail = EXCLUDED.detail, updated_at = now()""",
+                            status = EXCLUDED.status, detail = EXCLUDED.detail, updated_at = EXCLUDED.updated_at,
+                            access = EXCLUDED.access, source_metadata = EXCLUDED.source_metadata""",
                         (self.p.collection, e.source_uri, e.content_sha256, e.pipeline_hash, e.chunk_count, e.status,
-                            e.detail))  # fmt: skip
+                            e.detail, e.updated_at, json.dumps(e.access), json.dumps(e.metadata, default=str)))  # fmt: skip
 
     def delete(self, uri: str) -> None:
         with self.db.pool.connection() as conn:
@@ -342,7 +394,8 @@ class PgManifest:
 
 def _entry(r: Any) -> ManifestEntry:
     return ManifestEntry(source_uri=r[0], content_sha256=r[1], pipeline_hash=r[2], chunk_count=int(r[3]),
-                        status=r[4], detail=r[5], updated_at=float(r[6]))  # fmt: skip
+                        status=r[4], detail=r[5], updated_at=float(r[6]), access=dict(r[7] or {}),
+                        metadata=dict(r[8] or {}))  # fmt: skip
 
 
 @register("manifest", "postgres", params=PgParams, requires=("postgres",),

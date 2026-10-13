@@ -144,3 +144,28 @@ def _check_access(search: Callable[..., list[Any]]) -> None:
     assert search(OTHER_TENANT, 10) == [], "LEAK: a chunk crossed tenants"
     only = search(ALICE, 10, {"doc": "doc://handbook"})
     assert {h.chunk.document_uri for h in only} <= {"doc://handbook"}, "metadata filter ignored"
+
+
+def check_access_update(make: Callable[[], Any], embedder: Any = None) -> None:
+    """Permissions change at the source: after update_access the store answers with the NEW
+    access, for vector stores (embedder given) and keyword indexes alike. Revocation is immediate."""
+    store, chunks = make(), sample_chunks()
+    if embedder is not None:
+        store.upsert(chunks, embedder.embed_documents([c.text for c in chunks]))
+
+        def find(who: Principal, text: str) -> set[str]:
+            return {h.chunk.document_uri for h in store.search(embedder.embed_query(text), who, 10)}
+    else:
+        store.index(chunks)
+
+        def find(who: Principal, text: str) -> set[str]:
+            return {h.chunk.document_uri for h in store.search(text, who, 10)}
+
+    assert "doc://salary" not in find(BOB, "salary bands engineers")
+    assert store.update_access("doc://salary", Access("internal", ("eng",))) == 1
+    assert "doc://salary" in find(BOB, "salary bands engineers"), "grant not applied"
+    assert "doc://salary" not in find(ALICE, "salary bands engineers"), "old access still applies"
+    assert store.update_access("doc://leave", Access("restricted", ("executives",))) == 2
+    assert "doc://leave" not in find(ALICE, "annual leave parental leave"), (
+        "LEAK: revocation not applied"
+    )

@@ -16,6 +16,7 @@ import re
 import threading
 from collections import Counter, defaultdict
 from collections.abc import Callable, Iterator, Sequence
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -23,7 +24,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 from rag_core.registry import Container, register
-from rag_core.types import Chunk, Principal, ScoredChunk
+from rag_core.types import Access, Chunk, Principal, ScoredChunk
 
 WORD = re.compile(r"[\w]+(?:['\u2019][\w]+)?", re.UNICODE)  # keeps "don't" whole
 
@@ -334,6 +335,15 @@ class MemoryVectorStore:
                 for s in [cosine(vector, v)]]  # fmt: skip
         return sorted(hits, key=lambda h: -h.score)[:k]
 
+    def update_access(self, document_uri: str, access: Access) -> int:
+        """Step 36: new permissions on every chunk of the document, in place (no re-embedding)."""
+        with self._lock:
+            ids = [i for i, (ch, _) in self._rows.items() if ch.document_uri == document_uri]
+            for i in ids:
+                ch, v = self._rows[i]
+                self._rows[i] = (replace(ch, access=access), v)
+        return len(ids)
+
     def count(self) -> int:
         return len(self._rows)
 
@@ -385,14 +395,32 @@ class MemoryKeywordIndex:
                 self._remove(i)
         return len(ids)
 
+    def update_access(self, document_uri: str, access: Access) -> int:
+        """Step 36: new permissions on every chunk of the document, in place (no re-indexing)."""
+        with self._lock:
+            ids = [i for i, (ch, _, _) in self._docs.items() if ch.document_uri == document_uri]
+            for i in ids:
+                ch, tf, length = self._docs[i]
+                self._docs[i] = (replace(ch, access=access), tf, length)
+        return len(ids)
+
+    def search_all(self, text: str, k: int) -> list[ScoredChunk]:
+        """Every tenant and group: for the erasure job only (Step 36), never for people."""
+        return self._rank(text, k, lambda ch: True)
+
     def search(self, text: str, principal: Principal, k: int,
                filters: dict[str, object] | None = None) -> list[ScoredChunk]:  # fmt: skip
+        return self._rank(
+            text, k, lambda ch: ch.access.allows(principal) and matches_filters(ch, filters)
+        )
+
+    def _rank(self, text: str, k: int, visible: Callable[[Chunk], bool]) -> list[ScoredChunk]:
         n = len(self._docs) or 1
         avg = sum(length for _, _, length in self._docs.values()) / n
         terms = set(words(text))
         hits = []
         for ch, tf, length in list(self._docs.values()):
-            if not (ch.access.allows(principal) and matches_filters(ch, filters)):
+            if not visible(ch):
                 continue
             score = 0.0
             for t in terms:

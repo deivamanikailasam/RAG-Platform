@@ -109,6 +109,21 @@ class _OpenSearch:
                         params={"refresh": "true"})  # fmt: skip
         return int(res.get("deleted", 0))
 
+    def update_access(self, document_uri: str, access: Access) -> int:
+        """Rewrite the access fields of this document's chunks in place (painless script, parameters)."""
+        script = {"lang": "painless", "params": {"t": access.tenant, "c": access.classification, "g": list(access.groups)},
+                  "source": "ctx._source.tenant_id = params.t; ctx._source.classification = params.c; "
+                            "ctx._source.acl_groups = params.g"}  # fmt: skip
+        res = self._req("POST", f"/{self.p.index}/_update_by_query", {"query": {"term": {"source_uri": document_uri}},
+                        "script": script}, params={"refresh": "true", "conflicts": "proceed"})  # fmt: skip
+        return int(res.get("updated", 0))
+
+    def search_all(self, text: str, k: int) -> list[ScoredChunk]:
+        """Every tenant and group: for the erasure job only (Step 36), never for people."""
+        body = {"size": k, "_source": {"excludes": [self.p.vector_field]},
+                "query": {"multi_match": {"query": text, "fields": ["text", "embed_text", "title"]}}}  # fmt: skip
+        return self._hits(self._req("POST", f"/{self.p.index}/_search", body), "sparse")
+
     @staticmethod
     def _hits(res: dict[str, Any], stage: str) -> list[ScoredChunk]:
         out = []

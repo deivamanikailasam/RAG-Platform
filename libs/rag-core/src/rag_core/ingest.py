@@ -11,7 +11,7 @@ import hashlib
 import json
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any, Literal
 
@@ -182,6 +182,35 @@ class IngestionPipeline:
         self.on_event({"event": "rag.ingest", "uri": uri, "status": "deleted", "chunks": n})
         return result
 
+    def update_access(self, uri: str, access: Access) -> int:
+        """Permissions changed at the source (Step 36): every store, the graph and the manifest get
+        the new access now, without re-parsing or re-embedding. Revocation shouldn't wait."""
+        n = 0
+        for store in (self.vectors, self.keywords):
+            if store is not None:
+                if not hasattr(store, "update_access"):
+                    raise NotImplementedError(
+                        f"{type(store).__name__} can't change access in place: re-ingest instead"
+                    )
+                n = max(n, store.update_access(uri, access))
+        if self.graph is not None:
+            for cid, ch in list(self.graph.chunks.items()):
+                if ch.document_uri == uri:
+                    self.graph.chunks[cid] = replace(ch, access=access)
+        if self.manifest is not None and (entry := self.manifest.get(uri)) is not None:
+            self.manifest.put(replace(entry, access=_access_dict(access)))
+        if self.cache is not None:
+            self.cache.invalidate()  # cached answers may rest on what was just revoked
+        self.on_event(
+            {
+                "event": "rag.access",
+                "uri": uri,
+                "chunks": n,
+                "classification": access.classification,
+            }
+        )
+        return n
+
     def _done(self, source: Source, result: IngestResult, start: float) -> IngestResult:
         result = replace(result, seconds=round(time.monotonic() - start, 3))
         if self.cache is not None and result.status == "indexed":
@@ -195,11 +224,19 @@ class IngestionPipeline:
                     result.chunks,
                     result.status,
                     result.detail,
+                    # Step 36: the access and metadata it was ingested with (re-index, retention)
+                    access=_access_dict(source.access),
+                    metadata=dict(source.metadata),
                 )
             )
         self.on_event({"event": "rag.ingest", "uri": source.uri, "status": result.status, "chunks": result.chunks,
                         "sha256": source.sha256, "pipeline": self.hash, "pii": list(result.pii), "detail": result.detail})  # fmt: skip
         return result
+
+
+def _access_dict(access: Access) -> dict[str, Any]:
+    """Access as the manifest stores it (JSON: groups as a list)."""
+    return asdict(access) | {"groups": list(access.groups)}
 
 
 class Worker:

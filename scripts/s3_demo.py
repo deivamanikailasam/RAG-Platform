@@ -90,6 +90,8 @@ except ClientError as e:
 # 5) Lineage: record exactly which file version the Postgres document came from
 dsn = f"postgresql://rag_app:{os.environ['RAG_DB_APP_PASSWORD']}@127.0.0.1:5432/rag"
 with psycopg.connect(dsn) as conn:
+    # Step 36: row-level security. A maintenance script works across tenants ('*', whole session)
+    conn.execute("SELECT set_config('rag.tenant', '*', false)")
     stored = ingest.get_object(Bucket="rag-raw-docs", Key=key, VersionId=latest["VersionId"])
     lineage = {
         "s3_bucket": "rag-raw-docs",

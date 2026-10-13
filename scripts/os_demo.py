@@ -61,6 +61,8 @@ app_dsn = f"postgresql://rag_app:{os.environ['RAG_DB_APP_PASSWORD']}@127.0.0.1:5
 
 # 1) source of truth first: insert new docs into Postgres (idempotent by source_uri)
 with psycopg.connect(app_dsn) as conn:
+    # Step 36: row-level security. A maintenance script works across tenants ('*', whole session)
+    conn.execute("SELECT set_config('rag.tenant', '*', false)")
     register_vector(conn)
     coll = first(conn.execute("SELECT id FROM rag.collections WHERE name = 'demo'").fetchone())
     for title, text, acl, cls in NEW_DOCS:

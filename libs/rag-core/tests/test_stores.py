@@ -32,13 +32,15 @@ from rag_core.components.qdrant import QdrantParams, QdrantStore
 from rag_core.testing.conformance import (
     ALICE,
     BOB,
+    check_access_update,
     check_keyword_index,
     check_vector_store,
     sample_chunks,
 )
+from rag_core.testing.postgres import apply_migrations
 
 ROOT = Path(__file__).resolve().parents[3]
-MIGRATIONS = sorted((ROOT / "infra/db/rag/migrations").glob("*.sql"))
+MIGRATIONS_DIR = ROOT / "infra/db/rag/migrations"
 DIMS = 64
 
 
@@ -57,24 +59,8 @@ def pg_dsn() -> str:
         conn.execute("DROP DATABASE IF EXISTS rag_core_test WITH (FORCE)")
         conn.execute("CREATE DATABASE rag_core_test")
     dsn = make_conninfo(admin, dbname="rag_core_test")
-    with psycopg.connect(dsn, autocommit=True) as conn:
-        conn.execute("CREATE EXTENSION vector")
-        conn.execute("CREATE SCHEMA rag")
-        version = conn.execute(
-            "SELECT extversion FROM pg_extension WHERE extname = 'vector'"
-        ).fetchone()[0]  # type: ignore[index]
-        for f in MIGRATIONS:  # the REAL migrations: Step 11's tables, then Step 31's changes
-            up = f.read_text().split("-- migrate:down")[0]
-            if tuple(int(x) for x in version.split(".")[:2]) < (
-                0,
-                7,
-            ):  # halfvec arrived in pgvector 0.7
-                up = up.replace("halfvec_cosine_ops", "vector_cosine_ops").replace(
-                    "halfvec(1024)", f"vector({DIMS})"
-                )
-            else:
-                up = up.replace("halfvec(1024)", f"halfvec({DIMS})")
-            conn.execute(up)
+    # the REAL migrations: Step 11's tables, then Step 31's and Step 36's changes
+    apply_migrations(dsn, DIMS, MIGRATIONS_DIR)
     return dsn
 
 
@@ -100,6 +86,15 @@ def test_pgvector_conforms(pg_dsn: str) -> None:
 def test_postgres_fts_conforms(pg_dsn: str) -> None:
     n = iter(range(100))
     check_keyword_index(lambda: PgFullTextIndex(pg_params(pg_dsn, f"fts-{next(n)}")))
+
+
+def test_postgres_stores_change_access_in_place(pg_dsn: str) -> None:
+    """Step 36: access changes on the document row reach every chunk, vector and keyword alike."""
+    n = iter(range(100))
+    check_access_update(
+        lambda: PgVectorStore(pg_params(pg_dsn, f"reacl-vec-{next(n)}")), HashingEmbedder(DIMS)
+    )
+    check_access_update(lambda: PgFullTextIndex(pg_params(pg_dsn, f"reacl-fts-{next(n)}")))
 
 
 def test_postgres_vector_and_keyword_share_rows(pg_dsn: str) -> None:
@@ -174,6 +169,12 @@ def qdrant_store(url: str, collection: str) -> QdrantStore:
 def test_qdrant_conforms(qdrant_url: str) -> None:
     n = iter(range(100))
     check_vector_store(lambda: qdrant_store(qdrant_url, f"conf_{next(n)}"), HashingEmbedder(DIMS))
+
+
+def test_qdrant_changes_access_in_place(qdrant_url: str) -> None:
+    """Step 36: the payload's access fields are overwritten without re-embedding."""
+    n = iter(range(100))
+    check_access_update(lambda: qdrant_store(qdrant_url, f"reacl_{next(n)}"), HashingEmbedder(DIMS))
 
 
 def test_qdrant_needs_its_key(qdrant_url: str) -> None:

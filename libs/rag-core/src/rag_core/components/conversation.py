@@ -74,6 +74,23 @@ class InMemoryMemory:
         with self._lock:
             self._data.pop(session_key(principal, session_id), None)
 
+    def _keys_of(self, principal: Principal) -> list[str]:
+        prefix = session_key(principal, "")  # "tenant:subject:" - every session of this person
+        return [k for k in self._data if k.startswith(prefix)]
+
+    def count_subject(self, principal: Principal) -> int:
+        """Step 36 (erasure): how many conversations this person has."""
+        with self._lock:
+            return len(self._keys_of(principal))
+
+    def forget_subject(self, principal: Principal) -> int:
+        """Step 36 (erasure): delete every conversation of this person, and only theirs."""
+        with self._lock:
+            keys = self._keys_of(principal)
+            for k in keys:
+                del self._data[k]
+            return len(keys)
+
 
 @register(
     "memory",
@@ -109,10 +126,27 @@ class ValkeyMemory:
         self.p = p
         self.r = client or _valkey(p.url_env, p.url_file)
 
+    def _person(self, principal: Principal) -> str:
+        return hashlib.sha256(f"{principal.tenant}:{principal.subject}".encode()).hexdigest()[:24]
+
     def _key(self, principal: Principal, session_id: str) -> str:
-        return (
-            self.p.prefix + hashlib.sha256(session_key(principal, session_id).encode()).hexdigest()
+        # person first, so erasure can find every session of one person (Step 36); both hashed,
+        # so the keys say nothing about who or what
+        return f"{self.p.prefix}{self._person(principal)}:{hashlib.sha256(session_id.encode()).hexdigest()[:24]}"
+
+    def _keys_of(self, principal: Principal) -> list[str]:
+        return list(
+            self.r.scan_iter(match=f"{self.p.prefix}{self._person(principal)}:*", count=500)
         )
+
+    def count_subject(self, principal: Principal) -> int:
+        return len(self._keys_of(principal))
+
+    def forget_subject(self, principal: Principal) -> int:
+        keys = self._keys_of(principal)
+        if keys:
+            self.r.delete(*keys)
+        return len(keys)
 
     def history(self, principal: Principal, session_id: str) -> tuple[Turn, ...]:
         raw = self.r.lrange(self._key(principal, session_id), 0, -1)

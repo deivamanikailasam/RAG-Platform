@@ -65,6 +65,8 @@ def returned_id(cur: psycopg.Cursor[tuple[int]]) -> int:
 
 
 with psycopg.connect(dsn, autocommit=False) as conn:
+    # Step 36: row-level security. A maintenance script works across tenants ('*', whole session)
+    conn.execute("SELECT set_config('rag.tenant', '*', false)")
     register_vector(conn)
     cur = conn.cursor()
     cur.execute("SELECT id FROM rag.collections WHERE name = 'demo'")

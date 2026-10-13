@@ -70,6 +70,7 @@ class PgSearch:
         # The role is configurable, so the evaluation harness can read with rag_readonly (Step 26).
         # Read for EVERY connection: with OpenBao the username and password change over time (Step 28)
         self._host, self._credentials = s.db_host, s.db_credentials()
+        self._tenant = s.tenant  # Step 36: row-level security shows the database only this tenant
 
     def search(
         self,
@@ -99,6 +100,9 @@ class PgSearch:
         with psycopg.connect(host=self._host, dbname="rag", user=user_name, password=password,
                              application_name="rag-api") as conn:  # fmt: skip
             register_vector(conn)
+            # Step 36: row-level security. Local to this transaction, so a reused connection can't
+            # carry it into another request; without it the database returns no rows at all.
+            conn.execute("SELECT set_config('rag.tenant', %s, true)", (self._tenant,))
             rows = conn.execute(
                 SQL,
                 {
