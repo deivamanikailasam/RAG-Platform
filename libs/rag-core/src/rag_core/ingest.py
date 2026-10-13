@@ -2,7 +2,7 @@
 index, with unchanged sources skipped, replaced sources cleaned up, and every step traced.
 
     pipeline = IngestionPipeline(config.load("rag.yaml", "local"))
-    result = pipeline.ingest(load_source("s3://rag-originals/policies/leave.pdf", access=…))
+    result = pipeline.ingest(load_source("s3://rag-raw-docs/policies/leave.pdf", access=…))
 """
 
 from __future__ import annotations

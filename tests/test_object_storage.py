@@ -421,3 +421,29 @@ def test_demo_proves_the_rules_and_records_lineage(buckets: tuple[str, ...]) -> 
     assert meta["s3_version_id"] == lineage.group(2)
     body = b"Staff may work remotely up to two days per week with manager approval."
     assert meta["sha256"] == hashlib.sha256(body).hexdigest()
+
+
+def test_examples_only_use_buckets_that_exist() -> None:
+    """Every s3://<bucket>/ in docs, code and tests names a bucket s3_setup.py creates (or a placeholder)."""
+    created = set(re.findall(r'^create\("([\w-]+)"', (SCRIPTS / "s3_setup.py").read_text(), re.M))
+    assert created == {"rag-raw-docs", "rag-audit-archive", "rag-tmp"}
+    root = SCRIPTS.parent
+    files = [
+        p
+        for top in ("docs", "libs", "scripts", "services", "tests", "cards", "evals")
+        for p in (root / top).rglob("*")
+        if p.suffix in {".md", ".py", ".yaml", ".yml"} and ".venv" not in p.parts
+    ]
+    used = {
+        (bucket, p.relative_to(root).as_posix())
+        for p in files
+        for bucket in re.findall(r"s3://([a-z0-9][a-z0-9.-]+)/", p.read_text(errors="ignore"))
+    }
+    # "bucket" is the generic usage text; example-* and rag-backups (a fake client in test_backup.py)
+    # stand for the off-laptop backup bucket you bring yourself (Step 36)
+    wrong = {
+        u
+        for u in used
+        if u[0] not in created | {"bucket", "rag-backups"} and not u[0].startswith("example-")
+    }
+    assert not wrong, wrong

@@ -137,9 +137,9 @@ def test_load_source_from_file_and_s3(tmp_path: Path) -> None:
     assert load_source(f"file://{tmp_path}/a.md").data == b"# A\n\ntext"
     with mock_aws():
         s3 = boto3.client("s3", region_name="us-east-1")
-        s3.create_bucket(Bucket="rag-originals")
-        s3.put_object(Bucket="rag-originals", Key="hr/a.md", Body=b"hello")
-        src = load_source("s3://rag-originals/hr/a.md", Access("internal", ("hr",)), s3_client=s3)
+        s3.create_bucket(Bucket="rag-raw-docs")
+        s3.put_object(Bucket="rag-raw-docs", Key="hr/a.md", Body=b"hello")
+        src = load_source("s3://rag-raw-docs/hr/a.md", Access("internal", ("hr",)), s3_client=s3)
     assert src.data == b"hello"
     assert src.access.groups == ("hr",)
     with pytest.raises(ValueError, match="unsupported source"):

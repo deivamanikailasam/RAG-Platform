@@ -360,9 +360,9 @@ The same operations from the command line, against a real profile (dry runs; add
 
 ```bash
 uv run rag retention --rules examples/retention.yaml --profile local
-uv run rag erase-source s3://rag-originals/hr/letter-0412.pdf --profile local
+uv run rag erase-source s3://rag-raw-docs/hr/letter-0412.pdf --profile local
 uv run rag erase-subject --subject 8f1c…-sub --identifier jane.doe@example.com --profile local
-uv run rag reacl s3://rag-originals/policies/remote-work.md --group hr --classification confidential --profile local
+uv run rag reacl s3://rag-raw-docs/policies/remote-work.md --group hr --classification confidential --profile local
 uv run rag reindex --profile local --to local-v2          # a profile with the new embedder/collection
 ```
 
@@ -811,6 +811,10 @@ platform becomes the system of record, or sources can publish change events.
 
 ## Notes for this repository
 
+- **Example bucket:** the chapter's examples use `s3://rag-originals/…`, a bucket nothing creates. Step 14's
+  `scripts/s3_setup.py` creates `rag-raw-docs` for originals, and the `rag-ingest` / `rag-reader` identities may
+  only touch that bucket, so the commands, docstrings and tests here use `s3://rag-raw-docs/…`
+  (`tests/test_object_storage.py` checks that every example names a bucket that exists).
 - **Code reconstructed from the PDF.** Indentation and line wraps were rebuilt and `ruff format` re-wrapped a
   few long lines. The guide shows only the new methods of the stores, the pipeline and the memory; where the rest
   had to follow, it was written here to match: `_tenant` is called in *every* rag-core Postgres transaction

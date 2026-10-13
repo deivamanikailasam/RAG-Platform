@@ -169,13 +169,13 @@ def test_a_legal_hold_wins_over_retention() -> None:
     assert [i["uri"] for i in lc.apply_retention(IngestionPipeline(c), policy).items] == [old]
     # the deployed rules file parses, holds included
     deployed = lc.load_retention(ROOT / "deploy/base/rag-ingest/retention.yaml")
-    assert deployed.hold_for("s3://rag-originals/tickets/2025/42.md") is not None
-    assert deployed.hold_for("s3://rag-originals/tickets/2024/42.md") is None
+    assert deployed.hold_for("s3://rag-raw-docs/tickets/2025/42.md") is not None
+    assert deployed.hold_for("s3://rag-raw-docs/tickets/2024/42.md") is None
 
 
 def test_erasure_under_a_legal_hold_needs_a_recorded_override() -> None:
     c = offline()
-    uri = "s3://rag-originals/tickets/2025/42.md"
+    uri = "s3://rag-raw-docs/tickets/2025/42.md"
     IngestionPipeline(c).ingest(Source(uri, b"# Ticket\n\nThe customer disputes the invoice.",
                                        access=Access("internal", ("support",))))  # fmt: skip
     policy = lc.RetentionPolicy(rules=[], legal_holds=[lc.LegalHold(match="*/tickets/2025/*",
@@ -194,7 +194,7 @@ def test_erasure_under_a_legal_hold_needs_a_recorded_override() -> None:
 
 def test_erase_source_removes_every_version_and_every_copy() -> None:
     c = offline()
-    uri = "s3://rag-originals/hr/letter.md"
+    uri = "s3://rag-raw-docs/hr/letter.md"
     IngestionPipeline(c).ingest(
         Source(
             uri,

@@ -533,7 +533,7 @@ Ingest:
 
 ```bash
 uv run rag ingest --profile offline --group hr examples/corpus/*                            # try it with nothing running
-uv run rag enqueue --profile local --group hr s3://rag-originals/hr/leave-policy.pdf        # the platform way
+uv run rag enqueue --profile local --group hr s3://rag-raw-docs/hr/leave-policy.pdf        # the platform way
 docker compose -f infra/compose/compose.yaml logs -f ingestion-worker
 ```
 
@@ -749,6 +749,10 @@ needs a dedicated stream processor.
 
 ## Notes for this repository
 
+- **Example bucket:** the chapter's examples use `s3://rag-originals/…`, a bucket nothing creates. Step 14's
+  `scripts/s3_setup.py` creates `rag-raw-docs` for originals, and the `rag-ingest` / `rag-reader` identities may
+  only touch that bucket, so the commands, docstrings and tests here use `s3://rag-raw-docs/…`
+  (`tests/test_object_storage.py` checks that every example names a bucket that exists).
 - **Code reconstructed from the PDF.** The guide's listings were extracted from the PDF and their
   indentation and line wraps rebuilt; the conftest's HTML sample lost its tags in extraction and was rebuilt
   from what the tests assert (title "Remote work", a `track()` script, a "Home | HR" nav, an Item/Budget

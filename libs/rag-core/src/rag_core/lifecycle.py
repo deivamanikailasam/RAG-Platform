@@ -36,7 +36,7 @@ DAY = 86_400.0
 
 class RetentionRule(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    match: str  # a glob on the source URI: "s3://rag-originals/tickets/*"
+    match: str  # a glob on the source URI: "s3://rag-raw-docs/tickets/*"
     keep_days: int = Field(ge=1)
     reason: str = ""  # the record or policy that sets it, e.g. "Records Authority class 12.3"
 
