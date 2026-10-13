@@ -29,7 +29,7 @@ from rag_api.audit import (
 )
 from rag_api.llmtrace import LlmTracer, build_llm_tracer
 from rag_api.policy import Decision, OpaClient, PolicyEngine, PolicyUnavailable
-from rag_api.search import Hit, PgSearch, SearchBackend
+from rag_api.search import CoreSearch, Hit, PgSearch, SearchBackend
 from rag_api.settings import Settings
 from rag_common.auth import AuthError, KeyServiceUnavailable, OIDCSettings, Principal, TokenVerifier
 from rag_common.prompts import PromptError, Registry
@@ -152,7 +152,10 @@ def get_prompt_label() -> str:
 
 @lru_cache
 def get_search() -> SearchBackend:
-    return PgSearch(get_settings(), get_prompts())
+    s = get_settings()
+    if s.search_backend == "core":
+        return CoreSearch(s)  # rag-core pipeline from rag.yaml (Step 32)
+    return PgSearch(s, get_prompts())
 
 
 @lru_cache

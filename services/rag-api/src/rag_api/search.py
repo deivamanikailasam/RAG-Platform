@@ -1,9 +1,11 @@
-"""Permission-aware semantic search over the Step 11 tables."""
+"""Permission-aware search: Step 11's single SQL query ("legacy"), or rag-core's search pipeline
+("core", Step 32: hybrid retrieval, fusion, reranking), chosen by RAG_API_SEARCH_BACKEND."""
 
 from __future__ import annotations
 
+import zlib
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol, cast
 
 import psycopg
 from openai import OpenAI
@@ -113,3 +115,56 @@ class PgSearch:
             )
             for i, t, c, acl, sc in rows
         ]
+
+
+class CoreSearch:
+    """The same contract as PgSearch, answered by rag-core's search pipeline (Step 32). OPA still
+    decides WHAT may be seen (the filter); rag-core decides HOW to find it (rag.yaml)."""
+
+    def __init__(self, s: Settings, pipeline: Any = None) -> None:
+        from rag_core import config
+        from rag_core.search import SearchPipeline
+
+        self._pipeline = pipeline or SearchPipeline(config.load(s.rag_config, s.rag_profile))
+        self._tenant = s.tenant
+
+    def search(
+        self,
+        query: str,
+        *,
+        groups: frozenset[str],
+        classifications: frozenset[str],
+        k: int,
+        user: str,
+    ) -> list[Candidate]:
+        from rag_core.types import Classification, Query
+        from rag_core.types import Principal as CorePrincipal
+
+        if not classifications:
+            return []  # fail closed, exactly like PgSearch
+        # OPA only returns known classification names
+        levels = cast(tuple[Classification, ...], tuple(sorted(classifications)))
+        who = CorePrincipal(user, tuple(sorted(groups)), levels, self._tenant)
+        # Ask for more chunks than documents: several chunks often come from one document
+        result = self._pipeline.search(Query(query, who, k=k * 3))
+        trace.get_current_span().set_attribute("rag.search.texts", len(result.texts))
+        best: dict[int, Candidate] = {}
+        for h in result.hits:
+            doc_id = _document_id(h.chunk)
+            if doc_id in best:
+                continue  # hits are best-first: the first chunk of a document carries its score
+            a = h.chunk.access
+            best[doc_id] = Candidate(
+                ref=DocumentRef(id=doc_id, classification=a.classification, acl_groups=a.groups),
+                hit=Hit(id=doc_id, title=str(h.chunk.metadata.get("title", "")),
+                        classification=a.classification, score=round(h.score, 3)),
+            )  # fmt: skip
+        return list(best.values())[:k]
+
+
+def _document_id(chunk: Any) -> int:
+    """Step 11's numeric id when the store has one (Postgres); a stable number otherwise."""
+    value = chunk.metadata.get("document_id")
+    if isinstance(value, int):
+        return value
+    return zlib.crc32(chunk.document_uri.encode())

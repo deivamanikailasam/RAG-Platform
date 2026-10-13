@@ -5,6 +5,7 @@ OpenBao Agent, Step 28). When a file exists in both, /run/bao wins.
 """
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -38,6 +39,12 @@ class Settings(BaseSettings):
     # Prompt registry (Step 24): the folder baked into the image, and which label this environment runs
     prompts_dir: Path = Path("/app/prompts")
     prompt_label: str = "production"  # staging environments set "staging"
+    # Search engine (Step 32): "legacy" = Step 11's single SQL query; "core" = rag-core's pipeline
+    # (hybrid search, fusion, reranking, …) configured by a profile in rag.yaml.
+    search_backend: Literal["legacy", "core"] = "legacy"
+    rag_config: Path = Path("/app/rag.yaml")
+    rag_profile: str = "local"
+    tenant: str = "default"  # one tenant per deployment until Step 36's multi-tenant setup
     opa_url: str = "http://opa:8181"  # the policy decision point (Step 18)
     opa_token: SecretStr  # file /run/secrets/rag_api_opa_token (or /run/bao, Step 28)
     # Langfuse (Step 22). Leave langfuse_base_url empty to switch LLM tracing off.
