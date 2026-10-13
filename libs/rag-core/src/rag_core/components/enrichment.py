@@ -7,13 +7,17 @@ is shown and cited, never changes. A chunk saying "It is 18 weeks." embeds far b
 
 from __future__ import annotations
 
+import functools
 import hashlib
+import json
+import logging
 import threading
+import time
 from collections import OrderedDict
 from collections.abc import Callable, Sequence
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
@@ -21,6 +25,8 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr
 from rag_core.components.basics import gateway_key
 from rag_core.registry import Container, register, spec
 from rag_core.types import Chunk, Document
+
+log = logging.getLogger("rag_core.enrichment")
 
 
 class _Strict(BaseModel):
@@ -231,18 +237,55 @@ def _gw_embedder(p: GatewayEmbedderParams, c: Container) -> GatewayEmbedder:
 class CachedParams(_Strict):
     inner: dict[str, Any]  # the real embedder: {use: gateway, …}
     max_items: int = Field(100_000, ge=1)
+    # extension 04: a second level shared by every replica and surviving restarts: re-ingesting
+    # after a deploy, or a new pod answering popular questions, embeds nothing it has seen before
+    store: Literal["memory", "valkey"] = "memory"
+    url_env: str | None = "RAG_VALKEY_URL"
+    url_file: str | None = None  # /run/bao/valkey_url (OpenBao Agent)
+    ttl_seconds: int = Field(
+        30 * 86_400, ge=60
+    )  # unused vectors expire (a model change orphans them)
+    namespace: str = "rag:emb"
+
+
+class ValkeyVectors:
+    """Vectors in Valkey as compact JSON, keyed by model + text hash, with a TTL. MGET/pipelined
+    SETs, so a batch of 64 chunks costs two round trips, not 128."""
+
+    def __init__(self, client: Any, namespace: str, ttl_seconds: int) -> None:
+        self.r, self.ns, self.ttl = client, namespace, ttl_seconds
+
+    def get_many(self, keys: Sequence[str]) -> list[list[float] | None]:
+        if not keys:
+            return []
+        raw = self.r.mget([f"{self.ns}:{k}" for k in keys])
+        return [json.loads(v) if v else None for v in raw]
+
+    def put_many(self, items: Sequence[tuple[str, list[float]]]) -> None:
+        if not items:
+            return
+        pipe = self.r.pipeline()
+        for k, v in items:
+            pipe.set(
+                f"{self.ns}:{k}",
+                json.dumps([round(x, 7) for x in v], separators=(",", ":")),
+                ex=self.ttl,
+            )
+        pipe.execute()
 
 
 class CachedEmbedder:
     """Never embed the same text twice with the same model: re-ingesting an unchanged chunk, or
-    a popular query, costs nothing. Keyed by (model, sha256(text))."""
+    a popular query, costs nothing. Keyed by (model, sha256(text)). Extension 04: with
+    `store: valkey`, a shared second level behind the in-process LRU."""
 
-    def __init__(self, inner: Any, max_items: int) -> None:
+    def __init__(self, inner: Any, max_items: int, shared: ValkeyVectors | None = None) -> None:
         self.inner, self.model, self.dimensions = inner, inner.model, inner.dimensions
         self._cache: OrderedDict[str, list[float]] = OrderedDict()
         self._max = max_items
         self._lock = threading.Lock()
-        self.hits = self.misses = 0
+        self.shared = shared
+        self.hits = self.misses = self.shared_hits = 0
 
     def _key(self, kind: str, text: str) -> str:
         return hashlib.sha256(f"{self.model}\x00{kind}\x00{text}".encode()).hexdigest()
@@ -260,9 +303,34 @@ class CachedEmbedder:
             if len(self._cache) > self._max:
                 self._cache.popitem(last=False)
 
+    def _lookup(self, keys: list[str]) -> list[list[float] | None]:
+        found = [self._get(k) for k in keys]
+        missing = [i for i, v in enumerate(found) if v is None]
+        if self.shared is not None and missing:
+            try:
+                remote = self.shared.get_many([keys[i] for i in missing])
+            except Exception as e:  # the shared cache is an optimisation: never fail on it
+                log.warning("embedding cache (valkey) unavailable: %s", e)
+                remote = [None] * len(missing)
+            for i, v in zip(missing, remote, strict=True):
+                if v is not None:
+                    found[i] = v
+                    self._put(keys[i], v)
+                    self.shared_hits += 1
+        return found
+
+    def _store(self, items: list[tuple[str, list[float]]]) -> None:
+        for k, v in items:
+            self._put(k, v)
+        if self.shared is not None:
+            try:
+                self.shared.put_many(items)
+            except Exception as e:
+                log.warning("embedding cache (valkey) unavailable: %s", e)
+
     def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
         keys = [self._key("d", t) for t in texts]
-        cached = [self._get(k) for k in keys]
+        cached = self._lookup(keys)
         missing = [i for i, v in enumerate(cached) if v is None]
         self.hits += len(texts) - len(missing)
         self.misses += len(missing)
@@ -270,28 +338,109 @@ class CachedEmbedder:
             fresh = self.inner.embed_documents([texts[i] for i in missing])
             for i, v in zip(missing, fresh, strict=True):
                 cached[i] = v
-                self._put(keys[i], v)
+            self._store([(keys[i], cached[i]) for i in missing])  # type: ignore[misc]
         return [v for v in cached if v is not None]
 
     def embed_query(self, text: str) -> list[float]:
         key = self._key("q", text)
-        v = self._get(key)
+        v = self._lookup([key])[0]
         if v is None:
             self.misses += 1
             v = self.inner.embed_query(text)
-            self._put(key, v)
+            self._store([(key, v)])
         else:
             self.hits += 1
         return v
+
+
+def _inner_embedder(raw: dict[str, Any], c: Container) -> Any:
+    inner_spec = dict(raw)
+    s = spec("embedder", str(inner_spec.pop("use")))
+    return s.factory(s.params.model_validate(inner_spec), c)
 
 
 @register(
     "embedder",
     "cached",
     params=CachedParams,
-    summary="wraps any embedder: the same text is never embedded twice (LRU)",
+    summary="wraps any embedder: the same text is never embedded twice (LRU; shared in Valkey with store: valkey)",
 )
 def _cached(p: CachedParams, c: Container) -> CachedEmbedder:
-    inner_spec = dict(p.inner)
-    s = spec("embedder", str(inner_spec.pop("use")))
-    return CachedEmbedder(s.factory(s.params.model_validate(inner_spec), c), p.max_items)
+    shared = None
+    if p.store == "valkey":
+        from rag_core.components.conversation import _valkey
+
+        shared = ValkeyVectors(_valkey(p.url_env, p.url_file), p.namespace, p.ttl_seconds)
+    return CachedEmbedder(_inner_embedder(p.inner, c), p.max_items, shared)
+
+
+# ================================================================ batching and rate limits (extension 04)
+
+
+class BatchedParams(_Strict):
+    inner: dict[str, Any]  # the real embedder
+    batch_size: int = Field(32, ge=1, le=2048)  # texts per request
+    requests_per_second: float | None = Field(None, gt=0)  # a ceiling; None = as fast as it answers
+    max_retries: int = Field(3, ge=0, le=10)  # transient failures (timeouts, 429, 5xx) are retried
+    backoff_seconds: float = Field(1.0, ge=0)  # doubled after each failure
+
+
+class BatchedEmbedder:
+    """Ingestion at a pace the embedding service accepts: texts sent in batches of `batch_size`,
+    at most `requests_per_second`, with exponential backoff on transient errors. A large re-index
+    then finishes instead of tripping the provider's rate limit (or the gateway's budget, Step 10)
+    halfway through. Invalid input (ValueError, TypeError) is not retried."""
+
+    def __init__(self, inner: Any, p: BatchedParams, clock: Callable[[], float] = time.monotonic,
+                 sleep: Callable[[float], None] = time.sleep) -> None:  # fmt: skip
+        self.inner, self.p, self.clock, self.sleep = inner, p, clock, sleep
+        self.model, self.dimensions = inner.model, inner.dimensions
+        self._next = 0.0
+        self._lock = threading.Lock()
+        self.requests = self.retries = 0
+
+    def _pace(self) -> None:
+        if self.p.requests_per_second is None:
+            return
+        with self._lock:
+            now = self.clock()
+            wait = self._next - now
+            self._next = max(now, self._next) + 1.0 / self.p.requests_per_second
+        if wait > 0:
+            self.sleep(wait)
+
+    def _call(self, fn: Callable[[], Any]) -> Any:
+        delay = self.p.backoff_seconds
+        for attempt in range(self.p.max_retries + 1):
+            self._pace()
+            self.requests += 1
+            try:
+                return fn()
+            except (ValueError, TypeError):
+                raise
+            except Exception as e:
+                if attempt == self.p.max_retries:
+                    raise
+                self.retries += 1
+                log.warning(
+                    "embedding request failed (%s), retrying in %.1fs", type(e).__name__, delay
+                )
+                self.sleep(delay)
+                delay *= 2
+        raise RuntimeError("unreachable")  # pragma: no cover
+
+    def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
+        out: list[list[float]] = []
+        for i in range(0, len(texts), self.p.batch_size):
+            part = list(texts[i : i + self.p.batch_size])
+            out += self._call(functools.partial(self.inner.embed_documents, part))
+        return out
+
+    def embed_query(self, text: str) -> list[float]:
+        return list(self._call(lambda: self.inner.embed_query(text)))
+
+
+@register("embedder", "batched", params=BatchedParams,
+          summary="wraps any embedder: fixed-size batches, a requests-per-second ceiling, retries with backoff")  # fmt: skip
+def _batched(p: BatchedParams, c: Container) -> BatchedEmbedder:
+    return BatchedEmbedder(_inner_embedder(p.inner, c), p)
